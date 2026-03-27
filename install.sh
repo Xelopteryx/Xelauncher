@@ -302,38 +302,50 @@ log_user 1
 # Lancer le script
 spawn sudo ./retropie_setup.sh
 
-expect {
-    # Menu principal - choisir Basic Install (option 3)
-    -re ".*Choose an option.*" {
-        send "3\r"
-        exp_continue
-    }
-    
-    # Confirmation d'installation
-    -re ".*Would you like to proceed.*" {
-        send "y\r"
-        exp_continue
-    }
-    
-    # Écran "Press any key"
-    -re ".*Press any key to continue.*" {
-        send "\r"
-        exp_continue
-    }
-    
-    # Installation terminée
-    -re ".*Setup is now complete.*" {
-        send "q\r"
-        exp_continue
-    }
-    
-    # Gestion du temps d'attente
-    timeout {
-        send_user "\nTimeout - vérification de l'installation...\n"
-    }
-    
-    eof {
-        send_user "\nInstallation terminée\n"
+# Boucle principale
+while 1 {
+    expect {
+        # Menu principal - différentes variantes possibles
+        -re ".*(Choose an option|Choose option).*" {
+            send "3\r"
+        }
+        
+        # Basic Install directement visible
+        -re ".*Basic Install.*" {
+            send "\r"
+        }
+        
+        # Confirmation d'installation
+        -re ".*Would you like to proceed.*" {
+            send "y\r"
+        }
+        
+        # Écran "Press any key" ou "Press any key to continue"
+        -re ".*Press any key.*" {
+            send "\r"
+        }
+        
+        # Téléchargement en cours
+        -re ".*(Downloading|Installing).*" {
+            exp_continue
+        }
+        
+        # Installation terminée
+        -re ".*Setup is now complete.*" {
+            send "q\r"
+            break
+        }
+        
+        # Sortie normale
+        eof {
+            break
+        }
+        
+        # Timeout
+        timeout {
+            send_user "\nTimeout - l'installation pourrait être terminée\n"
+            break
+        }
     }
 }
 
@@ -350,8 +362,20 @@ EOF
     if command -v emulationstation >/dev/null 2>&1; then
         ok "RetroPie installé avec succès"
     else
-        warn "L'installation de RetroPie peut nécessiter une intervention manuelle"
-        warn "Pour l'installer plus tard: cd ~/RetroPie-Setup && sudo ./retropie_setup.sh"
+        warn "L'installation automatique de RetroPie a échoué"
+        warn "Installation manuelle lancée..."
+        
+        # Lancer l'installation manuelle
+        sudo ./retropie_setup.sh
+        
+        if command -v emulationstation >/dev/null 2>&1; then
+            ok "RetroPie installé manuellement avec succès"
+        else
+            warn "RetroPie n'a pas été installé"
+            warn "Vous pouvez l'installer plus tard avec:"
+            warn "  cd ~/RetroPie-Setup && sudo ./retropie_setup.sh"
+            warn "Choisissez ensuite 'Basic Install'"
+        fi
     fi
 }
 
