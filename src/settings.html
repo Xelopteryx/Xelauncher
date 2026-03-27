@@ -1,0 +1,2190 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>XeLauncher — Paramètres</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Share+Tech+Mono&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#0a0a0f; --grid:#1a1a2e;
+  --blue:#00a4dc; --blue-dim:rgba(0,164,220,0.15); --blue-glow:rgba(0,164,220,0.4);
+  --red:#c0392b;  --red-dim:rgba(192,57,43,0.15);
+  --gold:rgba(232,213,176,0.85); --gold-dim:rgba(232,213,176,0.3);
+  --green:#a5d6a7; --green-dim:rgba(165,214,167,0.15);
+  --text:rgba(255,255,255,0.75); --text-dim:rgba(255,255,255,0.3);
+  --border:rgba(255,255,255,0.1); --surface:rgba(255,255,255,0.05);
+}
+
+html,body{width:100%;height:100%;overflow:hidden;font-size:18px}
+body{background:var(--bg);font-family:'Share Tech Mono',monospace;color:var(--text);display:flex;flex-direction:column;animation:fadeIn .35s ease}
+
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes focusIn{from{transform:scale(.97)}to{transform:scale(1)}}
+
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 39px,var(--grid) 39px,var(--grid) 40px),
+             repeating-linear-gradient(90deg,transparent,transparent 39px,var(--grid) 39px,var(--grid) 40px);opacity:.15}
+body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at center,transparent 30%,var(--bg) 100%)}
+
+/* ── Layout ── */
+.page{position:relative;z-index:1;display:flex;flex-direction:column;height:100vh}
+.body{display:flex;flex:1;overflow:hidden}
+.content{flex:1;overflow-y:auto;padding:3vh 4vw;display:flex;flex-direction:column;gap:2vh}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:var(--border)}
+
+/* ── Header ── */
+.header{display:flex;align-items:center;gap:2vw;padding:1.5vh 3vw;border-bottom:1px solid var(--border);background:rgba(10,10,15,.97);flex-shrink:0}
+.header-back{display:flex;align-items:center;gap:.6em;background:transparent;border:1px solid var(--border);color:var(--text-dim);font-family:'Share Tech Mono',monospace;font-size:.7em;letter-spacing:.2em;text-transform:uppercase;padding:.4em 1em;cursor:pointer;transition:all .2s}
+.header-back.focused{border-color:var(--gold);color:var(--gold);background:rgba(232,213,176,.08);transform:scale(1.04);box-shadow:0 0 16px var(--gold-dim)}
+.header-title{font-family:'Black Han Sans',sans-serif;color:var(--gold-dim);font-size:.8em;letter-spacing:.5em;text-transform:uppercase;flex:1;text-align:center}
+.header-hint{font-size:.55em;letter-spacing:.15em;color:var(--text-dim);text-transform:uppercase}
+
+/* ── Sidebar ── */
+.sidebar{width:clamp(200px,22vw,280px);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:1.5vh 0;flex-shrink:0;overflow-y:auto;background:rgba(10,10,15,.6)}
+.nav-item{display:flex;align-items:center;gap:.8em;padding:1.4vh 1.6vw;cursor:pointer;font-size:.75em;letter-spacing:.2em;text-transform:uppercase;color:var(--text-dim);border-left:3px solid transparent;transition:all .2s;user-select:none}
+.nav-item svg{opacity:.4;flex-shrink:0;transition:all .2s}
+.nav-item.active{color:var(--blue);border-left-color:var(--blue);background:var(--blue-dim)}
+.nav-item.active svg{opacity:1}
+.nav-item.focused{color:var(--text);border-left-color:var(--gold);background:rgba(232,213,176,.06);animation:focusIn .15s ease;box-shadow:inset 0 0 20px rgba(232,213,176,.04)}
+.nav-item.focused svg{opacity:.9}
+.nav-item.active.focused{border-left-color:var(--blue);box-shadow:inset 0 0 20px var(--blue-dim)}
+
+/* ── Section title ── */
+.section-title{font-family:'Black Han Sans',sans-serif;color:var(--gold);font-size:.85em;letter-spacing:.4em;text-transform:uppercase;border-bottom:1px solid var(--gold-dim);padding-bottom:.5em;margin-bottom:.2em}
+
+/* ── Param rows ── */
+.param-row{display:flex;align-items:center;justify-content:space-between;padding:1.6vh 1.4vw;background:var(--surface);border:1px solid var(--border);transition:all .2s;gap:1.5vw}
+.param-row.focused{background:var(--blue-dim);border-color:var(--blue);transform:scale(1.01);box-shadow:0 0 20px rgba(0,164,220,.15)}
+.param-row.focused .param-label{color:var(--blue)}
+.param-left{display:flex;flex-direction:column;gap:.3em;min-width:0}
+.param-label{font-size:.8em;letter-spacing:.15em;text-transform:uppercase;color:var(--text)}
+.param-desc{font-size:.65em;letter-spacing:.08em;color:var(--text-dim)}
+
+/* ── Toggle ── */
+.toggle{width:52px;height:26px;border:1px solid var(--border);background:var(--surface);position:relative;cursor:pointer;transition:all .25s;flex-shrink:0;border-radius:2px}
+.toggle.on{background:rgba(0,164,220,.3);border-color:var(--blue);box-shadow:0 0 10px rgba(0,164,220,.2)}
+.toggle::after{content:'';position:absolute;top:4px;left:4px;width:16px;height:16px;background:var(--text-dim);transition:all .25s}
+.toggle.on::after{left:30px;background:var(--blue)}
+
+/* ── Select cyclable ── */
+.param-select{display:flex;align-items:center;gap:.6em;font-size:.75em;letter-spacing:.15em;color:var(--text-dim);text-transform:uppercase;flex-shrink:0}
+.param-select .val{color:var(--blue);font-size:.85em;min-width:5em;text-align:center;transition:all .2s}
+.param-row.focused .param-select .val{color:var(--gold)}
+.arrow{opacity:.35;font-size:.7em;cursor:pointer}
+.param-row.focused .arrow{opacity:1}
+
+/* ── Info badge ── */
+.info-badge{font-size:.78em;letter-spacing:.08em;color:var(--green);font-family:'Share Tech Mono',monospace;flex-shrink:0}
+.info-badge.na{color:var(--text-dim)}
+
+/* ── Action button ── */
+.action-btn{font-family:'Share Tech Mono',monospace;font-size:.65em;letter-spacing:.2em;text-transform:uppercase;background:transparent;border:1px solid var(--border);color:var(--text-dim);padding:.4em 1.1em;cursor:pointer;transition:all .2s;flex-shrink:0}
+.param-row.focused .action-btn,.wifi-item.focused .action-btn{border-color:var(--blue);color:var(--blue);background:var(--blue-dim)}
+.action-btn.danger{border-color:rgba(192,57,43,.4);color:rgba(192,57,43,.6)}
+.param-row.focused .action-btn.danger{border-color:var(--red);color:#e85555;background:var(--red-dim)}
+
+/* ── WiFi items ── */
+.wifi-item{display:flex;align-items:center;justify-content:space-between;padding:1.4vh 1.4vw;background:var(--surface);border:1px solid var(--border);transition:all .2s;gap:1vw;cursor:pointer}
+.wifi-item.focused{background:var(--blue-dim);border-color:var(--blue);transform:scale(1.01);box-shadow:0 0 20px rgba(0,164,220,.15)}
+.wifi-item.current{border-color:rgba(165,214,167,.35)}
+.wifi-item.current .wifi-ssid{color:var(--green)}
+.wifi-item.focused .wifi-ssid{color:var(--blue)}
+.wifi-left{display:flex;flex-direction:column;gap:.3em;min-width:0;flex:1}
+.wifi-ssid{font-size:.8em;letter-spacing:.15em;text-transform:uppercase;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wifi-meta{font-size:.6em;letter-spacing:.08em;color:var(--text-dim)}
+.wifi-right{display:flex;align-items:center;gap:.8vw;flex-shrink:0}
+.wifi-trash-btn{background:transparent;border:1px solid rgba(192,57,43,.25);color:rgba(192,57,43,.4);padding:.4em .6em;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.wifi-item.focused .wifi-trash-btn{border-color:rgba(192,57,43,.4);color:rgba(192,57,43,.6)}
+.wifi-item.focused.trash-focus .wifi-trash-btn{border-color:var(--red);color:#e85555;background:var(--red-dim);transform:scale(1.1)}
+
+/* ── Hidden items ── */
+.hidden-item{display:flex;align-items:center;justify-content:space-between;padding:1.2vh 1.4vw;background:var(--surface);border:1px solid rgba(192,57,43,.3);gap:1vw;cursor:pointer}
+.hidden-item.focused{background:var(--blue-dim);border-color:var(--blue);transform:scale(1.01);box-shadow:0 0 20px rgba(0,164,220,.15)}
+.hidden-item .wifi-ssid{color:var(--text-dim)}
+.hidden-item.focused .wifi-ssid{color:var(--blue)}
+
+/* ── Section masquée ── */
+.hidden-toggle{display:flex;align-items:center;gap:.6em;padding:.8vh 1.4vw;cursor:pointer;font-size:.65em;letter-spacing:.2em;text-transform:uppercase;color:var(--text-dim);border:1px dashed rgba(255,255,255,.08);transition:all .2s;margin-top:.3vh}
+.hidden-toggle.focused{color:var(--text);border-color:rgba(255,255,255,.2);background:var(--surface)}
+.hidden-toggle svg{transition:transform .2s}
+.hidden-toggle.open svg{transform:rotate(90deg)}
+
+/* ── Manette ── */
+.ctrl-grid{display:grid;grid-template-columns:1fr 1fr;gap:1vh}
+.ctrl-card{display:flex;align-items:center;gap:1em;padding:1.8vh 1.4vw;background:var(--surface);border:1px solid var(--border);cursor:pointer;transition:all .2s}
+.ctrl-card.selected{border-color:var(--blue);background:var(--blue-dim)}
+.ctrl-card.focused{border-color:var(--gold);box-shadow:0 0 16px var(--gold-dim);transform:scale(1.02)}
+.ctrl-card.selected.focused{border-color:var(--blue);box-shadow:0 0 20px rgba(0,164,220,.25)}
+.ctrl-icon{font-size:1.8em;line-height:1;flex-shrink:0}
+.ctrl-name{font-family:'Black Han Sans',sans-serif;font-size:.85em;letter-spacing:.2em;color:var(--text)}
+.ctrl-card.selected .ctrl-name{color:var(--blue)}
+.ctrl-sub{font-size:.6em;letter-spacing:.15em;color:var(--text-dim);text-transform:uppercase}
+.ctrl-check{margin-left:auto;width:16px;height:16px;border:1px solid var(--border);flex-shrink:0;transition:all .2s}
+.ctrl-card.selected .ctrl-check{background:var(--blue);border-color:var(--blue)}
+
+/* ── Interface cards (config réseau) ── */
+.iface-card{display:flex;align-items:center;justify-content:space-between;padding:1.8vh 1.4vw;background:var(--surface);border:1px solid var(--border);cursor:pointer;transition:all .2s;gap:1vw}
+.iface-card.focused{background:var(--blue-dim);border-color:var(--blue);transform:scale(1.01);box-shadow:0 0 20px rgba(0,164,220,.15);animation:focusIn .15s ease}
+.iface-card.focused .iface-name{color:var(--blue)}
+.iface-left{display:flex;flex-direction:column;gap:.3em}
+.iface-name{font-family:'Black Han Sans',sans-serif;font-size:.9em;letter-spacing:.2em;color:var(--text)}
+.iface-ip{font-size:.7em;color:var(--green);font-family:'Share Tech Mono',monospace}
+.iface-badge{font-size:.6em;letter-spacing:.15em;text-transform:uppercase;padding:.25em .8em;border:1px solid}
+.iface-badge.up{color:var(--green);border-color:rgba(165,214,167,.4)}
+.iface-badge.down{color:var(--text-dim);border-color:var(--border)}
+
+/* ── Bluetooth status badge ── */
+.bt-status-badge{font-size:.7em;padding:.2em .8em;border-radius:2px}
+.bt-status-badge.connected{background:rgba(165,214,167,.15);color:var(--green);border:1px solid rgba(165,214,167,.3)}
+.bt-status-badge.disconnected{background:rgba(255,255,255,.05);color:var(--text-dim);border:1px solid var(--border)}
+
+/* ── Tabs ── */
+.tab-content{display:none;flex-direction:column;gap:1.5vh}
+.tab-content.active{display:flex}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:3vh;left:50%;transform:translateX(-50%) translateY(60px);background:rgba(10,10,20,.97);border:1px solid var(--border);font-size:.7em;letter-spacing:.2em;text-transform:uppercase;color:var(--text);padding:.7em 2em;z-index:999;transition:transform .25s ease;white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.ok{border-color:var(--green);color:var(--green)}
+.toast.err{border-color:var(--red);color:#e85555}
+
+/* ── Overlay interface réseau ── */
+.iface-overlay{position:fixed;inset:0;background:rgba(8,8,14,.95);z-index:700;display:none;align-items:center;justify-content:center}
+.iface-overlay.visible{display:flex}
+.iface-panel{width:clamp(340px,50vw,580px);max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;gap:1.5vh;background:rgba(12,12,22,.99);border:1px solid rgba(0,164,220,.3);padding:3vh 3vw;animation:fadeIn .2s ease}
+.iface-panel-title{font-family:'Black Han Sans',sans-serif;color:var(--gold-dim);font-size:.9em;letter-spacing:.4em;text-transform:uppercase;border-bottom:1px solid var(--gold-dim);padding-bottom:.6em}
+.iface-panel .param-row{background:rgba(255,255,255,.03)}
+.iface-panel .param-row.focused{background:var(--blue-dim);border-color:var(--blue);transform:scale(1.01);box-shadow:0 0 16px rgba(0,164,220,.12)}
+.iface-panel-hint{font-size:.6em;letter-spacing:.15em;color:var(--text-dim);text-transform:uppercase;text-align:center;padding-top:.5vh}
+#ip-static-fields{display:flex;flex-direction:column;gap:1.2vh}
+
+/* ── Numpad/Clavier ── */
+.numpad-overlay{position:fixed;inset:0;background:rgba(8,8,14,.95);z-index:800;display:none;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:4vh;gap:2vh}
+.numpad-overlay.visible{display:flex}
+.numpad-title{font-family:'Black Han Sans',sans-serif;color:var(--gold-dim);font-size:.85em;letter-spacing:.4em;text-transform:uppercase}
+.numpad-field{background:#0d0d18;border:1px solid rgba(0,164,220,.5);color:var(--blue);font-family:'Share Tech Mono',monospace;font-size:clamp(18px,2.5vw,28px);letter-spacing:.25em;padding:.5em 2em;min-width:clamp(280px,38vw,520px);text-align:center}
+.numpad-grid{display:grid;gap:.5vh;width:clamp(280px,38vw,520px)}
+.numpad-key{height:clamp(44px,6.5vh,68px);background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:'Share Tech Mono',monospace;font-size:clamp(15px,1.8vw,22px);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
+.numpad-key.focused{background:var(--blue-dim);border-color:var(--blue);color:var(--blue);transform:scale(1.06);box-shadow:0 0 14px rgba(0,164,220,.2)}
+.numpad-key.ok{border-color:rgba(0,164,220,.3);color:rgba(0,164,220,.65);grid-column:span 2;font-size:.7em;letter-spacing:.2em;text-transform:uppercase}
+.numpad-key.ok.focused{background:rgba(0,164,220,.2);border-color:var(--blue);color:var(--blue)}
+.numpad-key.del{color:rgba(192,57,43,.6);border-color:rgba(192,57,43,.3)}
+.numpad-key.del.focused{background:var(--red-dim);border-color:var(--red);color:#e85555}
+.numpad-key.cancel{font-size:.7em;letter-spacing:.15em;text-transform:uppercase}
+.numpad-key.caps-on{border-color:rgba(255,200,0,.4);color:rgba(255,200,0,.85)}
+.numpad-hint{font-size:.6em;letter-spacing:.15em;color:var(--text-dim);text-transform:uppercase}
+
+/* ── Wizard manette ── */
+.wizard-overlay{position:fixed;inset:0;background:rgba(8,8,14,.97);z-index:900;display:none;flex-direction:column;align-items:center;justify-content:center;gap:3vh}
+.wizard-overlay.visible{display:flex}
+.wizard-box{width:clamp(360px,60vw,700px);display:flex;flex-direction:column;gap:2vh;background:rgba(12,12,22,.99);border:1px solid rgba(0,164,220,.35);padding:4vh 4vw;animation:fadeIn .2s ease}
+.wizard-title{font-family:'Black Han Sans',sans-serif;color:var(--gold);font-size:1em;letter-spacing:.4em;text-transform:uppercase;border-bottom:1px solid var(--gold-dim);padding-bottom:.6em}
+.wizard-step-label{font-size:.75em;letter-spacing:.15em;color:var(--text-dim);text-transform:uppercase}
+.wizard-action-name{font-family:'Black Han Sans',sans-serif;font-size:1.4em;letter-spacing:.2em;color:var(--blue);text-align:center;padding:.5em 0;min-height:2em}
+.wizard-instructions{font-size:.7em;letter-spacing:.12em;color:var(--text-dim);text-align:center;line-height:1.6em}
+.wizard-captured{font-size:.65em;color:var(--green);letter-spacing:.15em;text-align:center;min-height:1.5em}
+.wizard-progress{display:flex;gap:.4em;justify-content:center;flex-wrap:wrap}
+.wizard-dot{width:10px;height:10px;border:1px solid var(--border)}
+.wizard-dot.done{background:var(--blue);border-color:var(--blue)}
+.wizard-dot.current{background:var(--gold-dim);border-color:var(--gold);animation:pulse .8s ease-in-out infinite}
+.wizard-btns{display:flex;gap:1em;justify-content:center}
+.wizard-btn{font-family:'Share Tech Mono',monospace;font-size:.7em;letter-spacing:.2em;text-transform:uppercase;background:transparent;border:1px solid var(--border);color:var(--text-dim);padding:.5em 1.5em;cursor:pointer;transition:all .2s}
+.wizard-btn.primary{border-color:var(--blue);color:var(--blue)}
+.wizard-btn.primary:hover,.wizard-btn.primary.focused{background:var(--blue-dim)}
+.wizard-btn.danger{border-color:rgba(192,57,43,.4);color:rgba(192,57,43,.6)}
+.wizard-btn.danger:hover,.wizard-btn.danger.focused{background:var(--red-dim);border-color:var(--red);color:#e85555}
+.wizard-skip-hint{font-size:.6em;color:var(--text-dim);text-align:center;letter-spacing:.15em;text-transform:uppercase}
+.gp-map-item{display:flex;align-items:center;justify-content:space-between;padding:1.4vh 1.4vw;background:var(--surface);border:1px solid var(--border);transition:all .2s;gap:1vw}
+.gp-map-item.focused{background:var(--blue-dim);border-color:var(--blue)}
+.gp-map-name{font-size:.78em;letter-spacing:.12em;text-transform:uppercase;color:var(--text)}
+.gp-map-meta{font-size:.6em;letter-spacing:.08em;color:var(--text-dim)}
+.loading-spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .6s linear infinite;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Bluetooth actions ── */
+.bt-device-row .bt-action.focused{background:var(--blue-dim)!important;border-color:var(--blue)!important;color:var(--blue)!important;transform:scale(1.06);box-shadow:0 0 12px rgba(0,164,220,.2)}
+.bt-device-row .bt-action.danger.focused{background:var(--red-dim)!important;border-color:var(--red)!important;color:#e85555!important}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <button class="header-back" id="backBtn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M5 12l7-7M5 12l7 7"/></svg>
+      Retour
+    </button>
+    <div class="header-title">Paramètres</div>
+    <div class="header-hint">↑↓ naviguer · ← retour · → entrer · ✕ valider</div>
+  </div>
+
+  <div class="body">
+    <nav class="sidebar" id="sidebar">
+      <div class="nav-item active" data-tab="network" id="nav-network">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+          <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor" stroke="none"/>
+        </svg>Réseau
+      </div>
+      <div class="nav-item" data-tab="display" id="nav-display">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+        </svg>Affichage
+      </div>
+      <div class="nav-item" data-tab="audio" id="nav-audio">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+        </svg>Audio
+      </div>
+      <div class="nav-item" data-tab="bluetooth" id="nav-bluetooth">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/>
+        </svg>Bluetooth
+      </div>
+      <div class="nav-item" data-tab="gamepads" id="nav-gamepads">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="8" width="20" height="12" rx="6"/>
+          <path d="M9 12v4M7 14h4M15 13h2M15 15h2"/>
+        </svg>Manettes
+      </div>
+      <div class="nav-item" data-tab="update" id="nav-update">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+          <path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+        </svg>Mise à jour
+      </div>
+    </nav>
+
+    <div class="content" id="mainContent">
+      <!-- ── RÉSEAU ── -->
+      <div class="tab-content active" id="tab-network">
+        <div class="section-title">WiFi</div>
+        <div class="param-row" id="net-ssid-row">
+          <div class="param-left"><div class="param-label">Réseau connecté</div><div class="param-desc">SSID actuel</div></div>
+          <div class="info-badge na" id="net-ssid-val">—</div>
+        </div>
+        <div class="param-row" id="net-scan-row">
+          <div class="param-left"><div class="param-label">Scanner les réseaux</div><div class="param-desc">Lister les réseaux WiFi disponibles</div></div>
+          <button class="action-btn" id="wifiScanBtn">Scanner</button>
+        </div>
+        <div id="wifi-list-wrap"></div>
+        <div class="hidden-toggle" id="hidden-networks-toggle">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+          Réseaux masqués (<span id="hidden-count">0</span>)
+        </div>
+        <div id="hidden-list-wrap" style="display:none;flex-direction:column;gap:.6vh"></div>
+        <div class="param-row" id="net-forget-row">
+          <div class="param-left"><div class="param-label">Oublier le réseau actuel</div><div class="param-desc">Supprimer le profil sauvegardé</div></div>
+          <button class="action-btn danger" id="wifiForgetBtn">Oublier</button>
+        </div>
+
+        <div class="section-title" style="margin-top:.5vh">Adresses IP</div>
+        <div class="param-row" id="net-ip-wifi-row">
+          <div class="param-left"><div class="param-label">WiFi (wlan0)</div><div class="param-desc">Adresse IP courante</div></div>
+          <div class="info-badge na" id="net-ip-wifi">—</div>
+        </div>
+        <div class="param-row" id="net-ip-eth-row">
+          <div class="param-left"><div class="param-label">Câblé (eth0)</div><div class="param-desc">Adresse IP courante</div></div>
+          <div class="info-badge na" id="net-ip-eth">—</div>
+        </div>
+        <div class="param-row" id="net-ip-refresh-row">
+          <div class="param-left"><div class="param-label">Rafraîchir</div><div class="param-desc">Recharger depuis le système</div></div>
+          <button class="action-btn" id="ipRefreshBtn">Rafraîchir</button>
+        </div>
+
+        <div class="section-title" style="margin-top:.5vh">Configuration avancée</div>
+        <div id="iface-list-wrap" style="display:flex;flex-direction:column;gap:1vh">
+          <div style="padding:1vh 1.4vw;font-size:.65em;letter-spacing:.15em;color:var(--text-dim)">Chargement…</div>
+        </div>
+      </div>
+
+      <!-- ── AFFICHAGE ── -->
+      <div class="tab-content" id="tab-display">
+        <div class="section-title">Affichage</div>
+        <div class="param-row" id="res-row">
+          <div class="param-left"><div class="param-label">Résolution</div><div class="param-desc">Sortie HDMI</div></div>
+          <div class="param-select"><span class="arrow" data-dir="-1">◀</span><span class="val" id="res-val">1920×1080</span><span class="arrow" data-dir="1">▶</span></div>
+        </div>
+        <div class="param-row" id="refresh-row">
+          <div class="param-left"><div class="param-label">Fréquence</div><div class="param-desc">Hz de sortie HDMI</div></div>
+          <div class="param-select"><span class="arrow" data-dir="-1">◀</span><span class="val" id="refresh-val">60 Hz</span><span class="arrow" data-dir="1">▶</span></div>
+        </div>
+        <div class="param-row" id="overscan-row">
+          <div class="param-left"><div class="param-label">Overscan</div><div class="param-desc">Compenser les bords coupés</div></div>
+          <div class="toggle" id="overscan-toggle"></div>
+        </div>
+        <div class="param-row" id="rotate-row">
+          <div class="param-left"><div class="param-label">Rotation</div><div class="param-desc">Rotation de l'image HDMI</div></div>
+          <div class="param-select"><span class="arrow" data-dir="-1">◀</span><span class="val" id="rotate-val">0°</span><span class="arrow" data-dir="1">▶</span></div>
+        </div>
+        <div class="param-row" id="display-apply-row">
+          <div class="param-left"><div class="param-label">Appliquer</div><div class="param-desc">Redémarre le serveur d'affichage</div></div>
+          <button class="action-btn" id="displayApplyBtn">Appliquer</button>
+        </div>
+      </div>
+
+      <!-- ── AUDIO ── -->
+      <div class="tab-content" id="tab-audio">
+        <div class="section-title">Audio</div>
+        <div class="param-row" id="audio-out-row">
+          <div class="param-left"><div class="param-label">Sortie audio</div><div class="param-desc">Périphérique de sortie</div></div>
+          <div class="param-select"><span class="arrow" data-dir="-1">◀</span><span class="val" id="audio-out-val">HDMI</span><span class="arrow" data-dir="1">▶</span></div>
+        </div>
+        <div class="param-row" id="volume-row">
+          <div class="param-left"><div class="param-label">Volume</div><div class="param-desc">Volume système (0–100%)</div></div>
+          <div class="param-select"><span class="arrow" data-dir="-1">◀</span><span class="val" id="volume-val">80%</span><span class="arrow" data-dir="1">▶</span></div>
+        </div>
+        <div class="param-row" id="audio-apply-row">
+          <div class="param-left"><div class="param-label">Appliquer</div><div class="param-desc">Enregistrer les paramètres audio</div></div>
+          <button class="action-btn" id="audioApplyBtn">Appliquer</button>
+        </div>
+      </div>
+
+      <!-- ── BLUETOOTH ── -->
+      <div class="tab-content" id="tab-bluetooth">
+        <div class="section-title">Bluetooth</div>
+        <div class="param-row" id="bt-power-row">
+          <div class="param-left"><div class="param-label">Bluetooth</div><div class="param-desc" id="bt-status-desc">Chargement…</div></div>
+          <div class="toggle" id="bt-power-toggle"></div>
+        </div>
+        <div class="param-row" id="bt-scan-row">
+          <div class="param-left"><div class="param-label">Scanner les appareils</div><div class="param-desc">Recherche ~12 secondes</div></div>
+          <button class="action-btn" id="btScanBtn">Scanner</button>
+        </div>
+        <div id="bt-scan-list" style="display:flex;flex-direction:column;gap:.6vh"></div>
+
+        <div class="section-title" style="margin-top:.5vh">Appareils appairés</div>
+        <div id="bt-paired-list" style="display:flex;flex-direction:column;gap:.6vh">
+          <div style="padding:1vh 1.4vw;font-size:.65em;color:var(--text-dim)">Chargement…</div>
+        </div>
+      </div>
+
+      <!-- ── MANETTES ── -->
+      <div class="tab-content" id="tab-gamepads">
+        <div class="section-title">Mappings Jellyfin</div>
+        <div class="param-row" id="gp-detect-row">
+          <div class="param-left">
+            <div class="param-label">Périphériques détectés</div>
+            <div class="param-desc" id="gp-detect-desc">Appuyez sur un bouton pour activer</div>
+          </div>
+          <div class="info-badge na" id="gp-detect-val">—</div>
+        </div>
+        <div id="gp-maps-list" style="display:flex;flex-direction:column;gap:.6vh">
+          <div style="padding:1vh 1.4vw;font-size:.65em;color:var(--text-dim)">Chargement…</div>
+        </div>
+        <div class="param-row" id="gp-new-row">
+          <div class="param-left">
+            <div class="param-label">Créer un nouveau mapping</div>
+            <div class="param-desc">Configurer les boutons d'un périphérique</div>
+          </div>
+          <button class="action-btn" id="gpNewBtn">Configurer</button>
+        </div>
+        <div class="section-title" style="margin-top:.5vh">Diagnostic</div>
+        <div class="param-row" id="gp-tester-row">
+          <div class="param-left">
+            <div class="param-label">Tester les boutons</div>
+            <div class="param-desc">Ouvre gamepad-tester.com pour voir les indices réels</div>
+          </div>
+          <button class="action-btn" id="gpTesterBtn">Ouvrir</button>
+        </div>
+        <div class="param-row" id="gp-debug-row">
+          <div class="param-left">
+            <div class="param-label">Debug manette en direct</div>
+            <div class="param-desc" id="gp-debug-desc" style="font-family:'Share Tech Mono',monospace;color:var(--blue);line-height:1.6em">Appuyez sur un bouton ou la croix…</div>
+          </div>
+          <button class="action-btn" id="gpDebugToggle">Activer</button>
+        </div>
+        <div class="param-row" id="gp-wiimote-rescan-row">
+          <div class="param-left">
+            <div class="param-label">Rescanner Wiimote</div>
+            <div class="param-desc">Relancer la lecture evdev si la croix ne répond pas</div>
+          </div>
+          <button class="action-btn" id="gpWiimoteRescanBtn">Rescanner</button>
+        </div>
+
+        <div class="section-title" style="margin-top:.5vh">Exemples inclus</div>
+        <div class="param-row" id="gp-examples-row">
+          <div class="param-left">
+            <div class="param-label">Exemples JMP</div>
+            <div class="param-desc" id="gp-examples-desc">Xbox, CEC, Apple Remote…</div>
+          </div>
+          <button class="action-btn" id="gpExamplesBtn">Activer</button>
+        </div>
+      </div>
+
+      <!-- ── MISE À JOUR ── -->
+      <div class="tab-content" id="tab-update">
+        <div class="section-title">Mise à jour système</div>
+        <div class="param-row" id="update-version-row">
+          <div class="param-left"><div class="param-label">Version XeLauncher</div><div class="param-desc">Installée actuellement</div></div>
+          <div class="info-badge" id="update-version-val">…</div>
+        </div>
+        <div class="param-row" id="update-check-row">
+          <div class="param-left"><div class="param-label">Vérifier les mises à jour</div><div class="param-desc">Rechercher les paquets disponibles</div></div>
+          <button class="action-btn" id="updateCheckBtn">Vérifier</button>
+        </div>
+        <div class="param-row" id="update-run-row">
+          <div class="param-left"><div class="param-label">Mettre à jour les paquets</div><div class="param-desc" id="update-run-desc">apt update + apt upgrade</div></div>
+          <button class="action-btn" id="updateRunBtn">Mettre à jour</button>
+        </div>
+        <div class="param-row" id="update-reboot-row">
+          <div class="param-left"><div class="param-label">Redémarrer après mise à jour</div><div class="param-desc">Redémarrage automatique</div></div>
+          <div class="toggle" id="reboot-toggle"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Overlay config interface réseau -->
+<div class="iface-overlay" id="ifaceOverlay">
+  <div class="iface-panel" id="ifacePanel">
+    <div class="iface-panel-title" id="ifacePanelTitle">Interface</div>
+    <div class="param-row" id="ip-dhcp-row">
+      <div class="param-left"><div class="param-label">DHCP automatique</div><div class="param-desc">Obtenir l'IP via le routeur</div></div>
+      <div class="toggle" id="ip-dhcp-toggle"></div>
+    </div>
+    <div id="ip-static-fields">
+      <div class="param-row" id="ip-static-row">
+        <div class="param-left"><div class="param-label">Adresse IP</div><div class="param-desc" id="ip-static-desc">—</div></div>
+        <button class="action-btn" id="ip-static-btn">Modifier</button>
+      </div>
+      <div class="param-row" id="ip-mask-row">
+        <div class="param-left"><div class="param-label">Masque</div><div class="param-desc" id="ip-mask-desc">255.255.255.0</div></div>
+        <button class="action-btn" id="ip-mask-btn">Modifier</button>
+      </div>
+      <div class="param-row" id="ip-gw-row">
+        <div class="param-left"><div class="param-label">Passerelle</div><div class="param-desc" id="ip-gw-desc">—</div></div>
+        <button class="action-btn" id="ip-gw-btn">Modifier</button>
+      </div>
+      <div class="param-row" id="ip-dns1-row">
+        <div class="param-left"><div class="param-label">DNS principal</div><div class="param-desc" id="ip-dns1-desc">1.1.1.1</div></div>
+        <button class="action-btn" id="ip-dns1-btn">Modifier</button>
+      </div>
+      <div class="param-row" id="ip-dns2-row">
+        <div class="param-left"><div class="param-label">DNS secondaire</div><div class="param-desc" id="ip-dns2-desc">1.0.0.1</div></div>
+        <button class="action-btn" id="ip-dns2-btn">Modifier</button>
+      </div>
+    </div>
+    <div class="param-row" id="ip-apply-row">
+      <div class="param-left"><div class="param-label">Appliquer</div><div class="param-desc">Écrire la configuration réseau</div></div>
+      <button class="action-btn" id="ip-apply-btn">Appliquer</button>
+    </div>
+    <div class="iface-panel-hint">↑↓ naviguer · ✕ modifier/valider · ○ fermer</div>
+  </div>
+</div>
+
+<!-- Numpad / Clavier -->
+<div class="numpad-overlay" id="numpadOverlay">
+  <div class="numpad-title" id="numpadTitle">Valeur</div>
+  <div class="numpad-field" id="numpadDisplay">|</div>
+  <div class="numpad-grid" id="numpadGrid"></div>
+  <div class="numpad-hint">↑↓←→ naviguer · ✕ saisir · ○ annuler</div>
+</div>
+
+<!-- Wizard mapping manette -->
+<div class="wizard-overlay" id="wizardOverlay">
+  <div class="wizard-box">
+    <div class="wizard-title">Assistant de mapping</div>
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="wizard-step-label" id="wizardStepLabel">Étape 1 / 10</div>
+      <div class="wizard-step-label" id="wizardDeviceName" style="color:var(--blue)"></div>
+    </div>
+    <div class="wizard-action-name" id="wizardActionName">HAUT</div>
+    <div class="wizard-instructions" id="wizardInstructions">Appuyez sur le bouton ou déplacez le joystick vers le HAUT</div>
+    <div class="wizard-captured" id="wizardCaptured"></div>
+    <div class="wizard-progress" id="wizardProgress"></div>
+    <div class="wizard-btns">
+      <button class="wizard-btn" id="wizardSkipBtn">Passer</button>
+      <button class="wizard-btn danger" id="wizardCancelBtn">Annuler</button>
+    </div>
+    <div class="wizard-skip-hint">Passer = ne pas mapper cette action</div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+var api = window.xeLauncher || null;
+if(!api){
+  console.warn('xeLauncher API non disponible');
+  window.xeLauncher = api = {
+    isAvailable: function(){ return false; },
+    getVersion: function(){ return Promise.resolve('1.0.0'); },
+    wifiCurrentSSID: function(){ return Promise.resolve(''); },
+    wifiScan: function(){ return Promise.resolve([]); },
+    wifiConnect: function(){ return Promise.resolve(false); },
+    wifiForget: function(){ return Promise.resolve(false); },
+    getIpAddresses: function(){ return Promise.resolve({wifi:null,eth:null}); },
+    getInterfaces: function(){ return Promise.resolve([]); },
+    setStaticIp: function(){ return Promise.resolve(false); },
+    setDisplay: function(){ return Promise.resolve(false); },
+    setAudio: function(){ return Promise.resolve(false); },
+    setControllerType: function(){ return Promise.resolve(false); },
+    checkUpdate: function(){ return Promise.resolve({available:false}); },
+    systemUpdate: function(){ return Promise.resolve(false); },
+    systemReboot: function(){},
+    goBack: function(){ window.location.href='menu.html'; },
+    btListPaired: function(){ return Promise.resolve([]); },
+    btScan: function(){ return Promise.resolve([]); },
+    btPair: function(){ return Promise.resolve(false); },
+    btConnect: function(){ return Promise.resolve(false); },
+    btDisconnect: function(){ return Promise.resolve(false); },
+    btRemove: function(){ return Promise.resolve(false); },
+    btRename: function(){ return Promise.resolve(false); },
+    btStatus: function(){ return Promise.resolve({powered:false}); },
+    btPower: function(){ return Promise.resolve(false); },
+    listGamepadMaps: function(){ return Promise.resolve([]); },
+    saveGamepadMap: function(){ return Promise.resolve(false); },
+    deleteGamepadMap: function(){ return Promise.resolve(false); },
+    activateGamepadExamples: function(){ return Promise.resolve(false); }
+  };
+}
+
+// ÉTAT GLOBAL
+var S = {
+  tab:'network', zone:'sidebar', sideIdx:0, contentIdx:0,
+  ctrl: localStorage.getItem('xeCtrlType') || 'psn',
+  res:     {idx:1, opts:['1280×720','1920×1080','3840×2160']},
+  refresh: {idx:1, opts:['30 Hz','60 Hz','120 Hz']},
+  rotate:  {idx:0, opts:['0°','90°','180°','270°']},
+  audioOut:{idx:0, opts:['HDMI','Analogique','Bluetooth']},
+  volume:80, overscan:false, rebootAfterUpdate:false,
+  wifiNetworks:[], wifiCurrent:'',
+  hiddenNetworks: (function(){
+    try{ return JSON.parse(localStorage.getItem('xeHiddenWifi')||'[]'); }catch(e){ return []; }
+  })(),
+  showHidden:false,
+  btNames:{},
+  btPowered:false,
+  btPairedDevices:[],
+  btScannedDevices:[]
+};
+var TABS = ['network','display','audio','bluetooth','gamepads','update'];
+var SIDS = ['nav-network','nav-display','nav-audio','nav-bluetooth','nav-gamepads','nav-update'];
+
+function toast(msg, type) {
+  var el=document.getElementById('toast');
+  el.textContent=msg; el.className='toast show '+(type||'');
+  clearTimeout(el._t); el._t=setTimeout(function(){el.classList.remove('show');},2800);
+}
+
+function switchTab(name) {
+  S.tab=name; S.sideIdx=TABS.indexOf(name);
+  SIDS.forEach(function(id,i){
+    var el=document.getElementById(id);
+    if(el){
+      var active=i===S.sideIdx;
+      el.className='nav-item'+(active?' active':'')+(S.zone==='sidebar'&&active?' focused':'');
+    }
+  });
+  TABS.forEach(function(t){
+    var tabEl=document.getElementById('tab-'+t);
+    if(tabEl) tabEl.className='tab-content'+(t===name?' active':'');
+  });
+  S.contentIdx=0; updateContentFocus();
+  if(name==='network'){loadIPs();loadWifiStatus();loadInterfaces();}
+  if(name==='bluetooth') loadBluetooth();
+  if(name==='gamepads')  { loadGamepadMaps(); refreshExamplesBtn(); }
+  if(name==='update')  loadVersion();
+}
+function renderSidebarFocus(){
+  SIDS.forEach(function(id,i){
+    var el=document.getElementById(id);
+    if(el){
+      var active=TABS[i]===S.tab;
+      el.className='nav-item'+(active?' active':'')+(S.zone==='sidebar'&&i===S.sideIdx?' focused':'');
+    }
+  });
+}
+
+function getRows(){
+  var tab=document.getElementById('tab-'+S.tab); if(!tab) return [];
+  return Array.from(tab.querySelectorAll('.param-row,.wifi-item,.hidden-toggle,.ctrl-card,.iface-card,.hidden-item')).filter(function(el){
+    var p=el.parentElement;
+    while(p&&p!==tab){
+      if(p.style&&p.style.display==='none') return false;
+      p=p.parentElement;
+    }
+    return true;
+  });
+}
+function updateContentFocus(){
+  var tab=document.getElementById('tab-'+S.tab); if(!tab) return;
+  tab.querySelectorAll('.param-row,.wifi-item,.hidden-toggle,.ctrl-card,.iface-card,.hidden-item').forEach(function(el){
+    el.classList.remove('focused','trash-focus');
+  });
+  var rows=getRows();
+  if(S.zone==='content' && rows[S.contentIdx]){
+    rows[S.contentIdx].classList.add('focused');
+    rows[S.contentIdx].scrollIntoView({block:'nearest',behavior:'smooth'});
+  }
+}
+function renderHeaderFocus(){ 
+  var backBtn = document.getElementById('backBtn');
+  if(backBtn) backBtn.classList.toggle('focused',S.zone==='header');
+}
+function renderFocus(){ renderHeaderFocus(); renderSidebarFocus(); updateContentFocus(); }
+
+function renderOverscan()     { 
+  var el=document.getElementById('overscan-toggle');
+  if(el) el.className='toggle'+(S.overscan?' on':'');
+}
+function renderRebootToggle() { 
+  var el=document.getElementById('reboot-toggle');
+  if(el) el.className='toggle'+(S.rebootAfterUpdate?' on':'');
+}
+function cycleOpt(s,elId,dir){ 
+  s.idx=(s.idx+dir+s.opts.length)%s.opts.length; 
+  var el=document.getElementById(elId);
+  if(el) el.textContent=s.opts[s.idx];
+}
+function guessGateway(ip){ if(!ip) return ''; var p=ip.split('.'); if(p.length!==4) return ''; p[3]='1'; return p.join('.'); }
+
+function activateRow(row){
+  if(!row) return; var id=row.id;
+  if(id==='overscan-row')     {S.overscan=!S.overscan;renderOverscan();return;}
+  if(id==='update-reboot-row'){S.rebootAfterUpdate=!S.rebootAfterUpdate;renderRebootToggle();return;}
+  if(row.classList.contains('hidden-toggle')){toggleHiddenSection();return;}
+  if(row.classList.contains('iface-card')){
+    openIfaceOverlay(parseInt(row.dataset.idx)||0); return;
+  }
+  if(row.classList.contains('wifi-item')){
+    if(row.classList.contains('trash-focus')){
+      hideNetwork(row.dataset.ssid); return;
+    }
+    var net=S.wifiNetworks.find(function(n){return n.ssid===row.dataset.ssid;});
+    if(net && net.ssid!==S.wifiCurrent) doConnect(net);
+    return;
+  }
+  if(row.classList.contains('hidden-item')){
+    unhideNetwork(row.dataset.ssid);
+    return;
+  }
+  var btn=row.querySelector('button'); if(btn) btn.click();
+}
+
+function isCyclableRow(row){
+  if(!row) return false;
+  var id=row.id;
+  return (id==='res-row'||id==='refresh-row'||id==='rotate-row'||id==='audio-out-row'||id==='volume-row');
+}
+function changeRowValue(row,dir){
+  if(!row) return; var id=row.id;
+  if(id==='res-row')       cycleOpt(S.res,'res-val',dir);
+  if(id==='refresh-row')   cycleOpt(S.refresh,'refresh-val',dir);
+  if(id==='rotate-row')    cycleOpt(S.rotate,'rotate-val',dir);
+  if(id==='audio-out-row') cycleOpt(S.audioOut,'audio-out-val',dir);
+  if(id==='volume-row')    {S.volume=Math.min(100,Math.max(0,S.volume+dir*5));var volEl=document.getElementById('volume-val');if(volEl) volEl.textContent=S.volume+'%';}
+  if(row.classList.contains('wifi-item') && dir===1)  row.classList.add('trash-focus');
+  if(row.classList.contains('wifi-item') && dir===-1) row.classList.remove('trash-focus');
+}
+
+// NUMPAD IP
+var NP_ROWS=[['1','2','3'],['4','5','6'],['7','8','9'],['.','0','⌫'],['Annuler','OK']];
+var np={val:'',obj:null,key:'',descId:'',row:0,col:0,onConfirm:null,mode:'ip'};
+
+function openNumpad(title,descId,obj,key,onConfirm){
+  np.val=String(obj[key]||''); np.obj=obj; np.key=key; np.descId=descId;
+  np.onConfirm=onConfirm||null; np.row=0; np.col=0; np.mode='ip';
+  var titleEl=document.getElementById('numpadTitle');
+  if(titleEl) titleEl.textContent=title;
+  var gridEl=document.getElementById('numpadGrid');
+  if(gridEl) gridEl.style.gridTemplateColumns='repeat(3,1fr)';
+  renderNumpad();
+  var overlay=document.getElementById('numpadOverlay');
+  if(overlay) overlay.classList.add('visible');
+}
+function closeNumpad(){ 
+  var overlay=document.getElementById('numpadOverlay');
+  if(overlay) overlay.classList.remove('visible'); 
+  wifiPwdNet=null; 
+}
+
+function renderNumpad(){
+  var displayEl=document.getElementById('numpadDisplay');
+  if(displayEl) displayEl.textContent=(np.val||'')+'|';
+  var grid=document.getElementById('numpadGrid'); 
+  if(!grid) return;
+  grid.innerHTML='';
+  for(var r=0;r<4;r++){
+    NP_ROWS[r].forEach(function(k,c){
+      var btn=document.createElement('div');
+      btn.className='numpad-key'+(k==='⌫'?' del':'')+(np.row===r && np.col===c?' focused':'');
+      btn.textContent=k;
+      (function(rr,cc){btn.onclick=function(){np.row=rr;np.col=cc;numpadPress();};})(r,c);
+      grid.appendChild(btn);
+    });
+  }
+  var ann=document.createElement('div');
+  ann.className='numpad-key cancel'+(np.row===4 && np.col===0?' focused':'');
+  ann.textContent='Annuler'; ann.onclick=function(){np.row=4;np.col=0;numpadPress();};
+  grid.appendChild(ann);
+  var ok=document.createElement('div');
+  ok.className='numpad-key ok'+(np.row===4 && np.col===1?' focused':'');
+  ok.style.gridColumn='span 2'; ok.textContent='OK';
+  ok.onclick=function(){np.row=4;np.col=1;numpadPress();};
+  grid.appendChild(ok);
+}
+
+function numpadPress(){
+  var r=np.row,c=np.col;
+  if(r===4){
+    if(c===0){closeNumpad();return;}
+    if(np.obj) np.obj[np.key]=np.val;
+    var descEl=document.getElementById(np.descId);
+    if(descEl) descEl.textContent=np.val||'—';
+    if(np.onConfirm) np.onConfirm(np.val);
+    closeNumpad(); return;
+  }
+  var k=NP_ROWS[r][c]; if(!k) return;
+  if(k==='⌫') np.val=np.val.slice(0,-1);
+  else np.val+=k;
+  renderNumpad();
+}
+
+function numpadNav(key){
+  if(key==='ArrowUp')   { np.row=Math.max(0,np.row-1); if(np.row<4 && np.col>2) np.col=2; }
+  else if(key==='ArrowDown')  { np.row=Math.min(4,np.row+1); if(np.row===4 && np.col>1) np.col=1; }
+  else if(key==='ArrowLeft')  { np.col=Math.max(0,np.col-1); }
+  else if(key==='ArrowRight') { var mx=(np.row===4)?1:2; np.col=Math.min(mx,np.col+1); }
+  else if(key==='Enter')  { numpadPress(); return; }
+  else if(key==='Escape') { closeNumpad(); return; }
+  renderNumpad();
+}
+
+// CLAVIER MOT DE PASSE WIFI
+var wifiPwdNet=null;
+var WP_ROWS=[
+  ['1','2','3','4','5','6','7','8','9','0'],
+  ['a','b','c','d','e','f','g','h','i','j'],
+  ['k','l','m','n','o','p','q','r','s','t'],
+  ['u','v','w','x','y','z','-','_','.','@'],
+  ['MAJ','⌫','OK']
+];
+var wpCaps=false, wpRow=0, wpCol=0;
+
+function openWifiPwd(net){
+  wifiPwdNet=net; np.val=''; wpCaps=false; wpRow=0; wpCol=0;
+  var titleEl=document.getElementById('numpadTitle');
+  if(titleEl) titleEl.textContent='Mot de passe — '+net.ssid;
+  var gridEl=document.getElementById('numpadGrid');
+  if(gridEl) gridEl.style.gridTemplateColumns='repeat(10,1fr)';
+  renderWifiPwdKeyboard();
+  var overlay=document.getElementById('numpadOverlay');
+  if(overlay) overlay.classList.add('visible');
+}
+
+function renderWifiPwdKeyboard(){
+  var displayEl=document.getElementById('numpadDisplay');
+  if(displayEl) displayEl.textContent=(np.val||'')+'|';
+  var grid=document.getElementById('numpadGrid'); 
+  if(!grid) return;
+  grid.innerHTML='';
+  for(var r=0;r<4;r++){
+    WP_ROWS[r].forEach(function(k,col){
+      var btn=document.createElement('div');
+      var active=wpRow===r && wpCol===col;
+      btn.className='numpad-key'+(active?' focused':'');
+      var display=(wpCaps && k.length===1 && k>='a' && k<='z')?k.toUpperCase():k;
+      btn.textContent=display;
+      (function(rr,cc){btn.onclick=function(){wpRow=rr;wpCol=cc;wpPress();};})(r,col);
+      grid.appendChild(btn);
+    });
+  }
+  var row4=[{k:'MAJ',span:4},{k:'⌫',span:3},{k:'OK',span:3}];
+  row4.forEach(function(item,i){
+    var btn=document.createElement('div');
+    var active=wpRow===4 && wpCol===i;
+    btn.className='numpad-key'+(item.k==='OK'?' ok':'')+(item.k==='⌫'?' del':'')+(wpCaps && item.k==='MAJ'?' caps-on':'')+(active?' focused':'');
+    btn.style.gridColumn='span '+item.span;
+    btn.textContent=item.k==='MAJ'?(wpCaps?'min':'MAJ'):item.k;
+    (function(ii){btn.onclick=function(){wpRow=4;wpCol=ii;wpPress();};})(i);
+    grid.appendChild(btn);
+  });
+}
+
+function wpPress(){
+  if(wpRow<4){
+    var k=WP_ROWS[wpRow][wpCol]; if(!k) return;
+    np.val+=(wpCaps && k.length===1 && k>='a' && k<='z')?k.toUpperCase():k;
+  } else {
+    if(wpCol===0){ wpCaps=!wpCaps; }
+    else if(wpCol===1){ np.val=np.val.slice(0,-1); }
+    else { connectToNetwork(wifiPwdNet.ssid,np.val); closeNumpad(); return; }
+  }
+  renderWifiPwdKeyboard();
+}
+
+function wpNav(key){
+  if(key==='ArrowUp')   { if(wpRow>0) wpRow--; if(wpRow===4 && wpCol>2) wpCol=2; else if(wpRow<4 && wpCol>9) wpCol=9; }
+  else if(key==='ArrowDown')  { if(wpRow<4) wpRow++; if(wpRow===4 && wpCol>2) wpCol=2; }
+  else if(key==='ArrowLeft')  { if(wpRow===4) wpCol=Math.max(0,wpCol-1); else wpCol=(wpCol-1+10)%10; }
+  else if(key==='ArrowRight') { if(wpRow===4) wpCol=Math.min(2,wpCol+1); else wpCol=(wpCol+1)%10; }
+  else if(key==='Enter')  { wpPress(); return; }
+  else if(key==='Escape') { closeNumpad(); return; }
+  renderWifiPwdKeyboard();
+}
+
+// WIFI
+function signalSVG(sig){
+  var s=parseInt(sig)||0, lvl=s>75?4:s>50?3:s>25?2:1, bars='';
+  var heights=[4,7,10,14];
+  for(var i=0;i<4;i++){
+    var h=heights[i], on=i<lvl;
+    bars+='<rect x="'+(i*5)+'" y="'+(14-h)+'" width="3" height="'+h+'" rx="1" fill="'+(on?'currentColor':'rgba(255,255,255,0.15)')+'"/>';
+  }
+  return '<svg width="22" height="14" viewBox="0 0 22 14" style="flex-shrink:0">'+bars+'</svg>';
+}
+var trashSVG='<svg width="14" height="15" viewBox="0 0 14 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 4h12M5 4V3a.5.5 0 01.5-.5h3A.5.5 0 019 3v1M2.5 4l.7 9a1 1 0 001 .9h5.6a1 1 0 001-.9l.7-9"/><line x1="5.5" y1="7" x2="5.5" y2="10.5"/><line x1="8.5" y1="7" x2="8.5" y2="10.5"/></svg>';
+var eyeSVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+
+function loadWifiStatus(){
+  var el=document.getElementById('net-ssid-val'); 
+  if(el) el.textContent='…';
+  if(api && api.wifiCurrentSSID) api.wifiCurrentSSID().then(function(s){
+    S.wifiCurrent=s||''; 
+    if(el){
+      el.textContent=s||'—'; 
+      el.className='info-badge'+(s?'':' na');
+    }
+  }).catch(function(){if(el){el.textContent='—';el.className='info-badge na';}});
+}
+
+var wifiScanBtn = document.getElementById('wifiScanBtn');
+if(wifiScanBtn){
+  wifiScanBtn.onclick=function(){
+    var btn=this; btn.textContent='…'; btn.disabled=true;
+    var wrap=document.getElementById('wifi-list-wrap');
+    if(wrap) wrap.innerHTML='';
+    if(api && api.wifiScan) api.wifiScan().then(function(nets){
+      S.wifiNetworks=nets||[]; renderWifiList();
+      btn.textContent='Scanner'; btn.disabled=false;
+      var hiddenCount=document.getElementById('hidden-count');
+      if(hiddenCount) hiddenCount.textContent=S.hiddenNetworks.length;
+    }).catch(function(){btn.textContent='Scanner';btn.disabled=false;toast('Erreur scan WiFi','err');});
+    else{btn.textContent='Scanner';btn.disabled=false;toast('wifiScan non dispo','err');}
+  };
+}
+
+function renderWifiList(){
+  var wrap=document.getElementById('wifi-list-wrap'); 
+  if(!wrap) return;
+  wrap.innerHTML='';
+  var visible=S.wifiNetworks.filter(function(n){return S.hiddenNetworks.indexOf(n.ssid)<0;});
+  if(!visible.length){
+    wrap.innerHTML='<div style="padding:1vh 1.4vw;font-size:.65em;letter-spacing:.15em;color:var(--text-dim)">Aucun réseau — scannez d\'abord</div>';
+    return;
+  }
+  visible.forEach(function(net){
+    var item=document.createElement('div');
+    var cur=net.ssid===S.wifiCurrent;
+    item.className='wifi-item'+(cur?' current':'');
+    item.dataset.ssid=net.ssid;
+    item.innerHTML='<div class="wifi-left">'
+      +'<div class="wifi-ssid">'+escapeHtml(net.ssid)+(cur?' ●':'')+'</div>'
+      +'<div class="wifi-meta">'+(net.security||'Ouvert')+'</div></div>'
+      +'<div class="wifi-right">'
+      +signalSVG(net.signal)
+      +(cur?'<button class="action-btn">Connecté</button>':'<button class="action-btn">Connecter</button>')
+      +'<button class="wifi-trash-btn" title="Masquer">'+trashSVG+'</button>'
+      +'</div>';
+    var connectBtn = item.querySelector('.action-btn');
+    if(connectBtn){
+      connectBtn.onclick=function(e){
+        e.stopPropagation(); if(!cur) doConnect(net);
+      };
+    }
+    var trashBtn = item.querySelector('.wifi-trash-btn');
+    if(trashBtn){
+      trashBtn.onclick=function(e){
+        e.stopPropagation(); hideNetwork(net.ssid);
+      };
+    }
+    item.onclick=function(){ if(!cur) doConnect(net); };
+    wrap.appendChild(item);
+  });
+  if(S.zone==='content') updateContentFocus();
+}
+
+function escapeHtml(str){
+  if(!str) return '';
+  return str.replace(/[&<>]/g, function(m){
+    if(m==='&') return '&amp;';
+    if(m==='<') return '&lt;';
+    if(m==='>') return '&gt;';
+    return m;
+  });
+}
+
+function doConnect(net){
+  var secured=net.security && net.security!=='' && net.security!=='Ouvert' && !/^ESS$/.test(net.security);
+  if(secured) openWifiPwd(net);
+  else connectToNetwork(net.ssid,'');
+}
+function connectToNetwork(ssid,pwd){
+  if(!api || !api.wifiConnect){toast('wifiConnect non disponible','err');return;}
+  toast('Connexion à '+ssid+'…','');
+  api.wifiConnect(ssid,pwd).then(function(ok){
+    toast(ok?'Connecté à '+ssid:'Échec — vérifiez le mot de passe',ok?'ok':'err');
+    if(ok){S.wifiCurrent=ssid;loadWifiStatus();renderWifiList();}
+  }).catch(function(){toast('Erreur de connexion','err');});
+}
+function saveHidden(){ localStorage.setItem('xeHiddenWifi',JSON.stringify(S.hiddenNetworks)); }
+function hideNetwork(ssid){
+  if(S.hiddenNetworks.indexOf(ssid)<0) S.hiddenNetworks.push(ssid);
+  saveHidden();
+  var hiddenCount=document.getElementById('hidden-count');
+  if(hiddenCount) hiddenCount.textContent=S.hiddenNetworks.length;
+  renderWifiList();
+  if(S.showHidden) renderHiddenList();
+}
+function unhideNetwork(ssid){
+  S.hiddenNetworks=S.hiddenNetworks.filter(function(s){return s!==ssid;});
+  saveHidden();
+  var hiddenCount=document.getElementById('hidden-count');
+  if(hiddenCount) hiddenCount.textContent=S.hiddenNetworks.length;
+  renderHiddenList();
+  renderWifiList();
+}
+function toggleHiddenSection(){
+  S.showHidden=!S.showHidden;
+  var wrap=document.getElementById('hidden-list-wrap');
+  var tog=document.getElementById('hidden-networks-toggle');
+  if(wrap) wrap.style.display=S.showHidden?'flex':'none';
+  if(tog) tog.classList.toggle('open',S.showHidden);
+  if(S.showHidden) renderHiddenList();
+}
+function renderHiddenList(){
+  var wrap=document.getElementById('hidden-list-wrap'); 
+  if(!wrap) return;
+  wrap.innerHTML='';
+  if(!S.hiddenNetworks.length){
+    wrap.innerHTML='<div style="padding:1vh 1.4vw;font-size:.65em;color:var(--text-dim)">Aucun réseau masqué</div>';
+    return;
+  }
+  S.hiddenNetworks.forEach(function(ssid){
+    var item=document.createElement('div'); 
+    item.className='hidden-item';
+    item.dataset.ssid=ssid;
+    item.innerHTML='<div class="wifi-left"><div class="wifi-ssid">'+escapeHtml(ssid)+'</div><div class="wifi-meta">Masqué</div></div>'
+      +'<button class="action-btn" style="font-size:.6em">Afficher</button>';
+    var btn=item.querySelector('button');
+    if(btn){
+      btn.onclick=function(e){
+        e.stopPropagation();
+        unhideNetwork(ssid);
+      };
+    }
+    item.onclick=function(){ unhideNetwork(ssid); };
+    wrap.appendChild(item);
+  });
+}
+var wifiForgetBtn = document.getElementById('wifiForgetBtn');
+if(wifiForgetBtn){
+  wifiForgetBtn.onclick=function(){
+    if(!S.wifiCurrent){toast('Aucun réseau connecté','err');return;}
+    if(api && api.wifiForget) api.wifiForget(S.wifiCurrent).then(function(){
+      toast('Réseau oublié','ok'); S.wifiCurrent=''; loadWifiStatus();
+      renderWifiList();
+    }); else toast('wifiForget non dispo','err');
+  };
+}
+var hiddenToggle = document.getElementById('hidden-networks-toggle');
+if(hiddenToggle) hiddenToggle.onclick=toggleHiddenSection;
+
+// IPs + INTERFACES
+function loadIPs(){
+  ['net-ip-wifi','net-ip-eth'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.textContent='…';
+  });
+  if(api && api.getIpAddresses) api.getIpAddresses().then(function(ips){
+    var w=(ips && ips.wifi)||null,e=(ips && ips.eth)||null;
+    var we=document.getElementById('net-ip-wifi'),ee=document.getElementById('net-ip-eth');
+    if(we){we.textContent=w||'—'; we.className='info-badge'+(w?'':' na');}
+    if(ee){ee.textContent=e||'—'; ee.className='info-badge'+(e?'':' na');}
+  }).catch(function(){});
+}
+var ipRefreshBtn = document.getElementById('ipRefreshBtn');
+if(ipRefreshBtn) ipRefreshBtn.onclick=function(){loadIPs();loadInterfaces();};
+
+var ifaceData=[];
+function loadInterfaces(){
+  var wrap=document.getElementById('iface-list-wrap');
+  if(wrap) wrap.innerHTML='<div style="padding:1vh 1.4vw;font-size:.65em;color:var(--text-dim)">Chargement…</div>';
+  if(api && api.getInterfaces){
+    api.getInterfaces().then(function(ifaces){
+      ifaceData=ifaces||[]; renderIfaceList();
+    }).catch(function(){
+      ifaceData=[]; renderIfaceList(); toast('Erreur lecture interfaces','err');
+    });
+  } else {
+    if(wrap) wrap.innerHTML='<div style="padding:1vh 1.4vw;font-size:.65em;color:var(--red)">getInterfaces non disponible</div>';
+  }
+}
+function renderIfaceList(){
+  var wrap=document.getElementById('iface-list-wrap'); 
+  if(!wrap) return;
+  wrap.innerHTML='';
+  if(!ifaceData.length){
+    wrap.innerHTML='<div style="padding:1vh 1.4vw;font-size:.65em;color:var(--text-dim)">Aucune interface détectée</div>';
+    return;
+  }
+  ifaceData.forEach(function(iface,i){
+    var card=document.createElement('div');
+    card.className='iface-card';
+    card.id='iface-card-'+i;
+    card.dataset.idx=i;
+    card.innerHTML='<div class="iface-left">'
+      +'<div class="iface-name">'+escapeHtml(iface.name)+'</div>'
+      +(iface.ip?'<div class="iface-ip">'+escapeHtml(iface.ip)+'/'+(iface.cidr||'?')+'</div>':'<div class="iface-ip" style="color:var(--text-dim)">sans IP</div>')
+      +'</div>'
+      +'<span class="iface-badge '+(iface.state==='up'?'up':'down')+'">'+(iface.state==='up'?'actif':'inactif')+'</span>';
+    (function(idx){card.onclick=function(){openIfaceOverlay(idx);};})(i);
+    wrap.appendChild(card);
+  });
+  if(S.zone==='content') updateContentFocus();
+}
+
+// OVERLAY CONFIG INTERFACE
+var ifaceStates={};
+var currentIfaceIdx=0;
+var ifacePanelFocus=0;
+var IFACE_ALL_ROWS=['ip-dhcp-row','ip-static-row','ip-mask-row','ip-gw-row','ip-dns1-row','ip-dns2-row','ip-apply-row'];
+
+function getIfaceState(name){
+  if(!ifaceStates[name]){
+    ifaceStates[name]={dhcp:true,ip:'',mask:'255.255.255.0',gw:'',dns1:'1.1.1.1',dns2:'1.0.0.1'};
+  }
+  return ifaceStates[name];
+}
+
+function openIfaceOverlay(idx){
+  currentIfaceIdx=idx;
+  var iface=ifaceData[idx]||{};
+  var st=getIfaceState(iface.name);
+  if(!st.ip && iface.ip){
+    st.ip=iface.ip;
+    st.gw=guessGateway(iface.ip);
+  }
+  var titleEl=document.getElementById('ifacePanelTitle');
+  if(titleEl) titleEl.textContent=(iface.name||'Interface')+' — '+(iface.ip||'sans IP');
+  ifacePanelFocus=0;
+  renderIfacePanel();
+  var overlay=document.getElementById('ifaceOverlay');
+  if(overlay) overlay.classList.add('visible');
+}
+function closeIfaceOverlay(){
+  var overlay=document.getElementById('ifaceOverlay');
+  if(overlay) overlay.classList.remove('visible');
+}
+
+function renderIfacePanel(){
+  var iface=ifaceData[currentIfaceIdx]||{};
+  var st=getIfaceState(iface.name);
+  var dhcpToggle=document.getElementById('ip-dhcp-toggle');
+  if(dhcpToggle) dhcpToggle.className='toggle'+(st.dhcp?' on':'');
+  var sf=document.getElementById('ip-static-fields');
+  if(sf) sf.style.display=st.dhcp?'none':'flex';
+  var staticDesc=document.getElementById('ip-static-desc');
+  if(staticDesc) staticDesc.textContent=st.ip||'—';
+  var maskDesc=document.getElementById('ip-mask-desc');
+  if(maskDesc) maskDesc.textContent=st.mask||'255.255.255.0';
+  var gwDesc=document.getElementById('ip-gw-desc');
+  if(gwDesc) gwDesc.textContent=st.gw||'—';
+  var dns1Desc=document.getElementById('ip-dns1-desc');
+  if(dns1Desc) dns1Desc.textContent=st.dns1||'1.1.1.1';
+  var dns2Desc=document.getElementById('ip-dns2-desc');
+  if(dns2Desc) dns2Desc.textContent=st.dns2||'1.0.0.1';
+  var rows=getIfacePanelRows();
+  IFACE_ALL_ROWS.forEach(function(id){
+    var el=document.getElementById(id); 
+    if(el) el.classList.remove('focused');
+  });
+  var focusId=rows[ifacePanelFocus];
+  if(focusId){
+    var focusEl=document.getElementById(focusId);
+    if(focusEl) focusEl.classList.add('focused');
+  }
+}
+
+function getIfacePanelRows(){
+  var iface=ifaceData[currentIfaceIdx]||{};
+  var st=getIfaceState(iface.name);
+  if(st.dhcp) return['ip-dhcp-row','ip-apply-row'];
+  return IFACE_ALL_ROWS;
+}
+
+function ifacePanelActivate(){
+  var iface=ifaceData[currentIfaceIdx]||{};
+  var st=getIfaceState(iface.name);
+  var rows=getIfacePanelRows();
+  var id=rows[ifacePanelFocus];
+  if(id==='ip-dhcp-row'){st.dhcp=!st.dhcp;renderIfacePanel();return;}
+  if(id==='ip-apply-row'){applyIfaceConfig();return;}
+  var map={
+    'ip-static-row':['Adresse IP','ip-static-desc','ip'],
+    'ip-mask-row':  ['Masque','ip-mask-desc','mask'],
+    'ip-gw-row':    ['Passerelle','ip-gw-desc','gw'],
+    'ip-dns1-row':  ['DNS principal','ip-dns1-desc','dns1'],
+    'ip-dns2-row':  ['DNS secondaire','ip-dns2-desc','dns2'],
+  };
+  if(map[id]) openNumpad(map[id][0],map[id][1],st,map[id][2],function(){ renderIfacePanel(); });
+}
+
+function applyIfaceConfig(){
+  var iface=ifaceData[currentIfaceIdx];
+  if(!iface){toast('Interface introuvable','err');return;}
+  var st=getIfaceState(iface.name);
+  if(!st.dhcp && !st.ip){toast('Adresse IP manquante','err');return;}
+  if(!st.dhcp && !st.gw){toast('Passerelle manquante','err');return;}
+  var cfg={
+    iface:iface.name, dhcp:st.dhcp,
+    ip:st.ip, mask:st.mask, gw:st.gw,
+    dns:st.dns1+(st.dns2?' '+st.dns2:'')
+  };
+  if(api && api.setStaticIp) api.setStaticIp(cfg).then(function(ok){
+    toast(ok?'Configuration appliquée sur '+iface.name:'Erreur réseau — voir logs',ok?'ok':'err');
+    if(ok){closeIfaceOverlay();setTimeout(function(){loadInterfaces();loadIPs();},1500);}
+  }).catch(function(){toast('Erreur inattendue','err');});
+  else toast('setStaticIp non disponible','err');
+}
+
+var dhcpToggleBtn = document.getElementById('ip-dhcp-toggle');
+if(dhcpToggleBtn){
+  dhcpToggleBtn.onclick=function(){
+    var iface=ifaceData[currentIfaceIdx]||{}; var st=getIfaceState(iface.name);
+    st.dhcp=!st.dhcp; renderIfacePanel();
+  };
+}
+['ip-static','ip-mask','ip-gw','ip-dns1','ip-dns2'].forEach(function(k){
+  var labels={'ip-static':'Adresse IP','ip-mask':'Masque','ip-gw':'Passerelle','ip-dns1':'DNS principal','ip-dns2':'DNS secondaire'};
+  var keys={'ip-static':'ip','ip-mask':'mask','ip-gw':'gw','ip-dns1':'dns1','ip-dns2':'dns2'};
+  var btn=document.getElementById(k+'-btn');
+  if(btn){
+    btn.onclick=function(){
+      var iface=ifaceData[currentIfaceIdx]||{}; var st=getIfaceState(iface.name);
+      openNumpad(labels[k],k+'-desc',st,keys[k],function(){renderIfacePanel();});
+    };
+  }
+});
+var ipApplyBtn = document.getElementById('ip-apply-btn');
+if(ipApplyBtn) ipApplyBtn.onclick=applyIfaceConfig;
+
+// AFFICHAGE / AUDIO
+document.getElementById('displayApplyBtn').onclick=function(){
+  if(!api||!api.setDisplay){toast('setDisplay non disponible','err');return;}
+  api.setDisplay({
+    resolution:S.res.opts[S.res.idx],
+    refresh:S.refresh.opts[S.refresh.idx],
+    rotation:S.rotate.opts[S.rotate.idx],
+    overscan:S.overscan
+  }).then(function(ok){toast(ok?'Affichage appliqué':'Erreur affichage',ok?'ok':'err');});
+};
+
+document.getElementById('audioApplyBtn').onclick=function(){
+  if(!api||!api.setAudio){toast('setAudio non disponible','err');return;}
+  api.setAudio({output:S.audioOut.opts[S.audioOut.idx],volume:S.volume})
+    .then(function(ok){toast(ok?'Audio appliqué':'Erreur audio',ok?'ok':'err');});
+};
+
+// MANETTES — GAMEPAD MAPPING
+var WIZARD_ACTIONS = [
+  { key:'up',           label:'HAUT',            hint:'Appuyez D-PAD haut' },
+  { key:'down',         label:'BAS',             hint:'Appuyez D-PAD bas' },
+  { key:'left',         label:'GAUCHE',          hint:'Appuyez D-PAD gauche' },
+  { key:'right',        label:'DROITE',          hint:'Appuyez D-PAD droite' },
+  { key:'enter',        label:'VALIDER (A)',      hint:'Bouton de confirmation' },
+  { key:'back',         label:'RETOUR (B)',       hint:'Bouton retour' },
+  { key:'home',         label:'ACCUEIL',         hint:'Bouton Home — peut être différent de RETOUR' },
+  { key:'play_pause',   label:'PLAY / PAUSE',    hint:'Optionnel — peut réutiliser un bouton existant (ex: A)', reusable:true },
+  { key:'seek_backward',label:'RECULER',         hint:'Optionnel — peut réutiliser un bouton existant', reusable:true },
+  { key:'seek_forward', label:'AVANCER',         hint:'Optionnel — peut réutiliser un bouton existant', reusable:true },
+];
+
+var wizard = {
+  active: false,
+  stepIdx: 0,
+  mapping: {},
+  captureTimeout: null,
+  gamepadIdx: -1,
+  deviceName: '',
+  idmatcher: '',
+  prevAxes: [],
+  prevButtons: [],
+  pendingEvdevCode: null,  // injecté par le listener Wiimote evdev
+  cooldown: false,         // bloque la capture pendant 800ms après chaque input
+};
+
+function loadGamepadMaps() {
+  updateGpDetectLabel();
+  if(!api || !api.listGamepadMaps) {
+    renderGamepadMapsFallback();
+    return;
+  }
+  api.listGamepadMaps().then(function(maps){
+    renderGamepadMaps(maps || []);
+  }).catch(function(){ renderGamepadMapsFallback(); });
+}
+
+function renderGamepadMapsFallback() {
+  var wrap = document.getElementById('gp-maps-list');
+  if(!wrap) return;
+  wrap.innerHTML = '<div style="padding:1vh 1.4vw;font-size:.65em;color:var(--text-dim)">API non disponible — les fichiers sont dans ~/.var/app/.../inputmaps/</div>';
+}
+
+function renderGamepadMaps(maps) {
+  var wrap = document.getElementById('gp-maps-list');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  if(!maps.length) {
+    wrap.innerHTML = '<div style="padding:1vh 1.4vw;font-size:.65em;color:var(--text-dim)">Aucun mapping personnalisé — utilisez "Configurer"</div>';
+    return;
+  }
+  maps.forEach(function(m) {
+    var item = document.createElement('div');
+    item.className = 'gp-map-item param-row';
+    item.innerHTML = '<div class="param-left">'
+      + '<div class="gp-map-name">' + escapeHtml(m.name) + '</div>'
+      + '<div class="gp-map-meta">' + escapeHtml(m.idmatcher||'') + ' · ' + escapeHtml(m.file) + '</div>'
+      + '</div>'
+      + '<button class="action-btn danger" data-file="'+escapeHtml(m.file)+'">Supprimer</button>';
+    var delBtn = item.querySelector('button');
+    if(delBtn) {
+      delBtn.onclick = function(e) {
+        e.stopPropagation();
+        deleteGamepadMap(m.file);
+      };
+    }
+    wrap.appendChild(item);
+  });
+  if(S.zone==='content') updateContentFocus();
+}
+
+function deleteGamepadMap(file) {
+  if(!api || !api.deleteGamepadMap) { toast('API non disponible','err'); return; }
+  api.deleteGamepadMap(file).then(function(ok){
+    toast(ok ? 'Mapping supprimé' : 'Erreur suppression', ok ? 'ok' : 'err');
+    if(ok) loadGamepadMaps();
+  });
+}
+
+function refreshExamplesBtn() {
+  if(!api || !api.listGamepadMaps) return;
+  api.listGamepadMaps().then(function(maps) {
+    var exNames = ['xbox-controller-linux.json','cec.json','apple-remote.json','apple-media-keys.json'];
+    var hasAll = exNames.every(function(f){ return maps.find(function(m){ return m.file===f; }); });
+    var btn = document.getElementById('gpExamplesBtn');
+    var desc = document.getElementById('gp-examples-desc');
+    if(btn) {
+      btn.textContent = hasAll ? 'Désactiver' : 'Activer';
+      btn.className = hasAll ? 'action-btn danger' : 'action-btn';
+    }
+    if(desc) desc.textContent = hasAll ? 'Exemples actifs' : 'Xbox, CEC, Apple Remote…';
+  });
+}
+
+// DEBUG MANETTE
+var gpDebugActive = false;
+var gpDebugFrame = null;
+var gpDebugPrevB = [];
+var gpDebugPrevA = [];
+
+function gpDebugLoop(){
+  var gps = navigator.getGamepads ? navigator.getGamepads() : [];
+  var gp = null;
+  for(var i=0;i<gps.length;i++){ if(gps[i]){ gp=gps[i]; break; } }
+  var desc = document.getElementById('gp-debug-desc');
+  if(!gp){ if(desc) desc.textContent='Aucune manette détectée'; gpDebugFrame=requestAnimationFrame(gpDebugLoop); return; }
+
+  var lines = [];
+
+  // Boutons pressés
+  var pressed = [];
+  gp.buttons.forEach(function(b,i){ if(b.pressed) pressed.push('B'+i); });
+  lines.push('Boutons : ' + (pressed.length ? pressed.join(' ') : '—'));
+
+  // Axes avec valeur
+  var axes = [];
+  gp.axes.forEach(function(v,i){ if(Math.abs(v)>0.05) axes.push('A'+i+'='+v.toFixed(2)); });
+  lines.push('Axes    : ' + (axes.length ? axes.join(' ') : '—'));
+
+  // Événements boutons (appui)
+  var evts = [];
+  gp.buttons.forEach(function(b,i){
+    if(b.pressed && !gpDebugPrevB[i]) evts.push('↓B'+i);
+    if(!b.pressed && gpDebugPrevB[i]) evts.push('↑B'+i);
+    gpDebugPrevB[i] = b.pressed;
+  });
+
+  // Événements axes (franchissement seuil 0.4)
+  var T=0.4;
+  gp.axes.forEach(function(v,i){
+    var prev = gpDebugPrevA[i]||0;
+    if(Math.abs(v)>T && Math.abs(prev)<=T) evts.push('A'+i+'→'+v.toFixed(1));
+    if(Math.abs(v)<=T && Math.abs(prev)>T) evts.push('A'+i+'→0');
+    gpDebugPrevA[i] = v;
+  });
+  if(evts.length) lines.push('Évènements : ' + evts.join(' '));
+
+  lines.push('ID : ' + gp.id.substring(0,60));
+
+  if(desc) desc.innerHTML = lines.join('<br>');
+  gpDebugFrame = requestAnimationFrame(gpDebugLoop);
+}
+
+var gpDebugToggle = document.getElementById('gpDebugToggle');
+if(gpDebugToggle){
+  gpDebugToggle.onclick = function(){
+    gpDebugActive = !gpDebugActive;
+    gpDebugToggle.textContent = gpDebugActive ? 'Désactiver' : 'Activer';
+    var desc = document.getElementById('gp-debug-desc');
+    if(gpDebugActive){
+      gpDebugPrevB = []; gpDebugPrevA = [];
+      gpDebugFrame = requestAnimationFrame(gpDebugLoop);
+    } else {
+      if(gpDebugFrame){ cancelAnimationFrame(gpDebugFrame); gpDebugFrame=null; }
+      if(desc) desc.textContent = 'Appuyez sur un bouton ou la croix…';
+    }
+  };
+}
+
+var gpWiimoteRescanBtn = document.getElementById('gpWiimoteRescanBtn');
+if(gpWiimoteRescanBtn){
+  gpWiimoteRescanBtn.onclick = function(){
+    if(api && api.wiimoteRescan) api.wiimoteRescan().then(function(){ toast('Rescan Wiimote lancé','ok'); });
+    else toast('wiimoteRescan non disponible','err');
+  };
+}
+
+var gpTesterBtn = document.getElementById('gpTesterBtn');
+if(gpTesterBtn){
+  gpTesterBtn.onclick = function(){
+    if(api && api.openGamepadTester) api.openGamepadTester();
+    else toast('openGamepadTester non disponible','err');
+  };
+}
+
+var gpExamplesBtn = document.getElementById('gpExamplesBtn');
+if(gpExamplesBtn) {
+  gpExamplesBtn.onclick = function() {
+    if(!api || !api.activateGamepadExamples) { toast('API non disponible','err'); return; }
+    var isActive = gpExamplesBtn.textContent.trim() === 'Désactiver';
+    if(isActive) {
+      var exNames = ['xbox-controller-linux.json','cec.json','apple-remote.json','apple-media-keys.json'];
+      Promise.all(exNames.map(function(f){ return api.deleteGamepadMap ? api.deleteGamepadMap(f) : Promise.resolve(false); }))
+        .then(function(results){
+          var allOk = results.every(function(r){ return r; });
+          toast(allOk ? 'Exemples désactivés' : 'Certains fichiers n\'ont pas pu être supprimés', allOk ? 'ok' : 'err');
+          loadGamepadMaps();
+          refreshExamplesBtn();
+        });
+    } else {
+      api.activateGamepadExamples().then(function(ok){
+        toast(ok ? 'Exemples activés (Xbox, CEC…)' : 'Erreur', ok ? 'ok' : 'err');
+        if(ok) { loadGamepadMaps(); refreshExamplesBtn(); }
+      });
+    }
+  };
+}
+
+function updateGpDetectLabel() {
+  var gps = navigator.getGamepads ? navigator.getGamepads() : [];
+  var found = [];
+  for(var i=0; i<gps.length; i++) { if(gps[i]) found.push(gps[i].id); }
+  var val = document.getElementById('gp-detect-val');
+  var desc = document.getElementById('gp-detect-desc');
+  if(found.length) {
+    if(val) { val.textContent = found.length + ' détecté(s)'; val.className = 'info-badge'; }
+    if(desc) desc.textContent = found[0].length > 40 ? found[0].substring(0,40)+'…' : found[0];
+  } else {
+    if(val) { val.textContent = '—'; val.className = 'info-badge na'; }
+    if(desc) desc.textContent = 'Appuyez sur un bouton pour activer';
+  }
+}
+window.addEventListener('gamepadconnected', function(){ updateGpDetectLabel(); });
+window.addEventListener('gamepaddisconnected', function(){ updateGpDetectLabel(); });
+
+var gpNewBtn = document.getElementById('gpNewBtn');
+if(gpNewBtn) {
+  gpNewBtn.onclick = function() {
+    var gps = navigator.getGamepads ? navigator.getGamepads() : [];
+    var found = null;
+    for(var i=0; i<gps.length; i++) { if(gps[i]) { found = gps[i]; break; } }
+    if(!found) {
+      toast('Aucune manette détectée — appuyez sur un bouton d\'abord', 'err');
+      return;
+    }
+    startWizard(found);
+  };
+}
+
+function startWizard(gp) {
+  wizard.active = true;
+  wizard.stepIdx = 0;
+  wizard.mapping = {};
+  wizard.pendingEvdevCode = null;
+  wizard.cooldown = true;  // cooldown initial : wizardCaptureLoop maintient prevButtons à jour
+  setTimeout(function(){
+    wizard.pendingEvdevCode = null;
+    wizard.cooldown = false;
+  }, 800);
+  wizard.gamepadIdx = gp.index;
+  wizard.deviceName = gp.id;
+  var name = gp.id;
+  var clean = name.replace(/\s*\(.*\).*$/, '').trim();
+  wizard.idmatcher = clean.replace(/[\s]+/g, '.*');
+  var snap = navigator.getGamepads()[gp.index];
+  wizard.prevButtons = snap ? Array.from(snap.buttons).map(function(b){ return b.pressed; }) : [];
+  wizard.prevAxes    = snap ? Array.from(snap.axes).map(function(a){ return a; }) : [];
+
+  document.getElementById('wizardDeviceName').textContent = clean.length > 35 ? clean.substring(0,35)+'…' : clean;
+  document.getElementById('wizardOverlay').classList.add('visible');
+  renderWizardStep();
+  startWizardCapture();
+}
+
+function renderWizardStep() {
+  var action = WIZARD_ACTIONS[wizard.stepIdx];
+  var total  = WIZARD_ACTIONS.length;
+  document.getElementById('wizardStepLabel').textContent = 'Étape ' + (wizard.stepIdx+1) + ' / ' + total;
+  document.getElementById('wizardActionName').textContent = action.label;
+  document.getElementById('wizardInstructions').textContent = action.hint;
+  document.getElementById('wizardCaptured').textContent = '';
+
+  var backActionIdx = WIZARD_ACTIONS.findIndex(function(a){ return a.key==='back'; });
+  var backAlreadyPassed = backActionIdx < 0 || wizard.stepIdx > backActionIdx;
+  var cancelBtn = document.getElementById('wizardCancelBtn');
+  if(cancelBtn) {
+    cancelBtn.disabled = !backAlreadyPassed;
+    cancelBtn.style.opacity = backAlreadyPassed ? '1' : '0.3';
+    cancelBtn.title = backAlreadyPassed ? '' : 'Disponible après avoir mappé le bouton RETOUR';
+  }
+
+  var prog = document.getElementById('wizardProgress');
+  prog.innerHTML = '';
+  for(var i=0; i<total; i++) {
+    var dot = document.createElement('div');
+    dot.className = 'wizard-dot' + (i < wizard.stepIdx ? ' done' : i===wizard.stepIdx ? ' current' : '');
+    prog.appendChild(dot);
+  }
+}
+
+var wizardAnimFrame = null;
+function startWizardCapture() {
+  if(wizardAnimFrame) cancelAnimationFrame(wizardAnimFrame);
+  wizardAnimFrame = requestAnimationFrame(wizardCaptureLoop);
+}
+function stopWizardCapture() {
+  if(wizardAnimFrame) { cancelAnimationFrame(wizardAnimFrame); wizardAnimFrame = null; }
+}
+
+function wizardCaptureLoop() {
+  if(!wizard.active) return;
+
+  var gps = navigator.getGamepads ? navigator.getGamepads() : [];
+  var gp = gps[wizard.gamepadIdx];
+
+  // Pendant le cooldown : maintenir prevButtons à jour et attendre
+  if(wizard.cooldown) {
+    wizard.pendingEvdevCode = null;
+    if(gp) {
+      wizard.prevButtons = Array.from(gp.buttons).map(function(b){ return b.pressed; });
+      wizard.prevAxes    = Array.from(gp.axes).map(function(a){ return a; });
+    }
+    wizardAnimFrame = requestAnimationFrame(wizardCaptureLoop);
+    return;
+  }
+
+  // Hors cooldown : d'abord lire l'état COURANT, comparer avec prevButtons
+  var captured = null;
+
+  // Priorité 1 : code evdev injecté par le listener Wiimote (croix + boutons)
+  if(wizard.pendingEvdevCode) {
+    var ec = wizard.pendingEvdevCode;
+    wizard.pendingEvdevCode = null;
+    if(!isAlreadyMapped(ec)) captured = ec;
+  }
+
+  // Priorité 2 : boutons API Gamepad — détecter transition off→on
+  if(!captured && gp) {
+    for(var i=0; i<gp.buttons.length; i++) {
+      if(gp.buttons[i].pressed && !wizard.prevButtons[i]) {
+        var code = 'KEY_BUTTON_' + i;
+        if(!isAlreadyMapped(code)) { captured = code; break; }
+      }
+    }
+    if(!captured) {
+      var AXIS_THRESHOLD = 0.6;
+      for(var j=0; j<gp.axes.length; j++) {
+        var val = gp.axes[j];
+        var prev = wizard.prevAxes[j] || 0;
+        if(Math.abs(prev) < AXIS_THRESHOLD && Math.abs(val) >= AXIS_THRESHOLD) {
+          var axisCode = val < 0 ? 'KEY_AXIS_' + j + '_UP' : 'KEY_AXIS_' + j + '_DOWN';
+          if(!isAlreadyMapped(axisCode)) { captured = axisCode; break; }
+        }
+      }
+    }
+  }
+
+  // Mettre à jour prevButtons EN FIN de frame (après détection)
+  if(gp) {
+    wizard.prevButtons = Array.from(gp.buttons).map(function(b){ return b.pressed; });
+    wizard.prevAxes    = Array.from(gp.axes).map(function(a){ return a; });
+  }
+
+  if(captured) {
+    var action = WIZARD_ACTIONS[wizard.stepIdx];
+    document.getElementById('wizardCaptured').textContent = '✓ Capturé : ' + captured;
+    // Si le code est déjà mappé (action reusable), stocker les deux actions
+    if(wizard.mapping.hasOwnProperty(captured)) {
+      var existing = wizard.mapping[captured];
+      // Stocker comme tableau pour wizardFinish
+      if(!Array.isArray(existing)) existing = [existing];
+      if(existing.indexOf(action.key) < 0) existing.push(action.key);
+      wizard.mapping[captured] = existing;
+    } else {
+      wizard.mapping[captured] = action.key;
+    }
+    // Cooldown 800ms : le loop continue de tourner (maintient prevButtons à jour)
+    // mais ne capture rien. Au timeout, prevButtons est déjà à l'état courant.
+    wizard.cooldown = true;
+    wizard.pendingEvdevCode = null;
+    setTimeout(function(){
+      wizard.pendingEvdevCode = null;
+      wizard.cooldown = false;
+      wizardNextStep();
+    }, 800);
+    return;
+  }
+
+  wizardAnimFrame = requestAnimationFrame(wizardCaptureLoop);
+}
+
+function isAlreadyMapped(code) {
+  if(!wizard.mapping.hasOwnProperty(code)) return false;
+  // Les actions optionnelles (reusable) peuvent réutiliser un bouton déjà mappé
+  var currentAction = WIZARD_ACTIONS[wizard.stepIdx];
+  if(currentAction && currentAction.reusable) return false;
+  return true;
+}
+
+function wizardNextStep() {
+  wizard.stepIdx++;
+  if(wizard.stepIdx >= WIZARD_ACTIONS.length) {
+    wizardFinish();
+    return;
+  }
+  renderWizardStep();
+  startWizardCapture();
+}
+
+function wizardSkip() {
+  stopWizardCapture();
+  wizardNextStep();
+}
+
+function wizardCancel() {
+  stopWizardCapture();
+  wizard.active = false;
+  document.getElementById('wizardOverlay').classList.remove('visible');
+}
+
+// Convertir un code interne wizard → clé JMP inputmap
+// Format JMP confirmé : KEY_BUTTON_N, KEY_AXIS_N_UP/DOWN, KEY_HAT_UP/DOWN/LEFT/RIGHT
+function wizardCodeToJmp(code) {
+  // Codes evdev Wiimote (via IPC) → format JMP
+  var evdevMap = {
+    // Croix Wiimote (EV_KEY KEY_UP/DOWN/LEFT/RIGHT)
+    'KEY_DPAD_UP':    'KEY_HAT_UP',
+    'KEY_DPAD_DOWN':  'KEY_HAT_DOWN',
+    'KEY_DPAD_LEFT':  'KEY_HAT_LEFT',
+    'KEY_DPAD_RIGHT': 'KEY_HAT_RIGHT',
+    // Boutons Wiimote → numéros API Gamepad correspondants
+    'BTN_SOUTH':      'KEY_BUTTON_0',   // A
+    'BTN_EAST':       'KEY_BUTTON_1',   // B
+    'BTN_1':          'KEY_BUTTON_2',   // 1
+    'BTN_2':          'KEY_BUTTON_3',   // 2
+    'KEY_PREV':       'KEY_BUTTON_4',   // -
+    'BTN_MODE':       'KEY_BUTTON_5',   // Home
+    'KEY_NEXT':       'KEY_BUTTON_6',   // +
+    // D-pad PS4 HAT (via evdev IPC)
+    'HAT_UP':    'KEY_HAT_UP',
+    'HAT_DOWN':  'KEY_HAT_DOWN',
+    'HAT_LEFT':  'KEY_HAT_LEFT',
+    'HAT_RIGHT': 'KEY_HAT_RIGHT',
+  };
+  if(evdevMap[code]) return evdevMap[code];
+  // Codes API Gamepad standard : déjà au bon format JMP
+  // KEY_BUTTON_N → KEY_BUTTON_N (inchangé)
+  // KEY_AXIS_N_UP/DOWN → KEY_AXIS_N_UP/DOWN (inchangé)
+  return code;
+}
+
+function wizardFinish() {
+  stopWizardCapture();
+  wizard.active = false;
+  document.getElementById('wizardOverlay').classList.remove('visible');
+
+  if(!Object.keys(wizard.mapping).length) {
+    toast('Aucun bouton mappé', 'err');
+    return;
+  }
+
+  // Regrouper les actions par code JMP (un bouton peut avoir plusieurs actions)
+  var codeActions = {};
+  Object.keys(wizard.mapping).forEach(function(code){
+    var jmpCode = wizardCodeToJmp(code);
+    var val = wizard.mapping[code];
+    codeActions[jmpCode] = Array.isArray(val) ? val : [val];
+  });
+
+  var mapObj = {};
+  Object.keys(codeActions).forEach(function(jmpCode){
+    var actions = codeActions[jmpCode];
+    actions = actions.filter(function(a, i){ return actions.indexOf(a) === i; });
+
+    if(actions.length === 1) {
+      var a = actions[0];
+      if(a === 'back')       mapObj[jmpCode] = { short: 'back', long: 'home' };
+      else if(a === 'home')  mapObj[jmpCode] = { short: 'home', long: 'exit' };
+      else                   mapObj[jmpCode] = a;
+    } else {
+      mapObj[jmpCode] = { short: actions[0], long: actions[1] };
+    }
+  });
+
+  var jsonData = {
+    name: wizard.deviceName.replace(/\s*\(.*\).*$/, '').trim(),
+    idmatcher: wizard.idmatcher,
+    mapping: mapObj
+  };
+
+  var safeName = jsonData.name.replace(/[^a-zA-Z0-9\-_]/g, '_').toLowerCase().substring(0, 40);
+  var filename = safeName + '-xelauncher.json';
+
+  if(!api || !api.saveGamepadMap) {
+    toast('API saveGamepadMap non disponible', 'err');
+    console.log('Mapping JSON:', JSON.stringify(jsonData, null, 2));
+    return;
+  }
+
+  api.saveGamepadMap(filename, JSON.stringify(jsonData, null, 2)).then(function(ok){
+    toast(ok ? 'Mapping sauvegardé ! Relancez Jellyfin' : 'Erreur sauvegarde', ok ? 'ok' : 'err');
+    if(ok) loadGamepadMaps();
+  });
+}
+
+var wizardSkipBtn = document.getElementById('wizardSkipBtn');
+if(wizardSkipBtn) wizardSkipBtn.onclick = function(){ if(wizard.active) wizardSkip(); };
+var wizardCancelBtn = document.getElementById('wizardCancelBtn');
+if(wizardCancelBtn) wizardCancelBtn.onclick = function(){
+  if(this.disabled) return;
+  wizardCancel();
+};
+
+// BLUETOOTH
+function loadBluetooth(){
+  loadBtStatus();
+  loadBtPaired();
+}
+
+function loadBtStatus(){
+  if(!api||!api.btStatus) return;
+  api.btStatus().then(function(st){
+    S.btPowered=st.powered;
+    var tog=document.getElementById('bt-power-toggle');
+    var desc=document.getElementById('bt-status-desc');
+    if(tog) tog.className='toggle'+(S.btPowered?' on':'');
+    if(desc) desc.textContent=S.btPowered?'Actif':'Désactivé';
+  }).catch(function(){
+    S.btPowered=false;
+    var tog=document.getElementById('bt-power-toggle');
+    if(tog) tog.className='toggle';
+  });
+}
+
+function loadBtPaired(){
+  var wrap=document.getElementById('bt-paired-list');
+  if(!wrap) return;
+  if(!api||!api.btListPaired){
+    wrap.innerHTML='<div style="padding:1vh 1.4vw;font-size:.65em;color:var(--red)">btListPaired non disponible</div>';
+    return;
+  }
+  wrap.innerHTML='<div style="padding:1vh 1.4vw;font-size:.65em;color:var(--text-dim)">Chargement…</div>';
+  api.btListPaired().then(function(devs){
+    S.btPairedDevices=devs||[];
+    renderBtPaired();
+    if(S.tab==='bluetooth'&&S.zone==='content') updateContentFocus();
+  }).catch(function(){
+    S.btPairedDevices=[];
+    renderBtPaired();
+  });
+}
+
+function renderBtPaired(){
+  var wrap=document.getElementById('bt-paired-list');
+  if(!wrap) return;
+  wrap.innerHTML='';
+  if(!S.btPairedDevices.length){
+    wrap.innerHTML='<div style="padding:1vh 1.4vw;font-size:.65em;color:var(--text-dim)">Aucun appareil appairé</div>';
+    return;
+  }
+  S.btPairedDevices.forEach(function(dev){
+    var item=document.createElement('div');
+    item.className='param-row bt-device-row';
+    item.dataset.mac=dev.mac;
+    item.dataset.kind='paired';
+    var iconSVG=btDeviceIcon(dev.type);
+    var customName=S.btNames[dev.mac]||dev.name;
+    var statusClass = dev.connected ? 'connected' : 'disconnected';
+    var statusText = dev.connected ? 'Connecté' : 'Déconnecté';
+    item.innerHTML='<div class="param-left" style="flex-direction:row;align-items:center;gap:.8em">'
+      +iconSVG
+      +'<div><div class="param-label">'+escapeHtml(customName)+'</div>'
+      +'<div class="param-desc">'+dev.mac+' · <span class="bt-status-badge '+statusClass+'">'+statusText+'</span></div></div></div>'
+      +'<div style="display:flex;gap:.6vw">'
+      +(dev.connected
+        ? '<button class="action-btn bt-action" data-action="disconnect" data-mac="'+dev.mac+'">Déconnecter</button>'
+        : '<button class="action-btn bt-action" data-action="connect" data-mac="'+dev.mac+'">Connecter</button>')
+      +'<button class="action-btn bt-action" data-action="rename" data-mac="'+dev.mac+'" data-name="'+customName+'">Renommer</button>'
+      +'<button class="action-btn danger bt-action" data-action="remove" data-mac="'+dev.mac+'">Retirer</button>'
+      +'</div>';
+    item.querySelectorAll('.bt-action').forEach(function(btn){
+      btn.onclick=function(e){e.stopPropagation(); btAction(btn.dataset.action,btn.dataset.mac,btn.dataset.name);};
+    });
+    wrap.appendChild(item);
+  });
+}
+
+function btDeviceIcon(type){
+  if(!type) type='';
+  type=type.toLowerCase();
+  if(/audio|headset|headphone|speaker/.test(type))
+    return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>';
+  if(/input|mouse|keyboard/.test(type))
+    return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="2" width="14" height="20" rx="7"/><path d="M12 6v4M8 13h8M8 17h8"/></svg>';
+  if(/gamepad|joystick|controller/.test(type))
+    return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="8" width="20" height="12" rx="6"/><path d="M9 12v4M7 14h4M15 13h2M15 15h2"/></svg>';
+  return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/></svg>';
+}
+
+function btAction(action, mac, name){
+  if(!api) return;
+  toast('En cours...', '');
+  if(action==='connect'){
+    api.btConnect(mac).then(function(ok){
+      toast(ok?'Connecté à '+name:'Échec connexion',ok?'ok':'err');
+      if(ok) loadBtPaired();
+    }).catch(function(){ toast('Erreur connexion', 'err'); });
+  } else if(action==='disconnect'){
+    api.btDisconnect(mac).then(function(ok){
+      toast(ok?'Déconnecté':'Erreur',ok?'ok':'err');
+      if(ok) loadBtPaired();
+    }).catch(function(){ toast('Erreur déconnexion', 'err'); });
+  } else if(action==='remove'){
+    api.btRemove(mac).then(function(ok){
+      toast(ok?'Appareil retiré':'Erreur suppression',ok?'ok':'err');
+      if(ok) loadBtPaired();
+    }).catch(function(){ toast('Erreur suppression', 'err'); });
+  } else if(action==='rename'){
+    btRenaming=mac;
+    np.val=name||''; np.obj=null; np.key=''; np.descId='';
+    np.onConfirm=function(val){
+      if(!val.trim()) return;
+      if(!S.btNames) S.btNames={};
+      S.btNames[mac]=val.trim();
+      if(api&&api.btRename) api.btRename(mac,val.trim()).then(function(){ loadBtPaired(); });
+      btRenaming=null;
+    };
+    wifiPwdNet={ssid:name};
+    np.val=name||'';
+    document.getElementById('numpadTitle').textContent='Renommer — '+name;
+    document.getElementById('numpadGrid').style.gridTemplateColumns='repeat(10,1fr)';
+    wpCaps=false; wpRow=0; wpCol=0;
+    renderWifiPwdKeyboard();
+    document.getElementById('numpadOverlay').classList.add('visible');
+  }
+}
+
+var btRenaming=null;
+
+document.getElementById('btScanBtn').onclick=function(){
+  var btn=this;
+  if(!S.btPowered){toast('Bluetooth désactivé','err');return;}
+  btn.textContent='Scan…'; btn.disabled=true;
+  var wrap=document.getElementById('bt-scan-list');
+  if(wrap) wrap.innerHTML='<div style="padding:1vh 1.4vw;font-size:.65em;color:var(--text-dim)">Scan en cours (~12s)…</div>';
+  if(api&&api.btScan) api.btScan().then(function(devs){
+    S.btScannedDevices=devs||[];
+    renderBtScan();
+    btn.textContent='Scanner'; btn.disabled=false;
+    if(S.tab==='bluetooth'&&S.zone==='content') updateContentFocus();
+  }).catch(function(){btn.textContent='Scanner';btn.disabled=false;toast('Erreur scan BT','err');});
+  else{btn.textContent='Scanner';btn.disabled=false;toast('btScan non disponible','err');}
+};
+
+function renderBtScan(){
+  var wrap=document.getElementById('bt-scan-list'); if(!wrap) return;
+  wrap.innerHTML='';
+  var available=S.btScannedDevices.filter(function(d){return !d.paired;});
+  if(!available.length){
+    var msg = S.btScannedDevices.length > 0
+      ? 'Tous les appareils détectés sont déjà appairés'
+      : 'Aucun appareil trouvé — vérifiez que l\'appareil est en mode appairage';
+    wrap.innerHTML='<div style="padding:1vh 1.4vw;font-size:.65em;color:var(--text-dim)">'+msg+'</div>';
+    return;
+  }
+  available.forEach(function(dev){
+    var item=document.createElement('div');
+    item.className='param-row bt-device-row';
+    item.dataset.mac=dev.mac;
+    item.dataset.kind='scan';
+    item.innerHTML='<div class="param-left">'
+      +'<div class="param-label">'+escapeHtml(dev.name)+'</div>'
+      +'<div class="param-desc">'+dev.mac+'</div></div>'
+      +'<button class="action-btn bt-action bt-pair-btn" data-mac="'+dev.mac+'">Appairer</button>';
+    item.querySelector('.bt-pair-btn').onclick=function(e){
+      e.stopPropagation();
+      var btn=this; btn.disabled=true; btn.textContent='Appairage…';
+      toast('Appairage en cours (~20s)','');
+      if(api&&api.btPair) api.btPair(dev.mac).then(function(ok){
+        btn.textContent='Appairer'; btn.disabled=false;
+        toast(ok?'✓ Appairé avec succès !':'✗ Échec — vérifiez que l\'appareil est en mode appairage',ok?'ok':'err');
+        if(ok){loadBtPaired(); renderBtScan();}
+      }).catch(function(){
+        btn.textContent='Appairer'; btn.disabled=false;
+        toast('Erreur inattendue lors de l\'appairage','err');
+      });
+      else { btn.textContent='Appairer'; btn.disabled=false; toast('btPair non disponible','err'); }
+    };
+    wrap.appendChild(item);
+  });
+}
+
+document.getElementById('bt-power-toggle').onclick=function(){
+  if(!api||!api.btPower) return;
+  api.btPower(!S.btPowered).then(function(ok){
+    if(ok){S.btPowered=!S.btPowered;loadBtStatus();if(S.btPowered)loadBtPaired();}
+    else toast('Erreur Bluetooth','err');
+  });
+};
+document.getElementById('bt-power-row').onclick=function(){
+  document.getElementById('bt-power-toggle').onclick();
+};
+
+function loadVersion(){
+  var el=document.getElementById('update-version-val'); 
+  if(el) el.textContent='…';
+  if(api && api.getVersion) api.getVersion().then(function(v){if(el) el.textContent=v||'—';}); else if(el) el.textContent='—';
+}
+var updateCheckBtn = document.getElementById('updateCheckBtn');
+if(updateCheckBtn){
+  updateCheckBtn.onclick=function(){
+    var btn=this; btn.textContent='…'; btn.disabled=true;
+    if(api && api.checkUpdate) api.checkUpdate().then(function(r){
+      btn.textContent='Vérifier'; btn.disabled=false;
+      toast(r && r.available?'Disponible : '+r.version:'Système à jour',r && r.available?'':'ok');
+    }).catch(function(){btn.textContent='Vérifier';btn.disabled=false;toast('Erreur vérification','err');});
+    else{btn.textContent='Vérifier';btn.disabled=false;toast('checkUpdate non dispo','err');}
+  };
+}
+var updateRunBtn = document.getElementById('updateRunBtn');
+if(updateRunBtn){
+  updateRunBtn.onclick=function(){
+    var btn=this,desc=document.getElementById('update-run-desc');
+    btn.textContent='En cours…'; btn.disabled=true; if(desc) desc.textContent='Patientez…';
+    if(api && api.systemUpdate) api.systemUpdate().then(function(ok){
+      btn.textContent='Mettre à jour'; btn.disabled=false; if(desc) desc.textContent='apt update + apt upgrade';
+      toast(ok?'Mise à jour terminée':'Échec',ok?'ok':'err');
+      if(ok && S.rebootAfterUpdate && api.systemReboot) setTimeout(function(){api.systemReboot();},1800);
+    }).catch(function(){btn.textContent='Mettre à jour';btn.disabled=false;if(desc) desc.textContent='apt update + apt upgrade';toast('Erreur inattendue','err');});
+    else{btn.textContent='Mettre à jour';btn.disabled=false;toast('systemUpdate non dispo','err');}
+  };
+}
+var backBtn = document.getElementById('backBtn');
+if(backBtn){
+  backBtn.onclick=function(){
+    if(api && api.goBack) api.goBack(); else window.location.href='menu.html';
+  };
+}
+
+document.querySelectorAll('.arrow').forEach(function(arrow){
+  var dir = parseInt(arrow.dataset.dir);
+  if(!isNaN(dir)){
+    arrow.style.cursor='pointer';
+    arrow.onclick=function(e){
+      e.stopPropagation();
+      var row = arrow.closest('.param-row');
+      if(row) changeRowValue(row, dir);
+    };
+  }
+});
+
+// NAVIGATION PRINCIPALE
+var inputReady=false; setTimeout(function(){inputReady=true;},400);
+
+var btSubFocus = -1;
+
+function getBtRowBtns(row) {
+  if(!row) return [];
+  return Array.from(row.querySelectorAll('.bt-action'));
+}
+function updateBtSubFocus(row) {
+  var btns = getBtRowBtns(row);
+  btns.forEach(function(b,i){ b.classList.toggle('focused', i===btSubFocus); });
+}
+function clearBtSubFocus(row) {
+  btSubFocus = -1;
+  if(row) getBtRowBtns(row).forEach(function(b){ b.classList.remove('focused'); });
+}
+
+function handleKey(key){
+  if(document.getElementById('wizardOverlay').classList.contains('visible')){
+    if(key==='Escape') wizardCancel();  // Escape annule toujours le wizard
+    else if(key==='Enter') { if(wizard.active && !wizard.cooldown) wizardSkip(); }
+    return;
+  }
+  if(document.getElementById('numpadOverlay').classList.contains('visible')){
+    if(wifiPwdNet) wpNav(key); else numpadNav(key);
+    return;
+  }
+  if(document.getElementById('ifaceOverlay').classList.contains('visible')){
+    var rows=getIfacePanelRows();
+    if(key==='ArrowUp')   {ifacePanelFocus=Math.max(0,ifacePanelFocus-1);renderIfacePanel();}
+    else if(key==='ArrowDown') {ifacePanelFocus=Math.min(rows.length-1,ifacePanelFocus+1);renderIfacePanel();}
+    else if(key==='Enter') ifacePanelActivate();
+    else if(key==='Escape'||key==='ArrowLeft') closeIfaceOverlay();
+    return;
+  }
+  if(S.zone==='header'){
+    if(key==='Enter'||key==='Escape'||key==='ArrowLeft'){
+      var btn=document.getElementById('backBtn');
+      if(btn) btn.click();
+    }
+    else if(key==='ArrowDown'){S.zone='sidebar';renderFocus();}
+    return;
+  }
+  if(S.zone==='sidebar'){
+    if(key==='ArrowUp'){
+      if(S.sideIdx===0){S.zone='header';renderFocus();}
+      else{S.sideIdx--;renderSidebarFocus();}
+    }
+    else if(key==='ArrowDown'){
+      if(S.sideIdx<TABS.length-1){S.sideIdx++;renderSidebarFocus();}
+    }
+    else if(key==='ArrowRight'||key==='Enter'){
+      switchTab(TABS[S.sideIdx]);S.zone='content';S.contentIdx=0;renderFocus();
+    }
+    else if(key==='Escape'||key==='ArrowLeft'){S.zone='header';renderFocus();}
+    return;
+  }
+  if(S.zone==='content'){
+    var rows=getRows(), row=rows[S.contentIdx];
+    var isBtRow = row && row.classList.contains('bt-device-row');
+
+    if(isBtRow && btSubFocus >= 0) {
+      var btns = getBtRowBtns(row);
+      if(key==='ArrowLeft'){
+        if(btSubFocus > 0){ btSubFocus--; updateBtSubFocus(row); }
+        else { clearBtSubFocus(row); }
+      }
+      else if(key==='ArrowRight'){
+        if(btSubFocus < btns.length-1){ btSubFocus++; updateBtSubFocus(row); }
+      }
+      else if(key==='ArrowUp'){
+        clearBtSubFocus(row);
+        if(S.contentIdx>0){S.contentIdx--;updateContentFocus();}
+      }
+      else if(key==='ArrowDown'){
+        clearBtSubFocus(row);
+        if(S.contentIdx<rows.length-1){S.contentIdx++;updateContentFocus();}
+      }
+      else if(key==='Enter'){
+        if(btns[btSubFocus]) btns[btSubFocus].click();
+      }
+      else if(key==='Escape'){
+        clearBtSubFocus(row);
+      }
+      return;
+    }
+
+    if(key==='ArrowUp'){
+      if(S.contentIdx>0){S.contentIdx--;updateContentFocus();}
+    }
+    else if(key==='ArrowDown'){
+      if(S.contentIdx<rows.length-1){S.contentIdx++;updateContentFocus();}
+    }
+    else if(key==='ArrowLeft'){
+      if(row && row.classList.contains('wifi-item') && row.classList.contains('trash-focus')){
+        row.classList.remove('trash-focus');
+      } else if(row && isCyclableRow(row)){
+        changeRowValue(row,-1);
+      } else {
+        S.zone='sidebar'; renderFocus();
+      }
+    }
+    else if(key==='ArrowRight'){
+      if(isBtRow){
+        var btns2 = getBtRowBtns(row);
+        if(btns2.length){ btSubFocus=0; updateBtSubFocus(row); }
+      }
+      else if(row && isCyclableRow(row)) changeRowValue(row,1);
+      else changeRowValue(row,1);
+    }
+    else if(key==='Enter'){
+      if(isBtRow){
+        var btns3 = getBtRowBtns(row);
+        if(btns3.length){ btSubFocus=0; updateBtSubFocus(row); }
+      } else {
+        activateRow(row);
+      }
+    }
+    else if(key==='Escape'){S.zone='sidebar';renderFocus();}
+    return;
+  }
+}
+
+document.addEventListener('keydown',function(e){
+  if(!inputReady) return;
+  var m={ArrowUp:'ArrowUp',ArrowDown:'ArrowDown',ArrowLeft:'ArrowLeft',ArrowRight:'ArrowRight',Enter:'Enter',Escape:'Escape',' ':'Enter'};
+  if(m[e.key]){e.preventDefault();handleKey(m[e.key]);}
+});
+
+// GAMEPAD
+var gpS={}, gpPolling=false;
+function startGpPolling(){if(gpPolling)return;gpPolling=true;requestAnimationFrame(pollGp);}
+function pollGp(){
+  var gps=navigator.getGamepads?navigator.getGamepads():[];
+  for(var i=0;i<gps.length;i++){
+    var gp=gps[i]; if(!gp) continue;
+    if(!gpS[i]) gpS[i]={b:[],acH:false,acV:false};
+    var st=gpS[i];
+    // Wiimote gérée entièrement via evdev (IPC wiimote-dpad) — pas de logique ici
+    var isWiimote = gp.id && /nintendo.*wii|wiimote|hid-wiimote/i.test(gp.id);
+    if(!isWiimote){
+      gp.buttons.forEach(function(btn,idx){
+        var p=btn.pressed,w=st.b[idx];
+        if(p && !w && inputReady){
+          if(idx===0)  handleKey('Enter');
+          if(idx===1)  handleKey('Escape');
+          if(idx===8)  handleKey('Escape');
+          // idx 12-15 = D-pad HAT → bloqués si evdev HAT actif (évite le double)
+          // idx 12-15 (D-pad HAT) gérés exclusivement via evdev IPC
+        }
+        st.b[idx]=p;
+      });
+    } else {
+      // Garder l'état à jour pour éviter les faux événements au reconnect
+      gp.buttons.forEach(function(btn,idx){ st.b[idx]=btn.pressed; });
+    }
+    var T=0.4, axH=0, axV=0;
+    if(!isWiimote){
+      if(Math.abs(gp.axes[0])>T) axH=gp.axes[0];
+      else if(gp.axes[6]!==undefined && Math.abs(gp.axes[6])>T) axH=gp.axes[6];
+      if(Math.abs(gp.axes[1])>T) axV=gp.axes[1];
+      else if(gp.axes[7]!==undefined && Math.abs(gp.axes[7])>T) axV=gp.axes[7];
+    }
+    if(!st.acH){
+      if(axH<-T){handleKey('ArrowLeft');st.acH=true;setTimeout(function(){st.acH=false;},200);}
+      else if(axH>T){handleKey('ArrowRight');st.acH=true;setTimeout(function(){st.acH=false;},200);}
+    }
+    if(axH===0) st.acH=false;
+    if(!st.acV){
+      if(axV<-T){handleKey('ArrowUp');st.acV=true;setTimeout(function(){st.acV=false;},200);}
+      else if(axV>T){handleKey('ArrowDown');st.acV=true;setTimeout(function(){st.acV=false;},200);}
+    }
+    if(axV===0) st.acV=false;
+  }
+  requestAnimationFrame(pollGp);
+}
+window.addEventListener('gamepadconnected',function(e){gpS[e.gamepad.index]={b:[],acH:false,acV:false};startGpPolling();});
+window.addEventListener('gamepaddisconnected',function(e){delete gpS[e.gamepad.index];});
+setTimeout(startGpPolling,500);
+
+// Wiimote via IPC (evdev main process)
+// Reçoit { key, rawCode } — key = touche logique, rawCode = bouton physique unique
+if(api && api.onWiimoteDpad){
+  api.onWiimoteDpad(function(evt){
+    var key     = evt.key;
+    var rawCode = evt.rawCode;
+
+    // Pendant le wizard : utiliser rawCode pour identifier chaque bouton physique
+    // Les rawCodes HAT (HAT_UP etc.) et Wiimote (BTN_SOUTH etc.) sont distincts → mappables séparément
+    if(wizard.active) {
+      if(rawCode && !wizard.pendingEvdevCode) {
+        wizard.pendingEvdevCode = rawCode;
+      }
+      return; // bloquer toute navigation
+    }
+
+    if(inputReady) handleKey(key);
+
+    // Debug
+    if(gpDebugActive){
+      var desc=document.getElementById('gp-debug-desc');
+      if(desc){
+        var prev=desc.innerHTML||'';
+        var lines=prev.split('<br>');
+        lines.unshift('evdev ↓ ' + rawCode + ' (' + key + ') <span style="color:var(--text-dim)">' + new Date().toLocaleTimeString() + '</span>');
+        if(lines.length>8) lines=lines.slice(0,8);
+        desc.innerHTML=lines.join('<br>');
+      }
+    }
+  });
+}
+
+// INIT
+function restoreConfig(cfg){
+  if(!cfg) return;
+  if(cfg.display){
+    var d=cfg.display;
+    if(d.resolution){
+      var ri=S.res.opts.indexOf(d.resolution);
+      if(ri>=0){S.res.idx=ri;var el=document.getElementById('res-val');if(el)el.textContent=S.res.opts[ri];}
+    }
+    if(d.refresh){
+      var fi=S.refresh.opts.indexOf(d.refresh);
+      if(fi>=0){S.refresh.idx=fi;var el=document.getElementById('refresh-val');if(el)el.textContent=S.refresh.opts[fi];}
+    }
+    if(d.rotation){
+      var roi=S.rotate.opts.indexOf(d.rotation);
+      if(roi>=0){S.rotate.idx=roi;var el=document.getElementById('rotate-val');if(el)el.textContent=S.rotate.opts[roi];}
+    }
+    if(typeof d.overscan==='boolean'){S.overscan=d.overscan;renderOverscan();}
+  }
+  if(cfg.audio){
+    if(cfg.audio.output){
+      var ai=S.audioOut.opts.indexOf(cfg.audio.output);
+      if(ai>=0){S.audioOut.idx=ai;var el=document.getElementById('audio-out-val');if(el)el.textContent=S.audioOut.opts[ai];}
+    }
+    if(typeof cfg.audio.volume==='number'){
+      S.volume=cfg.audio.volume;
+      var el=document.getElementById('volume-val');if(el)el.textContent=S.volume+'%';
+    }
+  }
+  if(cfg.btNames) S.btNames=cfg.btNames;
+}
+
+renderOverscan(); renderRebootToggle();
+var hiddenCount=document.getElementById('hidden-count');
+if(hiddenCount) hiddenCount.textContent=S.hiddenNetworks.length;
+if(api&&api.getConfig) api.getConfig().then(restoreConfig);
+switchTab('network');
+S.zone='sidebar'; renderFocus();
+loadWifiStatus(); loadIPs();
+
+})();
+</script>
+</body>
+</html>
