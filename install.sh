@@ -185,20 +185,21 @@ install_flatpak_jellyfin() {
         ok "Jellyfin Media Player déjà installé."
     else
         log "Installation de Jellyfin Media Player"
+        # Désactiver temporairement la redirection pour l'affichage interactif
+        exec >/dev/tty 2>&1
         sudo flatpak install -y flathub com.github.iwalton3.jellyfin-media-player
+        exec > >(tee -a "$LOG_FILE") 2>&1
         ok "Jellyfin Media Player installé."
     fi
     
-    # Configuration des permissions - Création du groupe flatpak si nécessaire
+    # Configuration des permissions
     log "Configuration des permissions flatpak"
     
-    # Vérifier et créer le groupe flatpak s'il n'existe pas
     if ! getent group flatpak >/dev/null 2>&1; then
         log "Création du groupe flatpak"
         sudo groupadd flatpak
     fi
     
-    # Ajouter l'utilisateur au groupe flatpak
     if ! groups "$REAL_USER" | grep -q "\bflatpak\b"; then
         sudo usermod -a -G flatpak "$REAL_USER"
         ok "Utilisateur ajouté au groupe flatpak"
@@ -206,12 +207,10 @@ install_flatpak_jellyfin() {
         ok "Utilisateur déjà dans le groupe flatpak"
     fi
     
-    # Redémarrer le service flatpak s'il existe
     if systemctl list-units --full -all | grep -q flatpak-system-helper; then
         sudo systemctl restart flatpak-system-helper 2>/dev/null || true
     fi
     
-    # Configurer les permissions D-Bus pour Jellyfin
     log "Configuration des permissions D-Bus pour Jellyfin"
     flatpak override --user --socket=wayland --socket=x11 --share=network --socket=session-bus com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
     
@@ -226,7 +225,6 @@ clone_or_update_repo() {
         else
             log "Mise à jour du dépôt"
             cd "$INSTALL_DIR"
-            # Stash des modifications locales éventuelles
             if ! git diff --quiet; then
                 git stash push -m "auto-stash avant pull"
                 warn "Modifications locales stashées."
@@ -246,11 +244,23 @@ clone_or_update_repo() {
 
 install_npm_deps() {
     cd "$INSTALL_DIR"
+    
+    # Corriger le package.json si electron-reload a la mauvaise version
+    if [[ -f "package.json" ]]; then
+        if grep -q '"electron-reload": "\^2\.0\.0"' package.json; then
+            log "Correction de la version electron-reload dans package.json"
+            sed -i 's/"electron-reload": "\^2\.0\.0"/"electron-reload": "\^1\.5\.0"/' package.json
+            # Déplacer electron-reload de dependencies vers devDependencies si nécessaire
+            sed -i '/"electron-reload".*$/d' package.json
+            sed -i '/"devDependencies": {/a \    "electron-reload": "^1.5.0",' package.json
+        fi
+    fi
+    
     if [[ ! -f "package.json" ]]; then
         warn "package.json absent. Impossible d'installer les dépendances npm."
         return 1
     fi
-    # Vérifier si node_modules existe et si package.json a changé
+    
     if [[ -d "node_modules" ]]; then
         local pkg_hash=$(md5sum package.json | cut -d' ' -f1)
         local lock_hash=""
@@ -262,9 +272,9 @@ install_npm_deps() {
             return 0
         fi
     fi
+    
     log "Installation des dépendances npm"
     npm install
-    # Sauvegarde du hash pour les prochaines vérifications
     md5sum package.json | cut -d' ' -f1 > node_modules/.package-lock.json.hash
     ok "Dépendances npm installées."
 }
@@ -297,7 +307,6 @@ configure_splashscreen() {
     mkdir -p "$RETROPIE_SPLASH_DIR"
     cp "$logo" "$RETROPIE_SPLASH_DIR/prometheus.png"
     sudo mkdir -p "$(dirname "$RETROPIE_SPLASH_LIST")"
-    # Éviter d'ajouter la ligne si déjà présente
     if ! grep -qxF "$RETROPIE_SPLASH_DIR/prometheus.png" "$RETROPIE_SPLASH_LIST" 2>/dev/null; then
         echo "$RETROPIE_SPLASH_DIR/prometheus.png" | sudo tee -a "$RETROPIE_SPLASH_LIST" >/dev/null
         ok "Splashscreen RetroPie configuré."
@@ -311,20 +320,18 @@ create_start_script() {
 #!/bin/bash
 export DISPLAY=:0
 cd "$INSTALL_DIR"
-exec npx electron . --no-sandbox --disable-dev-shm-usage
+exec ./node_modules/.bin/electron . --no-sandbox --disable-dev-shm-usage
 EOF
     chmod +x "$INSTALL_DIR/start.sh"
     ok "Script start.sh créé."
 }
 
 configure_autologin() {
-    # Utiliser raspi-config si disponible, sinon configurer systemd-logind
     if command -v raspi-config >/dev/null 2>&1; then
         log "Configuration de l'autologin avec raspi-config"
-        sudo raspi-config nonint do_boot_behaviour B2  # B2 = console autologin
+        sudo raspi-config nonint do_boot_behaviour B2
         ok "Autologin configuré avec raspi-config"
     else
-        # Méthode manuelle pour Debian/Raspbian
         log "Configuration manuelle de l'autologin"
         sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
         cat <<EOF | sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf
@@ -338,7 +345,6 @@ EOF
 }
 
 configure_systemd_service() {
-    # Créer le service qui démarre X avec le script
     sudo tee /etc/systemd/system/xelauncher.service > /dev/null <<EOF
 [Unit]
 Description=XeLauncher
@@ -364,7 +370,6 @@ EOF
 }
 
 configure_sudoers() {
-    # Permettre à l'utilisateur d'exécuter certaines commandes sans mot de passe
     cat <<EOF | sudo tee "$SUDOERS_FILE" > /dev/null
 $REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/tailscale up
 EOF
@@ -373,7 +378,6 @@ EOF
 }
 
 create_required_dirs() {
-    # Dossiers nécessaires pour l'application (avatars, etc.)
     mkdir -p "$INSTALL_DIR/avatars"
     ok "Dossiers requis créés."
 }
@@ -434,7 +438,6 @@ main() {
     configure_sudoers
     create_required_dirs
 
-    # Finalisation
     touch "$LOCK_FILE"
     echo ""
     ok "Installation terminée avec succès !"
