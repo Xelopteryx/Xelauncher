@@ -90,7 +90,7 @@ export HOME="/home/$REAL_USER"
 check_and_install_packages() {
     local to_install=()
     for pkg in "$@"; do
-        if ! dpkg -s "$pkg" &>/dev/null; then
+        if ! dpkg -s "$pkg" &>/dev/null 2>&1; then
             to_install+=("$pkg")
         fi
     done
@@ -102,7 +102,8 @@ check_and_install_packages() {
 
 install_nodejs() {
     if command -v node >/dev/null 2>&1; then
-        local node_version=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+        local node_version
+        node_version=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
         if [[ $node_version -ge 20 ]]; then
             ok "Node.js $(node -v) déjà installé"
             return 0
@@ -182,8 +183,6 @@ install_npm_deps() {
         if grep -q '"electron-reload": "\^2\.0\.0"' package.json; then
             log "Correction package.json"
             sed -i 's/"electron-reload": "\^2\.0\.0"/"electron-reload": "\^1.5.0"/' package.json
-            sed -i '/"electron-reload".*$/d' package.json
-            sed -i '/"devDependencies": {/a \    "electron-reload": "^1.5.0",' package.json
         fi
     fi
     
@@ -203,14 +202,28 @@ install_npm_deps() {
 EOF
     fi
     
-    if [[ ! -d "node_modules" ]] || [[ package.json -nt node_modules/.package-lock.json.hash 2>/dev/null ]]; then
-        log "Installation des dépendances npm"
-        npm install
-        md5sum package.json | cut -d' ' -f1 > node_modules/.package-lock.json.hash
-        ok "Dépendances installées"
-    else
-        ok "Dépendances déjà à jour"
+    # Vérification des dépendances
+    if [[ -d "node_modules" ]]; then
+        local pkg_hash=""
+        local lock_hash=""
+        if [[ -f "package.json" ]]; then
+            pkg_hash=$(md5sum package.json | cut -d' ' -f1)
+        fi
+        if [[ -f "node_modules/.package-lock.json.hash" ]]; then
+            lock_hash=$(cat "node_modules/.package-lock.json.hash")
+        fi
+        if [[ "$pkg_hash" == "$lock_hash" ]] && [[ -n "$pkg_hash" ]]; then
+            ok "Dépendances npm déjà à jour."
+            return 0
+        fi
     fi
+    
+    log "Installation des dépendances npm"
+    npm install
+    if [[ -f "package.json" ]]; then
+        md5sum package.json | cut -d' ' -f1 > node_modules/.package-lock.json.hash
+    fi
+    ok "Dépendances npm installées."
 }
 
 install_retropie() {
@@ -232,7 +245,7 @@ install_retropie() {
     
     cd "$HOME/RetroPie-Setup"
     
-    # Installation automatique - l'option "auto" installe la configuration de base
+    # Installation automatique
     exec >/dev/tty 2>&1
     log "Lancement de l'installation automatique..."
     sudo ./retropie_setup.sh auto
@@ -261,7 +274,11 @@ create_start_script() {
 #!/bin/bash
 export DISPLAY=:0
 cd "$(dirname "$0")"
-exec ./node_modules/.bin/electron . --no-sandbox --disable-dev-shm-usage
+if [ -f "./node_modules/.bin/electron" ]; then
+    exec ./node_modules/.bin/electron . --no-sandbox --disable-dev-shm-usage
+else
+    exec npx electron . --no-sandbox --disable-dev-shm-usage
+fi
 EOF
     chmod +x "$INSTALL_DIR/start.sh"
     ok "Script start.sh créé"
@@ -314,7 +331,9 @@ main() {
     echo -e "${WHITE}XeLauncher Installer (version automatisée)${RESET}"
     echo ""
     
-    [[ $YES_MODE -eq 0 ]] && read -p "Appuie sur Entrée pour continuer..."
+    if [[ $YES_MODE -eq 0 ]]; then
+        read -p "Appuie sur Entrée pour continuer..."
+    fi
     
     section "1/9 — Mise à jour"
     sudo apt-get update
