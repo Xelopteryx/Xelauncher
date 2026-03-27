@@ -9,9 +9,13 @@ set -e
 # -----------------------------
 # Variables
 # -----------------------------
+
 REPO_URL="https://github.com/Xelopteryx/Xelauncher.git"
 INSTALL_DIR="$HOME/xelauncher"
 LOCK_FILE="/var/tmp/xelauncher_install.lock"
+
+RETROPIE_SPLASH_DIR="$HOME/RetroPie/splashscreens"
+RETROPIE_SPLASH_LIST="/opt/retropie/configs/all/splashscreen.list"
 
 RED='\033[1;31m'
 GREEN='\033[1;32m'
@@ -24,6 +28,7 @@ log() { echo -e "${CYAN}→${RESET} $1"; }
 ok() { echo -e "${GREEN}✔${RESET} $1"; }
 warn() { echo -e "${YELLOW}!${RESET} $1"; }
 error() { echo -e "${RED}✖${RESET} $1"; }
+
 section() {
     echo ""
     echo -e "${WHITE}------------------------------------------------------------${RESET}"
@@ -36,8 +41,7 @@ section() {
 # -----------------------------
 
 if [[ -f "$LOCK_FILE" ]]; then
-    warn "Installation déjà effectuée sur ce système"
-    exit 0
+    warn "XeLauncher semble déjà installé sur ce système"
 fi
 
 # Vérification Internet
@@ -67,7 +71,7 @@ if [[ "$1" != "--yes" ]]; then
 fi
 
 # -----------------------------
-section "1/7 — Mise à jour système"
+section "1/8 — Mise à jour système"
 # -----------------------------
 
 sudo apt-get update
@@ -76,7 +80,7 @@ sudo apt-get upgrade -y
 ok "Système à jour"
 
 # -----------------------------
-section "2/7 — Dépendances système"
+section "2/8 — Dépendances système"
 # -----------------------------
 
 sudo apt-get install -y \
@@ -87,6 +91,7 @@ sudo apt-get install -y \
     xdotool \
     xserver-xorg xinit \
     unzip jq dialog xmlstarlet \
+    fbi \
     libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
     libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 \
     libxfixes3 libxrandr2 libgbm1 libasound2
@@ -94,11 +99,13 @@ sudo apt-get install -y \
 ok "Dépendances installées"
 
 # -----------------------------
-section "3/7 — Node.js"
+section "3/8 — Node.js"
 # -----------------------------
 
 if command -v node >/dev/null 2>&1; then
+
     ok "Node déjà présent ($(node -v))"
+
 else
 
     log "Installation Node.js"
@@ -110,10 +117,11 @@ else
     sudo apt-get install -y nodejs
 
     ok "Node installé ($(node -v))"
+
 fi
 
 # -----------------------------
-section "4/7 — Tailscale"
+section "4/8 — Tailscale"
 # -----------------------------
 
 if ! command -v tailscale >/dev/null 2>&1; then
@@ -132,7 +140,7 @@ sudo systemctl start tailscaled
 ok "Tailscale prêt"
 
 # -----------------------------
-section "5/7 — Flatpak + Jellyfin"
+section "5/8 — Flatpak + Jellyfin"
 # -----------------------------
 
 sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
@@ -148,12 +156,12 @@ fi
 ok "Jellyfin prêt"
 
 # -----------------------------
-section "6/7 — Clonage XeLauncher"
+section "6/8 — Clonage XeLauncher"
 # -----------------------------
 
 if [[ ! -d "$INSTALL_DIR" ]]; then
 
-    log "Clonage du dépôt"
+    log "Clonage du dépôt XeLauncher"
 
     git clone "$REPO_URL" "$INSTALL_DIR"
 
@@ -168,7 +176,7 @@ fi
 ok "Sources XeLauncher prêtes"
 
 # -----------------------------
-section "7/7 — Installation Node"
+section "7/8 — Installation Node"
 # -----------------------------
 
 cd "$INSTALL_DIR"
@@ -186,12 +194,12 @@ else
 fi
 
 # -----------------------------
-section "RetroPie"
+section "8/8 — Installation RetroPie"
 # -----------------------------
 
 if ! command -v emulationstation >/dev/null 2>&1; then
 
-    log "Installation RetroPie (peut être long)"
+    log "Installation RetroPie (cela peut prendre longtemps)"
 
     if [[ ! -d "$HOME/RetroPie-Setup" ]]; then
         git clone --depth=1 https://github.com/RetroPie/RetroPie-Setup.git "$HOME/RetroPie-Setup"
@@ -212,7 +220,33 @@ else
 fi
 
 # -----------------------------
-section "Script de lancement"
+section "Configuration splashscreen RetroPie"
+# -----------------------------
+
+PROMETHEUS_LOGO="$INSTALL_DIR/src/logos/Prometheus.png"
+
+if [[ -f "$PROMETHEUS_LOGO" ]]; then
+
+    log "Configuration du splashscreen Prometheus"
+
+    mkdir -p "$RETROPIE_SPLASH_DIR"
+
+    cp "$PROMETHEUS_LOGO" "$RETROPIE_SPLASH_DIR/prometheus.png"
+
+    sudo mkdir -p /opt/retropie/configs/all
+
+    echo "$RETROPIE_SPLASH_DIR/prometheus.png" | sudo tee "$RETROPIE_SPLASH_LIST" >/dev/null
+
+    ok "Splashscreen RetroPie configuré"
+
+else
+
+    warn "Prometheus.png introuvable dans src/logos"
+
+fi
+
+# -----------------------------
+section "Script de lancement XeLauncher"
 # -----------------------------
 
 cat > "$INSTALL_DIR/start.sh" <<EOF
@@ -229,20 +263,19 @@ chmod +x "$INSTALL_DIR/start.sh"
 ok "Script start.sh créé"
 
 # -----------------------------
-section "Service systemd"
+section "Service systemd XeLauncher"
 # -----------------------------
 
 sudo tee /etc/systemd/system/xelauncher.service > /dev/null <<EOF
 [Unit]
 Description=XeLauncher
-After=network.target
+After=systemd-user-sessions.service network.target
 
 [Service]
 User=$USER
 WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/start.sh
+ExecStart=/usr/bin/startx $INSTALL_DIR/start.sh -- :0
 Restart=always
-Environment=DISPLAY=:0
 
 [Install]
 WantedBy=multi-user.target
@@ -250,7 +283,9 @@ EOF
 
 sudo systemctl daemon-reload
 
-ok "Service systemd créé"
+sudo systemctl enable xelauncher
+
+ok "XeLauncher sera lancé automatiquement au démarrage"
 
 # -----------------------------
 section "Final"
@@ -262,13 +297,11 @@ echo ""
 ok "Installation terminée"
 
 echo ""
-echo "Commandes utiles :"
+echo "Au prochain reboot :"
 echo ""
-echo "Activer le launcher au boot :"
-echo "sudo systemctl enable xelauncher"
+echo "1. Splashscreen Prometheus"
+echo "2. Chargement RetroPie"
+echo "3. Lancement automatique XeLauncher"
 echo ""
-echo "Lancer maintenant :"
-echo "sudo systemctl start xelauncher"
-echo ""
-echo "Redémarrer :"
+echo "Redémarrer pour tester :"
 echo "sudo reboot"
