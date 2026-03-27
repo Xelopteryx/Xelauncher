@@ -112,7 +112,7 @@ install_nodejs() {
     log "Installation Node.js 20.x"
     curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/node_setup.sh
     sudo bash /tmp/node_setup.sh
-    rm /tmp/node_setup.sh
+    rm -f /tmp/node_setup.sh
     sudo apt-get install -y nodejs
     ok "Node.js installé: $(node -v)"
 }
@@ -125,8 +125,8 @@ install_tailscale() {
     log "Installation Tailscale"
     curl -fsSL https://tailscale.com/install.sh -o /tmp/tailscale_install.sh
     sudo bash /tmp/tailscale_install.sh
-    rm /tmp/tailscale_install.sh
-    sudo systemctl enable --now tailscaled
+    rm -f /tmp/tailscale_install.sh
+    sudo systemctl enable --now tailscaled 2>/dev/null || true
     ok "Tailscale installé"
 }
 
@@ -180,7 +180,7 @@ install_npm_deps() {
     
     # Correction package.json si nécessaire
     if [[ -f "package.json" ]]; then
-        if grep -q '"electron-reload": "\^2\.0\.0"' package.json; then
+        if grep -q '"electron-reload": "\^2\.0\.0"' package.json 2>/dev/null; then
             log "Correction package.json"
             sed -i 's/"electron-reload": "\^2\.0\.0"/"electron-reload": "\^1.5.0"/' package.json
         fi
@@ -203,26 +203,39 @@ EOF
     fi
     
     # Vérification des dépendances
-    if [[ -d "node_modules" ]]; then
+    local needs_install=0
+    
+    if [[ ! -d "node_modules" ]]; then
+        needs_install=1
+    else
         local pkg_hash=""
         local lock_hash=""
+        
         if [[ -f "package.json" ]]; then
-            pkg_hash=$(md5sum package.json | cut -d' ' -f1)
+            pkg_hash=$(md5sum package.json 2>/dev/null | cut -d' ' -f1)
         fi
+        
         if [[ -f "node_modules/.package-lock.json.hash" ]]; then
-            lock_hash=$(cat "node_modules/.package-lock.json.hash")
+            lock_hash=$(cat "node_modules/.package-lock.json.hash" 2>/dev/null)
         fi
-        if [[ "$pkg_hash" == "$lock_hash" ]] && [[ -n "$pkg_hash" ]]; then
-            ok "Dépendances npm déjà à jour."
-            return 0
+        
+        if [[ -z "$pkg_hash" ]] || [[ -z "$lock_hash" ]] || [[ "$pkg_hash" != "$lock_hash" ]]; then
+            needs_install=1
         fi
+    fi
+    
+    if [[ $needs_install -eq 0 ]]; then
+        ok "Dépendances npm déjà à jour."
+        return 0
     fi
     
     log "Installation des dépendances npm"
     npm install
+    
     if [[ -f "package.json" ]]; then
-        md5sum package.json | cut -d' ' -f1 > node_modules/.package-lock.json.hash
+        md5sum package.json 2>/dev/null | cut -d' ' -f1 > node_modules/.package-lock.json.hash 2>/dev/null || true
     fi
+    
     ok "Dépendances npm installées."
 }
 
