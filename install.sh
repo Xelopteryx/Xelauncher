@@ -323,8 +323,12 @@ configure_splashscreen() {
 create_start_script() {
     cat > "$INSTALL_DIR/start.sh" <<'EOF'
 #!/bin/bash
-export DISPLAY=:0
 cd "$(dirname "$0")"
+export DISPLAY=:0
+
+# Attendre que X soit prêt
+sleep 2
+
 if [ -f "./node_modules/.bin/electron" ]; then
     exec ./node_modules/.bin/electron . --no-sandbox --disable-dev-shm-usage
 else
@@ -336,10 +340,11 @@ EOF
 }
 
 configure_autologin() {
+    # Configurer l'autologin en console
     if command -v raspi-config >/dev/null 2>&1; then
-        log "Configuration de l'autologin"
+        log "Configuration de l'autologin console"
         sudo raspi-config nonint do_boot_behaviour B2
-        ok "Autologin configuré"
+        ok "Autologin console configuré"
     else
         log "Configuration manuelle de l'autologin"
         sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
@@ -351,22 +356,48 @@ EOF
         sudo systemctl daemon-reload
         ok "Autologin configuré manuellement"
     fi
+    
+    # Ajouter le lancement de XeLauncher dans .profile
+    if ! grep -q "XeLauncher" "$HOME/.profile" 2>/dev/null; then
+        log "Ajout de XeLauncher au démarrage dans .profile"
+        cat >> "$HOME/.profile" <<'EOF'
+
+# Lancement de XeLauncher (Prometheus Entertainment System)
+if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+    echo "Démarrage de XeLauncher..."
+    sleep 2
+    cd "$HOME/xelauncher"
+    exec startx ./start.sh -- :0 vt1
+fi
+EOF
+        ok "XeLauncher ajouté au démarrage"
+    else
+        ok "XeLauncher déjà configuré dans .profile"
+    fi
 }
 
 configure_systemd_service() {
+    # Désactiver l'ancien service s'il existe
+    if systemctl is-enabled xelauncher 2>/dev/null | grep -q "enabled"; then
+        log "Désactivation de l'ancien service systemd"
+        sudo systemctl disable xelauncher 2>/dev/null || true
+        sudo systemctl stop xelauncher 2>/dev/null || true
+        sudo rm -f /etc/systemd/system/xelauncher.service
+        sudo systemctl daemon-reload
+    fi
+    
+    # Garder le fichier de service désactivé (fallback)
     sudo tee /etc/systemd/system/xelauncher.service > /dev/null <<EOF
 [Unit]
-Description=XeLauncher
+Description=XeLauncher (fallback - utilisé par .profile)
 After=network.target
 
 [Service]
 User=$REAL_USER
 WorkingDirectory=$INSTALL_DIR
 Environment=DISPLAY=:0
-ExecStartPre=/bin/sleep 2
-ExecStart=/usr/bin/startx $INSTALL_DIR/start.sh -- :0
-Restart=always
-RestartSec=10
+ExecStart=/usr/bin/startx $INSTALL_DIR/start.sh -- :0 vt1
+Restart=no
 StandardOutput=journal
 StandardError=journal
 
@@ -374,8 +405,7 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
     sudo systemctl daemon-reload
-    sudo systemctl enable xelauncher
-    ok "Service systemd xelauncher créé et activé"
+    ok "Service systemd de fallback créé"
 }
 
 configure_sudoers() {
@@ -459,8 +489,8 @@ main() {
     echo "  - RetroPie installé" $([[ $SKIP_RETROPIE -eq 1 ]] && echo "(ignoré)" || echo "")
     echo "  - Splashscreen Prometheus configuré"
     echo "  - Script start.sh créé"
-    echo "  - Autologin configuré pour $REAL_USER"
-    echo "  - Service systemd xelauncher activé"
+    echo "  - Autologin console configuré"
+    echo "  - Lancement via .profile configuré"
     echo "  - Droits sudoers configurés"
     echo ""
     echo "Redémarrez maintenant pour tester : sudo reboot"
