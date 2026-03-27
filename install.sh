@@ -276,81 +276,21 @@ install_retropie() {
     
     log "Installation de RetroPie (20-40 minutes)"
     
-    # Installer expect pour l'automatisation
-    if ! command -v expect >/dev/null 2>&1; then
-        log "Installation de expect pour l'automatisation"
-        sudo apt-get update
-        sudo apt-get install -y expect
-    fi
-    
     if [[ ! -d "$HOME/RetroPie-Setup" ]]; then
+        log "Clonage du dépôt RetroPie-Setup"
         git clone --depth=1 https://github.com/RetroPie/RetroPie-Setup.git "$HOME/RetroPie-Setup"
     fi
     
     cd "$HOME/RetroPie-Setup"
     
-    # Désactiver la redirection pour l'affichage interactif
+    log "Mise à jour du dépôt RetroPie"
+    git pull --rebase 2>/dev/null || true
+    
+    # Désactiver la redirection pour voir la progression
     exec >/dev/tty 2>&1
     
-    log "Lancement de l'installation automatique de RetroPie (Basic Install)"
-    
-    # Automatisation complète avec expect
-    expect << 'EOF'
-set timeout 7200
-log_user 1
-
-# Lancer le script
-spawn sudo ./retropie_setup.sh
-
-# Boucle principale
-while 1 {
-    expect {
-        # Menu principal - différentes variantes possibles
-        -re ".*(Choose an option|Choose option).*" {
-            send "3\r"
-        }
-        
-        # Basic Install directement visible
-        -re ".*Basic Install.*" {
-            send "\r"
-        }
-        
-        # Confirmation d'installation
-        -re ".*Would you like to proceed.*" {
-            send "y\r"
-        }
-        
-        # Écran "Press any key" ou "Press any key to continue"
-        -re ".*Press any key.*" {
-            send "\r"
-        }
-        
-        # Téléchargement en cours
-        -re ".*(Downloading|Installing).*" {
-            exp_continue
-        }
-        
-        # Installation terminée
-        -re ".*Setup is now complete.*" {
-            send "q\r"
-            break
-        }
-        
-        # Sortie normale
-        eof {
-            break
-        }
-        
-        # Timeout
-        timeout {
-            send_user "\nTimeout - l'installation pourrait être terminée\n"
-            break
-        }
-    }
-}
-
-wait
-EOF
+    log "Lancement de l'installation de RetroPie (Basic Install)"
+    sudo __nodialog=1 ./retropie_packages.sh setup basic_install
     
     # Retour à la redirection normale
     exec > >(tee -a "$LOG_FILE") 2>&1
@@ -358,24 +298,12 @@ EOF
     # Créer les dossiers de ROMs
     mkdir -p "$HOME/RetroPie/roms"/{nes,snes,gb,gba,n64,psx,mame,arcade}
     
-    # Vérifier si l'installation a réussi
     if command -v emulationstation >/dev/null 2>&1; then
         ok "RetroPie installé avec succès"
     else
-        warn "L'installation automatique de RetroPie a échoué"
-        warn "Installation manuelle lancée..."
-        
-        # Lancer l'installation manuelle
-        sudo ./retropie_setup.sh
-        
-        if command -v emulationstation >/dev/null 2>&1; then
-            ok "RetroPie installé manuellement avec succès"
-        else
-            warn "RetroPie n'a pas été installé"
-            warn "Vous pouvez l'installer plus tard avec:"
-            warn "  cd ~/RetroPie-Setup && sudo ./retropie_setup.sh"
-            warn "Choisissez ensuite 'Basic Install'"
-        fi
+        warn "L'installation de RetroPie a rencontré un problème"
+        warn "Vous pouvez l'installer manuellement avec:"
+        warn "  cd ~/RetroPie-Setup && sudo __nodialog=1 ./retropie_packages.sh setup basic_install"
     fi
 }
 
