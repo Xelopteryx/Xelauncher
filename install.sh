@@ -178,18 +178,44 @@ install_flatpak_jellyfin() {
         log "Installation de flatpak"
         sudo apt-get install -y flatpak
     fi
+    
     sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    
     if flatpak info com.github.iwalton3.jellyfin-media-player >/dev/null 2>&1; then
         ok "Jellyfin Media Player déjà installé."
     else
         log "Installation de Jellyfin Media Player"
         sudo flatpak install -y flathub com.github.iwalton3.jellyfin-media-player
+        ok "Jellyfin Media Player installé."
     fi
-    # Configuration D-Bus pour permettre à l'utilisateur d'accéder à flatpak
+    
+    # Configuration des permissions - Création du groupe flatpak si nécessaire
+    log "Configuration des permissions flatpak"
+    
+    # Vérifier et créer le groupe flatpak s'il n'existe pas
+    if ! getent group flatpak >/dev/null 2>&1; then
+        log "Création du groupe flatpak"
+        sudo groupadd flatpak
+    fi
+    
+    # Ajouter l'utilisateur au groupe flatpak
     if ! groups "$REAL_USER" | grep -q "\bflatpak\b"; then
         sudo usermod -a -G flatpak "$REAL_USER"
-        ok "Utilisateur ajouté au groupe flatpak."
+        ok "Utilisateur ajouté au groupe flatpak"
+    else
+        ok "Utilisateur déjà dans le groupe flatpak"
     fi
+    
+    # Redémarrer le service flatpak s'il existe
+    if systemctl list-units --full -all | grep -q flatpak-system-helper; then
+        sudo systemctl restart flatpak-system-helper 2>/dev/null || true
+    fi
+    
+    # Configurer les permissions D-Bus pour Jellyfin
+    log "Configuration des permissions D-Bus pour Jellyfin"
+    flatpak override --user --socket=wayland --socket=x11 --share=network --socket=session-bus com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
+    
+    ok "Flatpak et Jellyfin configurés avec succès"
 }
 
 clone_or_update_repo() {
@@ -296,10 +322,10 @@ configure_autologin() {
     if command -v raspi-config >/dev/null 2>&1; then
         log "Configuration de l'autologin avec raspi-config"
         sudo raspi-config nonint do_boot_behaviour B2  # B2 = console autologin
-        # Optionnel : passer en graphique autologin ? Nous préférons console autologin puis startx via service
-        # Mais pour l'instant, on reste en console autologin.
+        ok "Autologin configuré avec raspi-config"
     else
         # Méthode manuelle pour Debian/Raspbian
+        log "Configuration manuelle de l'autologin"
         sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
         cat <<EOF | sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf
 [Service]
@@ -307,8 +333,8 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin $REAL_USER --noclear %I \$TERM
 EOF
         sudo systemctl daemon-reload
+        ok "Autologin configuré manuellement"
     fi
-    ok "Autologin configuré pour l'utilisateur $REAL_USER."
 }
 
 configure_systemd_service() {
@@ -321,6 +347,7 @@ After=systemd-user-sessions.service network.target
 [Service]
 User=$REAL_USER
 WorkingDirectory=$INSTALL_DIR
+Environment=DISPLAY=:0
 ExecStartPre=/bin/sleep 2
 ExecStart=/usr/bin/startx $INSTALL_DIR/start.sh -- :0
 Restart=always
@@ -363,7 +390,6 @@ main() {
 
     section "1/9 — Mise à jour système"
     sudo apt-get update
-    # On évite le upgrade automatique massif, mais on installe les paquets nécessaires
     ok "Paquets à jour."
 
     section "2/9 — Dépendances système"
@@ -378,7 +404,6 @@ main() {
         fbi
         libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0
         libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
-        # Electron supplémentaires
         libxss1 libxtst6 libgtk-3-0
     )
     check_and_install_packages "${deps[@]}"
