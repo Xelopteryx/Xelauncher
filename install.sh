@@ -209,16 +209,25 @@ install_npm_deps() {
 {
   "name": "xelauncher",
   "version": "1.0.0",
-  "main": "src/main.js",
+  "main": "src/JSs/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
   "dependencies": {
     "electron": "^28.0.0"
   },
   "devDependencies": {
     "electron-reload": "^1.5.0"
-  }
+  },
+  "author": "Xelopteryx"
 }
 EOF
     else
+        # Corriger le chemin main si nécessaire
+        if grep -q '"main": "src/main.js"' package.json 2>/dev/null; then
+            log "Correction du chemin main dans package.json"
+            sed -i 's|"main": "src/main.js"|"main": "src/JSs/main.js"|' package.json
+        fi
         # Corriger la version d'electron-reload si nécessaire
         if grep -q '"electron-reload": "\^2\.0\.0"' package.json 2>/dev/null; then
             log "Correction de la version electron-reload"
@@ -321,32 +330,45 @@ configure_splashscreen() {
 }
 
 create_start_script() {
+    # start.sh : utilisé uniquement si appelé manuellement depuis un TTY
     cat > "$INSTALL_DIR/start.sh" <<'EOF'
 #!/bin/bash
-cd "$(dirname "$0")"
-export DISPLAY=:0
+# Lance X puis XeLauncher via .xinitrc
+exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
+EOF
+    chmod +x "$INSTALL_DIR/start.sh"
+    ok "Script start.sh créé"
 
-# Attendre que X soit prêt
-sleep 2
+    # .xinitrc : exécuté par X après son démarrage
+    cat > "$HOME/.xinitrc" <<EOF
+#!/bin/bash
+# Désactiver l'économiseur d'écran et DPMS
+xset s off
+xset -dpms
+xset s noblank
 
+# Se placer dans le dossier XeLauncher
+cd "$INSTALL_DIR"
+
+# Lancer Electron
 if [ -f "./node_modules/.bin/electron" ]; then
     exec ./node_modules/.bin/electron . --no-sandbox --disable-dev-shm-usage
 else
     exec npx electron . --no-sandbox --disable-dev-shm-usage
 fi
 EOF
-    chmod +x "$INSTALL_DIR/start.sh"
-    ok "Script start.sh créé"
+    chmod +x "$HOME/.xinitrc"
+    ok "Fichier .xinitrc créé"
 }
 
 configure_autologin() {
     # Configurer l'autologin en console
     if command -v raspi-config >/dev/null 2>&1; then
-        log "Configuration de l'autologin console"
+        log "Configuration de l'autologin console via raspi-config"
         sudo raspi-config nonint do_boot_behaviour B2
         ok "Autologin console configuré"
     else
-        log "Configuration manuelle de l'autologin"
+        log "Configuration manuelle de l'autologin sur TTY1"
         sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
         cat <<EOF | sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf
 [Service]
@@ -356,23 +378,55 @@ EOF
         sudo systemctl daemon-reload
         ok "Autologin configuré manuellement"
     fi
-    
-    # Ajouter le lancement de XeLauncher dans .profile
-    if ! grep -q "XeLauncher" "$HOME/.profile" 2>/dev/null; then
-        log "Ajout de XeLauncher au démarrage dans .profile"
-        cat >> "$HOME/.profile" <<'EOF'
+
+    # .bash_profile : lu uniquement lors d'une connexion interactive (TTY)
+    # On l'utilise plutôt que .profile pour éviter les conflits avec les sessions SSH/GUI
+    local BASH_PROFILE="$HOME/.bash_profile"
+
+    if ! grep -q "XeLauncher" "$BASH_PROFILE" 2>/dev/null; then
+        log "Ajout de XeLauncher au démarrage dans .bash_profile"
+        cat >> "$BASH_PROFILE" <<EOF
 
 # Lancement de XeLauncher (Prometheus Entertainment System)
-if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+# Uniquement sur TTY1, sans session X déjà active
+if [ -z "\$DISPLAY" ] && [ "\$(tty)" = "/dev/tty1" ]; then
     echo "Démarrage de XeLauncher..."
-    sleep 2
-    cd "$HOME/xelauncher"
-    exec startx ./start.sh -- :0 vt1
+    exec startx "\$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
 fi
 EOF
-        ok "XeLauncher ajouté au démarrage"
+        ok "XeLauncher ajouté au démarrage dans .bash_profile"
     else
-        ok "XeLauncher déjà configuré dans .profile"
+        # Corriger l'ancienne entrée si elle utilise l'ancien start.sh
+        if grep -q "exec startx ./start.sh" "$BASH_PROFILE" 2>/dev/null || \
+           grep -q "cd.*xelauncher" "$BASH_PROFILE" 2>/dev/null; then
+            log "Correction de l'ancienne entrée dans .bash_profile"
+            # Supprimer le bloc XeLauncher existant
+            sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$BASH_PROFILE"
+            cat >> "$BASH_PROFILE" <<EOF
+
+# Lancement de XeLauncher (Prometheus Entertainment System)
+# Uniquement sur TTY1, sans session X déjà active
+if [ -z "\$DISPLAY" ] && [ "\$(tty)" = "/dev/tty1" ]; then
+    echo "Démarrage de XeLauncher..."
+    exec startx "\$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
+fi
+EOF
+            ok ".bash_profile mis à jour"
+        else
+            ok "XeLauncher déjà correctement configuré dans .bash_profile"
+        fi
+    fi
+
+    # S'assurer que .bash_profile charge .bashrc si présent (comportement standard)
+    if ! grep -q '\.bashrc' "$BASH_PROFILE" 2>/dev/null; then
+        sed -i '1s|^|# Charger .bashrc si présent\n[ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"\n\n|' "$BASH_PROFILE"
+    fi
+
+    # Supprimer toute ancienne entrée XeLauncher dans .profile pour éviter les conflits
+    if grep -q "XeLauncher" "$HOME/.profile" 2>/dev/null; then
+        log "Suppression de l'ancienne entrée XeLauncher dans .profile"
+        sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$HOME/.profile"
+        ok ".profile nettoyé"
     fi
 }
 
@@ -385,27 +439,34 @@ configure_systemd_service() {
         sudo rm -f /etc/systemd/system/xelauncher.service
         sudo systemctl daemon-reload
     fi
-    
-    # Garder le fichier de service désactivé (fallback)
+
+    # Service de fallback (non activé — le démarrage passe par .bash_profile)
     sudo tee /etc/systemd/system/xelauncher.service > /dev/null <<EOF
 [Unit]
-Description=XeLauncher (fallback - utilisé par .profile)
-After=network.target
+Description=XeLauncher Kiosk (fallback — démarrage normal via .bash_profile)
+After=systemd-user-sessions.service
 
 [Service]
+Type=simple
 User=$REAL_USER
-WorkingDirectory=$INSTALL_DIR
-Environment=DISPLAY=:0
-ExecStart=/usr/bin/startx $INSTALL_DIR/start.sh -- :0 vt1
-Restart=no
+Group=$REAL_USER
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty
 StandardOutput=journal
 StandardError=journal
+Environment=HOME=/home/$REAL_USER
+Environment=XDG_RUNTIME_DIR=/run/user/$(id -u "$REAL_USER")
+ExecStart=/usr/bin/startx /home/$REAL_USER/.xinitrc -- :0 vt1 -nolisten tcp
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
 
 [Install]
 WantedBy=multi-user.target
 EOF
     sudo systemctl daemon-reload
-    ok "Service systemd de fallback créé"
+    ok "Service systemd de fallback créé (non activé — démarrage via .bash_profile)"
 }
 
 configure_sudoers() {
@@ -485,12 +546,14 @@ main() {
     echo "  - Tailscale installé et démarré"
     echo "  - Jellyfin Media Player installé via flatpak"
     echo "  - Dépôt XeLauncher cloné/mis à jour"
+    echo "  - package.json corrigé (main: src/JSs/main.js)"
     echo "  - Dépendances npm installées"
     echo "  - RetroPie installé" $([[ $SKIP_RETROPIE -eq 1 ]] && echo "(ignoré)" || echo "")
     echo "  - Splashscreen Prometheus configuré"
-    echo "  - Script start.sh créé"
-    echo "  - Autologin console configuré"
-    echo "  - Lancement via .profile configuré"
+    echo "  - ~/.xinitrc créé (lancé par X au démarrage)"
+    echo "  - start.sh créé (lancement manuel)"
+    echo "  - Autologin TTY1 configuré"
+    echo "  - ~/.bash_profile configuré (lance startx sur TTY1)"
     echo "  - Droits sudoers configurés"
     echo ""
     echo "Redémarrez maintenant pour tester : sudo reboot"
