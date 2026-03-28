@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XeLauncher — Profils</title>
+<link rel="stylesheet" href="../CSSs/common.css">
+<link rel="stylesheet" href="../CSSs/profiles.css">
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="vignette"></div>
+
+<!-- Profiles main screen -->
+<div class="profiles-screen" id="profilesScreen">
+  <button class="back-btn" id="backBtn">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+    Retour
+  </button>
+
+  <!-- Server setup (shown if no server configured) -->
+  <div class="server-setup" id="serverSetup" style="display:none">
+    <div class="server-setup-label" id="serverSetupLabel">Entrez l'adresse du serveur Jellyfin</div>
+    <div class="server-input-wrap">
+      <div class="server-input" id="serverInput" tabindex="-1">|</div>
+      <div class="server-ping-icon" id="serverPingIcon"></div>
+    </div>
+    <button class="back-btn" style="position:static;margin-top:8px" id="serverBackBtn">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+      Retour
+    </button>
+    <div class="hint">Appuyez sur ✓ pour saisir · ✕ pour annuler</div>
+  </div>
+
+  <!-- Normal profiles view -->
+  <div id="profilesView" style="display:none; flex-direction:column; align-items:center; gap:clamp(16px,3.5vh,40px); width:100%; position:relative; z-index:1">
+    <div class="profiles-header">
+      <img class="header-logo" src="../LOGOs/jellyfin.png" alt="Jellyfin" onerror="this.outerHTML='<span style=&quot;font-size:32px&quot;>📺</span>'">
+      <div class="header-title">Qui regarde ?</div>
+    </div>
+
+    <div class="profiles-grid" id="profilesGrid"></div>
+
+    <div class="hint">✕ connecter · △ configurer · ○ retour</div>
+
+    <!-- Server button (bottom) -->
+    <button class="server-btn" id="serverBtn">
+      Serveur : <span class="ip" id="serverBtnIp">—</span>
+    </button>
+  </div>
+</div>
+
+<!-- Editor overlay -->
+<div class="editor-overlay" id="editorOverlay">
+  <div class="editor-title" id="editorTitle">Profil</div>
+  <img class="editor-avatar-preview" id="editorAvatarPreview" src="" alt="">
+  <div class="editor-fields">
+    <div class="editor-field">
+      <span class="label">Nom affiché</span>
+      <div class="editor-input" id="eName" tabindex="-1"></div>
+    </div>
+    <div class="editor-field">
+      <span class="label">Utilisateur Jellyfin</span>
+      <div class="editor-input" id="eUser" tabindex="-1"></div>
+    </div>
+    <div class="editor-field">
+      <span class="label">Mot de passe</span>
+      <div class="editor-input" id="ePass" tabindex="-1"></div>
+    </div>
+  </div>
+  <div class="editor-actions">
+    <button class="btn" id="eBtnAvatar">Avatar</button>
+    <button class="btn" id="eBtnSave">Sauvegarder</button>
+    <button class="btn danger" id="eBtnDelete" style="display:none">Supprimer</button>
+    <button class="btn" id="eBtnCancel">Annuler</button>
+  </div>
+  <div class="hint">↑↓ champ · ← → bouton · ✓ valider · ✕ annuler</div>
+</div>
+
+<!-- Avatar picker -->
+<div class="avatar-picker" id="avatarPicker">
+  <div class="avatar-picker-title">Choisir un avatar</div>
+  <div class="avatar-grid" id="avatarGrid"></div>
+  <div class="hint">↑↓←→ naviguer · ✓ choisir · ✕ annuler</div>
+</div>
+
+<!-- Virtual keyboard overlay -->
+<div class="kb-overlay" id="kbOverlay">
+  <div class="kb-label" id="kbLabel">Saisie</div>
+  <div class="kb-display" id="kbDisplay">|</div>
+  <div class="kb-panel">
+    <div class="kb-modes">
+      <button class="kb-mode-btn on" id="kbModeLetters">A-Z</button>
+      <button class="kb-mode-btn" id="kbModeNums">0-9</button>
+    </div>
+    <div id="kbRows"></div>
+  </div>
+</div>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">Connexion…</div>
+</div>
+
+<!-- Input mapper -->
+<div class="mapper-overlay" id="mapperOverlay"></div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="../JSs/input.js"></script>
+<script>
+'use strict';
+
+/* ── Utilities ───────────────────────────────────────────────────────────── */
+const toast = new XeInput.Toast(document.getElementById('toast'));
+const mapper = new XeInput.InputMapper();
+const gpPoller = new XeInput.GamepadPoller((raw) => onKey(raw, '__gamepad__'));
+
+const BUILTIN_AVATAR = '../LOGOs/jellyfin.png';
+
+/* ── Data ────────────────────────────────────────────────────────────────── */
+let serverUrl = '';
+let profiles = [];
+let focusZone = 1; // 0=back, 1..N=profiles, N+1=add, N+2=server-btn
+
+/* ── Screen states ───────────────────────────────────────────────────────── */
+// 'server' | 'profiles' | 'editor' | 'avatar' | 'kb' | 'mapper'
+let screen = 'loading';
+
+/* ── Init ────────────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  XeInput.requestWakeLock();
+  gpPoller.start();
+
+  // Bind static buttons
+  document.getElementById('backBtn').addEventListener('click', goBack);
+  document.getElementById('serverBackBtn').addEventListener('click', goBack);
+  document.getElementById('serverBtn').addEventListener('click', () => openServerSetup());
+  document.getElementById('eBtnAvatar').addEventListener('click', openAvatarPicker);
+  document.getElementById('eBtnSave').addEventListener('click', saveEditor);
+  document.getElementById('eBtnDelete').addEventListener('click', deleteEditor);
+  document.getElementById('eBtnCancel').addEventListener('click', closeEditor);
+  document.getElementById('kbModeLetters').addEventListener('click', () => kb.setMode('letters'));
+  document.getElementById('kbModeNums').addEventListener('click', () => kb.setMode('nums'));
+
+  if (window.xeLauncher) {
+    window.xeLauncher.getProfiles().then(data => {
+      serverUrl = (data && data.server) ? data.server : '';
+      profiles = (data && data.profiles) ? data.profiles : [];
+      if (!serverUrl) {
+        showServerSetup();
+      } else {
+        showProfilesView();
+      }
+    }).catch(() => showServerSetup());
+  } else {
+    // Dev fallback
+    showServerSetup();
+  }
+
+  setTimeout(() => { inputReady = true; }, 700);
+});
+
+window.addEventListener('gamepadconnected', (e) => {
+  if (!mapper.has(e.gamepad.id)) openMapperUI(e.gamepad.id);
+});
+
+/* ── Virtual keyboard ─────────────────────────────────────────────────────── */
+const kb = new XeInput.VirtualKeyboard(
+  document.getElementById('kbRows'),
+  document.getElementById('kbDisplay'),
+  document.getElementById('kbOverlay')
+);
+let kbCallback = null;
+
+function openKb(label, initial, callback) {
+  document.getElementById('kbLabel').textContent = label;
+  kb.open(initial || '');
+  kbCallback = callback;
+  kb.onConfirm = (val) => { closeKb(); if (kbCallback) kbCallback(val); };
+  kb.onCancel = closeKb;
+  document.getElementById('kbOverlay').classList.add('visible');
+  screen = 'kb';
+}
+
+function closeKb() {
+  document.getElementById('kbOverlay').classList.remove('visible');
+  screen = getPrevScreen();
+}
+
+function getPrevScreen() {
+  if (document.getElementById('editorOverlay').classList.contains('visible')) return 'editor';
+  if (document.getElementById('avatarPicker').classList.contains('visible')) return 'avatar';
+  if (document.getElementById('profilesView').style.display !== 'none') return 'profiles';
+  return 'server';
+}
+
+/* ── Server setup ─────────────────────────────────────────────────────────── */
+let serverEditValue = '';
+let serverPingTimer = null;
+
+function showServerSetup() {
+  document.getElementById('serverSetup').style.display = 'flex';
+  document.getElementById('profilesView').style.display = 'none';
+  screen = 'server';
+  serverEditValue = serverUrl || '';
+  updateServerDisplay();
+}
+
+function updateServerDisplay() {
+  const el = document.getElementById('serverInput');
+  el.textContent = (serverEditValue || '') + '|';
+  el.classList.toggle('active', screen === 'server');
+  pingServer(serverEditValue);
+}
+
+function pingServer(url) {
+  const icon = document.getElementById('serverPingIcon');
+  if (!url || url.length < 7) { icon.textContent = ''; return; }
+  icon.className = 'server-ping-icon checking';
+  icon.textContent = '●';
+  if (serverPingTimer) clearTimeout(serverPingTimer);
+  serverPingTimer = setTimeout(() => {
+    fetch(url + '/System/Ping', { signal: AbortSignal.timeout(4000) })
+      .then(r => {
+        if (r.ok) { icon.className = 'server-ping-icon ok'; icon.textContent = '✓ En ligne'; showProfilesView(); }
+        else throw new Error();
+      })
+      .catch(() => { icon.className = 'server-ping-icon fail'; icon.textContent = '✗ Hors ligne'; });
+  }, 600);
+}
+
+function confirmServer() {
+  if (!serverEditValue) return;
+  if (window.xeLauncher && window.xeLauncher.getProfiles) {
+    window.xeLauncher.getProfiles().then(data => {
+      const d = data || { server: '', profiles: [] };
+      d.server = serverEditValue;
+      return window.xeLauncher.saveProfile ? null : null;
+    });
+  }
+  serverUrl = serverEditValue;
+  // Save server
+  if (window.xeLauncher) {
+    window.xeLauncher.getProfiles().then(data => {
+      const d = data || { profiles: [] };
+      d.server = serverUrl;
+      // Persist via save-profile workaround: we save a dummy then real save
+      // Actually we'll just keep it in memory and re-fetch later
+    });
+  }
+  showProfilesView();
+}
+
+/* ── Profiles view ──────────────────────────────────────────────────────────── */
+function showProfilesView() {
+  document.getElementById('serverSetup').style.display = 'none';
+  document.getElementById('profilesView').style.display = 'flex';
+  document.getElementById('serverBtnIp').textContent = serverUrl || '—';
+  document.getElementById('serverBtn').classList.toggle('connected',
+    document.getElementById('serverPingIcon').classList.contains('ok'));
+  screen = 'profiles';
+  focusZone = 1;
+  renderProfiles();
+}
+
+function renderProfiles() {
+  const grid = document.getElementById('profilesGrid');
+  grid.innerHTML = '';
+  const total = profiles.length + 1; // +1 = add button
+
+  profiles.forEach((p, i) => {
+    const zone = i + 1;
+    const card = document.createElement('div');
+    card.className = 'profile-card' + (focusZone === zone ? ' active' : ' inactive');
+    card.id = 'pcard-' + i;
+    card.innerHTML =
+      '<div class="avatar-wrap"><img src="' + (p.avatarData || BUILTIN_AVATAR) +
+      '" alt="' + escHtml(p.name) + '" onerror="this.src=\'' + BUILTIN_AVATAR + '\'"></div>' +
+      '<span class="profile-name">' + escHtml(p.name) + '</span>';
+    card.addEventListener('click', () => { focusZone = zone; renderProfiles(); });
+    card.addEventListener('dblclick', () => { focusZone = zone; confirmProfile(); });
+    grid.appendChild(card);
+  });
+
+  // Add button
+  const addZone = profiles.length + 1;
+  const addCard = document.createElement('div');
+  addCard.className = 'profile-card profile-add' + (focusZone === addZone ? ' active' : ' inactive');
+  addCard.id = 'pcard-add';
+  addCard.innerHTML =
+    '<div class="avatar-wrap"><div class="avatar-placeholder"><span class="plus-icon">+</span></div></div>' +
+    '<span class="profile-name">Ajouter</span>';
+  addCard.addEventListener('click', () => { focusZone = addZone; renderProfiles(); });
+  addCard.addEventListener('dblclick', () => { focusZone = addZone; confirmProfile(); });
+  grid.appendChild(addCard);
+
+  // Server button highlight
+  const serverZone = profiles.length + 2;
+  document.getElementById('serverBtn').classList.toggle('active', focusZone === serverZone);
+  document.getElementById('backBtn').classList.toggle('active', focusZone === 0);
+}
+
+function confirmProfile() {
+  const addZone = profiles.length + 1;
+  const serverZone = profiles.length + 2;
+  if (focusZone === 0) { goBack(); return; }
+  if (focusZone === serverZone) { openServerSetup(); return; }
+  if (focusZone === addZone) { openEditor(null); return; }
+  const profile = profiles[focusZone - 1];
+  const card = document.getElementById('pcard-' + (focusZone - 1));
+  if (card) card.classList.add('pressing');
+  setTimeout(() => {
+    if (card) card.classList.remove('pressing');
+    launchProfile(profile);
+  }, 350);
+}
+
+function openServerSetup() {
+  showServerSetup();
+  screen = 'server';
+}
+
+/* ── Launch profile ───────────────────────────────────────────────────────── */
+function launchProfile(profile) {
+  if (!window.xeLauncher) { toast.show('xeLauncher non disponible', true); return; }
+  document.getElementById('loadingText').textContent = 'Connexion en cours…';
+  document.getElementById('loadingOverlay').classList.add('visible');
+
+  window.xeLauncher.jellyfinAuthenticate(serverUrl, profile.username, profile.password)
+    .then(result => {
+      document.getElementById('loadingOverlay').classList.remove('visible');
+      if (!result.ok || !result.accessToken) {
+        toast.show('Erreur : ' + (result.error || 'Identifiants incorrects'), true);
+        return;
+      }
+      toast.show('Bienvenue ' + profile.name + ' !', false);
+      setTimeout(() => {
+        window.xeLauncher.launchJellyfinWithToken(serverUrl, result.accessToken, result.userId);
+      }, 800);
+    })
+    .catch(e => {
+      document.getElementById('loadingOverlay').classList.remove('visible');
+      toast.show('Erreur réseau', true);
+    });
+}
+
+function goBack() {
+  if (window.xeLauncher) window.xeLauncher.goBack();
+  else window.location.href = 'menu.html';
+}
+
+/* ── Editor ──────────────────────────────────────────────────────────────── */
+let editingProfile = null;
+let editorFocusIdx = 0; // 0=name,1=user,2=pass,3=buttons
+let editorBtnIdx = 0;
+const EDITOR_FIELDS = ['eName','eUser','ePass'];
+const EDITOR_BTNS_IDS = ['eBtnAvatar','eBtnSave','eBtnDelete','eBtnCancel'];
+let editorBtnsVisible = [];
+
+function openEditor(profile) {
+  editingProfile = profile ? JSON.parse(JSON.stringify(profile)) : {
+    id: 'p_' + Date.now(), name: '', username: '', password: '', avatarData: null
+  };
+  document.getElementById('editorTitle').textContent = profile ? 'Modifier — ' + profile.name : 'Nouveau profil';
+  document.getElementById('eName').textContent = editingProfile.name;
+  document.getElementById('eUser').textContent = editingProfile.username;
+  document.getElementById('ePass').textContent = editingProfile.password ? '••••••••' : '';
+  document.getElementById('editorAvatarPreview').src = editingProfile.avatarData || BUILTIN_AVATAR;
+  document.getElementById('eBtnDelete').style.display = profile ? '' : 'none';
+  editorBtnsVisible = profile
+    ? ['eBtnAvatar','eBtnSave','eBtnDelete','eBtnCancel']
+    : ['eBtnAvatar','eBtnSave','eBtnCancel'];
+  editorFocusIdx = 0; editorBtnIdx = 0;
+  updateEditorFocus();
+  document.getElementById('editorOverlay').classList.add('visible');
+  screen = 'editor';
+}
+
+function closeEditor() {
+  document.getElementById('editorOverlay').classList.remove('visible');
+  screen = 'profiles';
+}
+
+function updateEditorFocus() {
+  EDITOR_FIELDS.forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', editorFocusIdx === i);
+  });
+  editorBtnsVisible.forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', editorFocusIdx === 3 && editorBtnIdx === i);
+  });
+}
+
+function editorConfirm() {
+  const FIELDS = ['name','username','password'];
+  const LABELS = ['Nom affiché','Utilisateur Jellyfin','Mot de passe'];
+  if (editorFocusIdx < 3) {
+    const key = FIELDS[editorFocusIdx];
+    const current = editingProfile[key] || '';
+    openKb(LABELS[editorFocusIdx], current, (val) => {
+      editingProfile[key] = val;
+      const elId = EDITOR_FIELDS[editorFocusIdx];
+      document.getElementById(elId).textContent = editorFocusIdx === 2 ? '••••••••' : val;
+      screen = 'editor';
+    });
+  } else {
+    const btnId = editorBtnsVisible[editorBtnIdx];
+    if (btnId === 'eBtnAvatar') openAvatarPicker();
+    else if (btnId === 'eBtnSave') saveEditor();
+    else if (btnId === 'eBtnDelete') deleteEditor();
+    else closeEditor();
+  }
+}
+
+function saveEditor() {
+  if (!editingProfile.name || !editingProfile.username) {
+    toast.show('Nom et utilisateur requis', true); return;
+  }
+  if (!window.xeLauncher) { closeEditor(); return; }
+  window.xeLauncher.saveProfile(editingProfile).then(() => {
+    closeEditor();
+    return window.xeLauncher.getProfiles();
+  }).then(data => {
+    profiles = data.profiles || [];
+    serverUrl = data.server || serverUrl;
+    renderProfiles();
+    toast.show('Profil sauvegardé', false);
+  }).catch(() => toast.show('Erreur sauvegarde', true));
+}
+
+function deleteEditor() {
+  if (!editingProfile.id || !window.xeLauncher) return;
+  window.xeLauncher.deleteProfile(editingProfile.id).then(() => {
+    closeEditor();
+    return window.xeLauncher.getProfiles();
+  }).then(data => {
+    profiles = data.profiles || [];
+    renderProfiles();
+    toast.show('Profil supprimé', false);
+  });
+}
+
+/* ── Avatar picker ───────────────────────────────────────────────────────── */
+let avatarList = [];
+let avatarFocusIdx = 0;
+const AVATAR_COLS = () => Math.max(3, Math.floor(window.innerWidth * 0.7 / 120));
+
+function openAvatarPicker() {
+  if (!window.xeLauncher) return;
+  window.xeLauncher.getAvatars().then(files => {
+    avatarList = files || [];
+    avatarFocusIdx = 0;
+    renderAvatarGrid();
+    document.getElementById('avatarPicker').classList.add('visible');
+    screen = 'avatar';
+  });
+}
+
+function renderAvatarGrid() {
+  const grid = document.getElementById('avatarGrid');
+  grid.innerHTML = '';
+  if (!avatarList.length) {
+    grid.innerHTML = '<div class="avatar-empty">Aucun avatar dans ~/xelauncher/avatars/</div>';
+    return;
+  }
+  avatarList.forEach((file, i) => {
+    if (!window.xeLauncher) return;
+    window.xeLauncher.getAvatarData(file).then(data => {
+      if (!data) return;
+      const img = document.createElement('img');
+      img.className = 'avatar-thumb' + (i === avatarFocusIdx ? ' active' : '');
+      img.src = data;
+      img.dataset.idx = i;
+      img.dataset.src = data;
+      img.addEventListener('click', () => selectAvatar(data));
+      grid.appendChild(img);
+    });
+  });
+}
+
+function updateAvatarFocus() {
+  document.querySelectorAll('.avatar-thumb').forEach((el, i) => {
+    el.classList.toggle('active', i === avatarFocusIdx);
+  });
+}
+
+function selectAvatar(data) {
+  if (editingProfile) editingProfile.avatarData = data;
+  document.getElementById('editorAvatarPreview').src = data;
+  document.getElementById('avatarPicker').classList.remove('visible');
+  screen = 'editor';
+}
+
+/* ── Input mapper UI ─────────────────────────────────────────────────────── */
+let mapperActive = false, mapperDeviceId = '', mapperCurrentIdx = 0;
+let mapperResult = {}, mapperWaiting = false;
+
+function openMapperUI(deviceId) {
+  mapperDeviceId = deviceId; mapperCurrentIdx = 0;
+  mapperResult = {}; mapperActive = true; mapperWaiting = false;
+  const el = document.getElementById('mapperOverlay');
+  el.innerHTML = '';
+  el.className = 'mapper-overlay visible';
+
+  const prev = screen; screen = 'mapper';
+
+  const title = document.createElement('div');
+  title.className = 'mapper-title';
+  title.textContent = 'Nouveau périphérique';
+  el.appendChild(title);
+
+  const dev = document.createElement('div');
+  dev.className = 'mapper-device';
+  dev.textContent = deviceId.substring(0, 55);
+  el.appendChild(dev);
+
+  const act = document.createElement('div');
+  act.className = 'mapper-actions';
+  act.id = 'mapperAct';
+  el.appendChild(act);
+
+  const grid = document.createElement('div');
+  grid.className = 'mapper-grid';
+  grid.id = 'mapperGrid2';
+  el.appendChild(grid);
+
+  const skip = document.createElement('button');
+  skip.className = 'btn';
+  skip.style.marginTop = '12px';
+  skip.textContent = 'Passer (défauts)';
+  skip.addEventListener('click', () => {
+    mapper.save(deviceId, mapper.getDefault());
+    closeMapperUI();
+  });
+  el.appendChild(skip);
+
+  renderMapperUI();
+  nextMapperStep();
+}
+
+function renderMapperUI() {
+  const grid = document.getElementById('mapperGrid2');
+  if (!grid) return;
+  grid.innerHTML = '';
+  XeInput.ACTION_KEYS.forEach((a, i) => {
+    const item = document.createElement('div');
+    item.className = 'mapper-btn' +
+      (mapperResult[a.id] ? ' assigned' : '') +
+      (i === mapperCurrentIdx && mapperWaiting ? ' current-target' : '');
+    const lbl = document.createElement('span');
+    lbl.textContent = a.label;
+    item.appendChild(lbl);
+    if (mapperResult[a.id]) {
+      const kn = document.createElement('span');
+      kn.className = 'mapper-key-name';
+      kn.textContent = mapperResult[a.id];
+      item.appendChild(kn);
+    }
+    grid.appendChild(item);
+  });
+}
+
+function nextMapperStep() {
+  if (mapperCurrentIdx >= XeInput.ACTION_KEYS.length) {
+    mapper.save(mapperDeviceId, mapperResult);
+    closeMapperUI();
+    toast.show('Mappage enregistré !', false);
+    return;
+  }
+  mapperWaiting = true;
+  const act = document.getElementById('mapperAct');
+  if (act) act.textContent = 'Appuyez pour : ' + XeInput.ACTION_KEYS[mapperCurrentIdx].label;
+  renderMapperUI();
+}
+
+function closeMapperUI() {
+  mapperActive = false; mapperWaiting = false;
+  document.getElementById('mapperOverlay').classList.remove('visible');
+  document.getElementById('mapperOverlay').innerHTML = '';
+  screen = getPrevScreen();
+}
+
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Input routing ───────────────────────────────────────────────────────── */
+let inputReady = false;
+
+document.addEventListener('keydown', (e) => {
+  if (!inputReady) return;
+  XeInput.requestWakeLock();
+  onKey(e.key, '__keyboard__');
+});
+
+function onKey(raw, deviceId) {
+  if (!inputReady) return;
+
+  // Mapper interception
+  if (mapperActive && mapperWaiting) {
+    mapperResult[XeInput.ACTION_KEYS[mapperCurrentIdx].id] = raw;
+    mapperCurrentIdx++;
+    mapperWaiting = false;
+    setTimeout(nextMapperStep, 200);
+    renderMapperUI();
+    return;
+  }
+
+  // Resolve key
+  const key = (deviceId && deviceId !== '__keyboard__')
+    ? mapper.resolveKey(deviceId, raw)
+    : raw;
+  if (!key) return;
+
+  // Route by screen
+  if (screen === 'kb') { kb.handleKey(key); return; }
+
+  if (screen === 'avatar') {
+    const thumbs = document.querySelectorAll('.avatar-thumb');
+    const cols = AVATAR_COLS();
+    if (key === 'ArrowLeft')  { avatarFocusIdx = Math.max(0, avatarFocusIdx - 1); updateAvatarFocus(); }
+    else if (key === 'ArrowRight') { avatarFocusIdx = Math.min(thumbs.length - 1, avatarFocusIdx + 1); updateAvatarFocus(); }
+    else if (key === 'ArrowUp')  { avatarFocusIdx = Math.max(0, avatarFocusIdx - cols); updateAvatarFocus(); }
+    else if (key === 'ArrowDown') { avatarFocusIdx = Math.min(thumbs.length - 1, avatarFocusIdx + cols); updateAvatarFocus(); }
+    else if (key === 'Enter') {
+      const t = thumbs[avatarFocusIdx];
+      if (t) selectAvatar(t.dataset.src);
+    }
+    else if (key === 'Escape') {
+      document.getElementById('avatarPicker').classList.remove('visible');
+      screen = 'editor';
+    }
+    return;
+  }
+
+  if (screen === 'editor') {
+    const maxBtn = editorBtnsVisible.length - 1;
+    if (key === 'ArrowUp') { if (editorFocusIdx > 0) { editorFocusIdx--; updateEditorFocus(); } }
+    else if (key === 'ArrowDown') { if (editorFocusIdx < 3) { editorFocusIdx++; updateEditorFocus(); } }
+    else if (key === 'ArrowLeft') { if (editorFocusIdx === 3) { editorBtnIdx = Math.max(0, editorBtnIdx - 1); updateEditorFocus(); } }
+    else if (key === 'ArrowRight') { if (editorFocusIdx === 3) { editorBtnIdx = Math.min(maxBtn, editorBtnIdx + 1); updateEditorFocus(); } }
+    else if (key === 'Enter') editorConfirm();
+    else if (key === 'Escape') closeEditor();
+    return;
+  }
+
+  if (screen === 'server') {
+    if (key === 'Enter') {
+      if (serverEditValue) {
+        confirmServer();
+      } else {
+        openKb('Adresse du serveur (ex: http://192.168.1.100:8096)', serverEditValue, (val) => {
+          serverEditValue = val;
+          updateServerDisplay();
+          screen = 'server';
+        });
+      }
+    }
+    else if (key === 'Escape') goBack();
+    return;
+  }
+
+  if (screen === 'profiles') {
+    const total = profiles.length + 2; // +1 add, +1 server
+    if (key === 'ArrowLeft') {
+      if (focusZone > 0) { focusZone--; renderProfiles(); }
+      else { focusZone = total; renderProfiles(); }
+    }
+    else if (key === 'ArrowRight') {
+      if (focusZone < total) { focusZone++; renderProfiles(); }
+      else { focusZone = 0; renderProfiles(); }
+    }
+    else if (key === 'ArrowUp') { focusZone = 0; renderProfiles(); }
+    else if (key === 'ArrowDown') { if (focusZone === 0) { focusZone = 1; renderProfiles(); } }
+    else if (key === 'Enter') confirmProfile();
+    else if (key === 'Triangle') {
+      if (focusZone > 0 && focusZone <= profiles.length) openEditor(profiles[focusZone - 1]);
+    }
+    else if (key === 'Escape') goBack();
+  }
+}
+
+// Gamepad
+gpPoller.onKey = (raw) => {
+  const gps = navigator.getGamepads ? navigator.getGamepads() : [];
+  let deviceId = '__gamepad__';
+  for (let i = 0; i < gps.length; i++) { if (gps[i]) { deviceId = gps[i].id; break; } }
+  onKey(raw, deviceId);
+};
+</script>
+</body>
+</html>

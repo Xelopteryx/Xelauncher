@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XeLauncher</title>
+<link rel="stylesheet" href="../CSSs/common.css">
+<link rel="stylesheet" href="../CSSs/menu.css">
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="vignette"></div>
+
+<!-- Top system bar -->
+<div class="top-bar" id="topBar">
+  <button class="top-bar-btn settings-btn" id="settingsBtn">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+    Paramètres
+  </button>
+  <button class="top-bar-close" id="topBarClose">×</button>
+</div>
+
+<!-- Main launcher -->
+<div class="launcher">
+  <div class="launcher-title">XeLauncher</div>
+  <div class="cards">
+    <div class="card card-retro active" id="card0">
+      <img class="card-logo" src="../LOGOs/retropie.png" alt="RetroPie" onerror="this.style.fontSize='clamp(40px,7vw,80px)';this.outerHTML='<span class=&quot;card-logo&quot; style=&quot;font-size:clamp(40px,7vw,80px);display:flex;align-items:center;justify-content:center;&quot;>🎮</span>'">
+      <span class="card-label">RetroPie</span>
+    </div>
+    <div class="card card-jellyfin inactive" id="card1">
+      <img class="card-logo" src="../LOGOs/jellyfin.png" alt="Jellyfin" onerror="this.style.fontSize='clamp(40px,7vw,80px)';this.outerHTML='<span class=&quot;card-logo&quot; style=&quot;font-size:clamp(40px,7vw,80px);display:flex;align-items:center;justify-content:center;&quot;>📺</span>'">
+      <span class="card-label">Jellyfin</span>
+    </div>
+  </div>
+  <div class="nav-hint" id="navHint">← → choisir · ✓ lancer · Start — options</div>
+</div>
+
+<!-- Power menu -->
+<div class="power-overlay" id="powerOverlay">
+  <div class="power-panel">
+    <div class="power-title">Système</div>
+    <div class="power-btn restart" id="pwrRestart"><span class="power-icon">↺</span> Redémarrer</div>
+    <div class="power-btn" id="pwrShutdown"><span class="power-icon">⏻</span> Éteindre</div>
+    <div class="power-btn cancel" id="pwrCancel"><span class="power-icon">✕</span> Annuler</div>
+    <div class="hint">↑↓ naviguer · ✓ confirmer · Start — fermer</div>
+  </div>
+</div>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">Chargement…</div>
+</div>
+
+<!-- Input mapper -->
+<div class="mapper-overlay" id="mapperOverlay"></div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Scripts -->
+<script src="../JSs/input.js"></script>
+<script>
+'use strict';
+
+/* ── State ──────────────────────────────────────────────────────────────── */
+let current = 0;         // 0=retropie, 1=jellyfin
+let topBarFocusIdx = -1; // -1=none, 0=settings, 1=close
+let powerFocusIdx = 0;
+const POWER_ITEMS = ['pwrRestart','pwrShutdown','pwrCancel'];
+
+const toast = new XeInput.Toast(document.getElementById('toast'));
+const mapper = new XeInput.InputMapper();
+const gpPoller = new XeInput.GamepadPoller(onKey);
+
+let inputReady = false;
+let konamiIdx = 0;
+const KONAMI = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight'];
+
+/* ── Init ───────────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  XeInput.requestWakeLock();
+  gpPoller.start();
+  setTimeout(() => { inputReady = true; }, 700);
+  renderCards();
+  setupCardClicks();
+  setupPowerBtns();
+  setupTopBar();
+
+  // Mode buttons for top bar
+  document.getElementById('settingsBtn').addEventListener('click', openSettings);
+  document.getElementById('topBarClose').addEventListener('click', closeTopBar);
+});
+
+window.addEventListener('gamepadconnected', (e) => {
+  checkNewDevice(e.gamepad.id, 'gamepad');
+});
+
+/* ── Device mapping check ────────────────────────────────────────────────── */
+function checkNewDevice(deviceId, type) {
+  if (!mapper.has(deviceId)) {
+    openMapper(deviceId, type);
+  }
+}
+
+/* ── Render ─────────────────────────────────────────────────────────────── */
+function renderCards() {
+  document.getElementById('card0').className = 'card card-retro ' + (current === 0 ? 'active' : 'inactive');
+  document.getElementById('card1').className = 'card card-jellyfin ' + (current === 1 ? 'active' : 'inactive');
+}
+
+function setupCardClicks() {
+  document.getElementById('card0').addEventListener('click', () => { current = 0; renderCards(); });
+  document.getElementById('card1').addEventListener('click', () => { current = 1; renderCards(); });
+  document.getElementById('card0').addEventListener('dblclick', launchCurrent);
+  document.getElementById('card1').addEventListener('dblclick', launchCurrent);
+}
+
+function setupPowerBtns() {
+  document.getElementById('pwrRestart').addEventListener('click', () => doPower(0));
+  document.getElementById('pwrShutdown').addEventListener('click', () => doPower(1));
+  document.getElementById('pwrCancel').addEventListener('click', closePower);
+}
+
+function setupTopBar() {
+  updateTopBarFocus();
+}
+
+function updateTopBarFocus() {
+  ['settingsBtn','topBarClose'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', i === topBarFocusIdx);
+  });
+}
+
+function updatePowerFocus() {
+  POWER_ITEMS.forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === powerFocusIdx);
+  });
+}
+
+/* ── Actions ─────────────────────────────────────────────────────────────── */
+function launchCurrent() {
+  if (!window.xeLauncher) return;
+  const card = document.getElementById('card' + current);
+  card.classList.add('pressing');
+  setTimeout(() => {
+    card.classList.remove('pressing');
+    if (current === 0) {
+      // RetroArch/RetroPie: hide window, launch, show when done
+      document.getElementById('loadingText').textContent = 'Lancement de RetroPie…';
+      document.getElementById('loadingOverlay').classList.add('visible');
+      window.xeLauncher.launchRetropie().then(() => {
+        document.getElementById('loadingOverlay').classList.remove('visible');
+      }).catch(() => {
+        document.getElementById('loadingOverlay').classList.remove('visible');
+        toast.show('Impossible de lancer RetroPie', true);
+      });
+    } else {
+      document.getElementById('loadingText').textContent = 'Connexion au réseau…';
+      document.getElementById('loadingOverlay').classList.add('visible');
+      window.xeLauncher.launchJellyfin().then(() => {
+        document.getElementById('loadingOverlay').classList.remove('visible');
+      }).catch(() => {
+        document.getElementById('loadingOverlay').classList.remove('visible');
+        toast.show('Impossible de lancer Jellyfin', true);
+      });
+    }
+  }, 350);
+}
+
+function openSettings() {
+  closeTopBar();
+  if (window.xeLauncher && window.xeLauncher.openSettings) window.xeLauncher.openSettings();
+  else window.location.href = 'settings.html';
+}
+
+function openTopBar() {
+  document.getElementById('topBar').classList.add('visible');
+  topBarFocusIdx = -1;
+  updateTopBarFocus();
+}
+
+function closeTopBar() {
+  document.getElementById('topBar').classList.remove('visible');
+  topBarFocusIdx = -1;
+  updateTopBarFocus();
+}
+
+function openPower() {
+  powerFocusIdx = 0; updatePowerFocus();
+  document.getElementById('powerOverlay').classList.add('visible');
+}
+
+function closePower() {
+  document.getElementById('powerOverlay').classList.remove('visible');
+}
+
+function doPower(idx) {
+  closePower();
+  if (!window.xeLauncher) return;
+  document.getElementById('loadingText').textContent = idx === 0 ? 'Redémarrage…' : 'Arrêt…';
+  document.getElementById('loadingOverlay').classList.add('visible');
+  if (idx === 0) window.xeLauncher.systemReboot();
+  else window.xeLauncher.systemShutdown();
+}
+
+/* ── Input Mapper UI ─────────────────────────────────────────────────────── */
+let mapperActive = false;
+let mapperDeviceId = '';
+let mapperActions = [];
+let mapperCurrentIdx = 0;
+let mapperResult = {};
+let mapperWaitingInput = false;
+
+function openMapper(deviceId, type) {
+  mapperDeviceId = deviceId;
+  mapperActions = [...XeInput.ACTION_KEYS];
+  mapperCurrentIdx = 0;
+  mapperResult = {};
+  mapperActive = true;
+  mapperWaitingInput = false;
+
+  const el = document.getElementById('mapperOverlay');
+  el.innerHTML = '';
+  el.className = 'mapper-overlay visible';
+
+  const title = document.createElement('div');
+  title.className = 'mapper-title';
+  title.textContent = 'Nouveau périphérique détecté';
+  el.appendChild(title);
+
+  const dev = document.createElement('div');
+  dev.className = 'mapper-device';
+  dev.textContent = deviceId.substring(0, 60);
+  el.appendChild(dev);
+
+  const actEl = document.createElement('div');
+  actEl.className = 'mapper-actions';
+  actEl.id = 'mapperCurrentAction';
+  el.appendChild(actEl);
+
+  const grid = document.createElement('div');
+  grid.className = 'mapper-grid';
+  grid.id = 'mapperGrid';
+  el.appendChild(grid);
+
+  const hint = document.createElement('div');
+  hint.className = 'mapper-hint';
+  hint.textContent = 'Appuyez sur le bouton correspondant à chaque action';
+  el.appendChild(hint);
+
+  const skipBtn = document.createElement('button');
+  skipBtn.className = 'btn';
+  skipBtn.textContent = 'Passer (utiliser valeurs par défaut)';
+  skipBtn.style.marginTop = '8px';
+  skipBtn.addEventListener('click', skipMapper);
+  el.appendChild(skipBtn);
+
+  renderMapper();
+  startMapperStep();
+}
+
+function renderMapper() {
+  const grid = document.getElementById('mapperGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  mapperActions.forEach((a, i) => {
+    const item = document.createElement('div');
+    item.className = 'mapper-btn' +
+      (mapperResult[a.id] ? ' assigned' : '') +
+      (i === mapperCurrentIdx && mapperWaitingInput ? ' current-target' : '');
+    const lbl = document.createElement('span');
+    lbl.textContent = a.label;
+    item.appendChild(lbl);
+    if (mapperResult[a.id]) {
+      const kn = document.createElement('span');
+      kn.className = 'mapper-key-name';
+      kn.textContent = mapperResult[a.id];
+      item.appendChild(kn);
+    }
+    grid.appendChild(item);
+  });
+}
+
+function startMapperStep() {
+  if (mapperCurrentIdx >= mapperActions.length) {
+    // Done
+    mapper.save(mapperDeviceId, mapperResult);
+    closeMapper();
+    toast.show('Mappage sauvegardé !', false);
+    return;
+  }
+  mapperWaitingInput = true;
+  const actEl = document.getElementById('mapperCurrentAction');
+  if (actEl) actEl.textContent = 'Appuyez pour : ' + mapperActions[mapperCurrentIdx].label;
+  renderMapper();
+}
+
+function mapperReceiveInput(rawKey) {
+  if (!mapperWaitingInput) return;
+  mapperResult[mapperActions[mapperCurrentIdx].id] = rawKey;
+  mapperCurrentIdx++;
+  mapperWaitingInput = false;
+  renderMapper();
+  setTimeout(startMapperStep, 200);
+}
+
+function skipMapper() {
+  mapper.save(mapperDeviceId, mapper.getDefault());
+  closeMapper();
+}
+
+function closeMapper() {
+  mapperActive = false;
+  mapperWaitingInput = false;
+  document.getElementById('mapperOverlay').classList.remove('visible');
+  document.getElementById('mapperOverlay').innerHTML = '';
+}
+
+/* ── Keyboard input ──────────────────────────────────────────────────────── */
+document.addEventListener('keydown', (e) => {
+  if (!inputReady) return;
+  // Wake screen
+  XeInput.requestWakeLock();
+
+  // Raw key (keyboard is always identity)
+  const raw = e.key;
+  onKey(raw, '__keyboard__');
+});
+
+/* ── Main input router ───────────────────────────────────────────────────── */
+function onKey(raw, deviceId) {
+  if (!inputReady) return;
+
+  // Device mapping interception
+  if (mapperActive && mapperWaitingInput) {
+    mapperReceiveInput(raw);
+    return;
+  }
+
+  // Resolve key through mapper (keyboard passes through)
+  const key = (deviceId && deviceId !== '__keyboard__')
+    ? mapper.resolveKey(deviceId, raw)
+    : raw;
+
+  if (!key) return; // unmapped device key
+
+  // Konami
+  if (key === KONAMI[konamiIdx]) {
+    konamiIdx++;
+    if (konamiIdx === KONAMI.length) { openTopBar(); konamiIdx = 0; }
+  } else { konamiIdx = 0; }
+
+  // Power menu
+  if (document.getElementById('powerOverlay').classList.contains('visible')) {
+    if (key === 'ArrowUp') { powerFocusIdx = (powerFocusIdx - 1 + 3) % 3; updatePowerFocus(); }
+    else if (key === 'ArrowDown') { powerFocusIdx = (powerFocusIdx + 1) % 3; updatePowerFocus(); }
+    else if (key === 'Enter') {
+      if (powerFocusIdx === 0) doPower(0);
+      else if (powerFocusIdx === 1) doPower(1);
+      else closePower();
+    }
+    else if (key === 'Escape' || key === 'Start') closePower();
+    return;
+  }
+
+  // Top bar
+  if (document.getElementById('topBar').classList.contains('visible')) {
+    if (topBarFocusIdx >= 0) {
+      if (key === 'ArrowLeft') { topBarFocusIdx = Math.max(0, topBarFocusIdx - 1); updateTopBarFocus(); }
+      else if (key === 'ArrowRight') { topBarFocusIdx = Math.min(1, topBarFocusIdx + 1); updateTopBarFocus(); }
+      else if (key === 'ArrowDown') { topBarFocusIdx = -1; updateTopBarFocus(); }
+      else if (key === 'Enter') { if (topBarFocusIdx === 0) openSettings(); else closeTopBar(); }
+      else if (key === 'Escape') closeTopBar();
+      else if (key === 'Start') { closeTopBar(); openPower(); }
+    } else {
+      if (key === 'ArrowUp') { topBarFocusIdx = 0; updateTopBarFocus(); }
+      else if (key === 'ArrowLeft') { current = 0; renderCards(); }
+      else if (key === 'ArrowRight') { current = 1; renderCards(); }
+      else if (key === 'Enter') launchCurrent();
+      else if (key === 'Escape') closeTopBar();
+      else if (key === 'Start') { closeTopBar(); openPower(); }
+    }
+    return;
+  }
+
+  // Main menu
+  if (key === 'ArrowLeft') { current = 0; renderCards(); }
+  else if (key === 'ArrowRight') { current = 1; renderCards(); }
+  else if (key === 'Enter') launchCurrent();
+  else if (key === 'Start') openPower();
+}
+
+// Gamepad sends raw keys, resolve via mapper if device known
+const _origGpOnKey = gpPoller.onKey.bind(gpPoller);
+gpPoller.onKey = (rawKey) => {
+  // Find which gamepad triggered (approximate — use first connected)
+  const gps = navigator.getGamepads ? navigator.getGamepads() : [];
+  let deviceId = '__gamepad__';
+  for (let i = 0; i < gps.length; i++) { if (gps[i]) { deviceId = gps[i].id; break; } }
+  onKey(rawKey, deviceId);
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XeLauncher — Paramètres</title>
+<link rel="stylesheet" href="../CSSs/common.css">
+<link rel="stylesheet" href="../CSSs/settings.css">
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="vignette"></div>
+
+<div class="settings-screen" id="settingsScreen">
+  <!-- Sidebar -->
+  <nav class="settings-sidebar" id="sidebar">
+    <div class="settings-logo">
+      <img src="../LOGOs/jellyfin.png" alt="XeLauncher" onerror="this.outerHTML='<span style=&quot;font-size:22px&quot;>⚙</span>'">
+      <div class="settings-logo-text">XeLauncher</div>
+    </div>
+    <div class="sidebar-item" data-tab="system"><span class="icon">💻</span>Système</div>
+    <div class="sidebar-item" data-tab="display"><span class="icon">🖥</span>Affichage</div>
+    <div class="sidebar-item" data-tab="audio"><span class="icon">🔊</span>Audio</div>
+    <div class="sidebar-item" data-tab="network"><span class="icon">🌐</span>Réseau</div>
+    <div class="sidebar-item" data-tab="bluetooth"><span class="icon">📡</span>Bluetooth</div>
+    <div class="sidebar-item" data-tab="controllers"><span class="icon">🎮</span>Manettes</div>
+  </nav>
+
+  <!-- Content -->
+  <main class="settings-main" id="settingsMain">
+    <!-- System tab -->
+    <div id="tab-system" class="tab-content">
+      <div class="section-title">Système</div>
+      <div class="settings-group">
+        <div class="settings-row" data-action="update">
+          <span class="settings-row-label">Mise à jour système</span>
+          <span class="settings-row-value" id="updateStatus">—</span>
+        </div>
+        <div class="settings-row" data-action="reboot">
+          <span class="settings-row-label">Redémarrer</span>
+          <span class="settings-row-value">↺</span>
+        </div>
+        <div class="settings-row" data-action="shutdown">
+          <span class="settings-row-label">Éteindre</span>
+          <span class="settings-row-value">⏻</span>
+        </div>
+        <div class="settings-row" data-action="back">
+          <span class="settings-row-label">← Retour au menu</span>
+        </div>
+      </div>
+      <div class="settings-group">
+        <div class="section-title" style="font-size:clamp(10px,1.2vw,14px)">Version</div>
+        <div class="settings-row">
+          <span class="settings-row-label">XeLauncher</span>
+          <span class="settings-row-value" id="versionVal">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Display tab -->
+    <div id="tab-display" class="tab-content" style="display:none">
+      <div class="section-title">Affichage</div>
+      <div class="settings-group">
+        <div class="settings-row" id="row-resolution">
+          <span class="settings-row-label">Résolution</span>
+          <span class="settings-row-value" id="resValue">1920×1080</span>
+        </div>
+        <div id="res-options" style="display:none;padding:0 0 8px 0">
+          <div class="option-list" id="resOptionList"></div>
+        </div>
+        <div class="settings-row" id="row-refresh">
+          <span class="settings-row-label">Fréquence</span>
+          <span class="settings-row-value" id="refValue">60Hz</span>
+        </div>
+        <div id="ref-options" style="display:none;padding:0 0 8px 0">
+          <div class="option-list" id="refOptionList"></div>
+        </div>
+        <div class="settings-row" id="row-rotation">
+          <span class="settings-row-label">Rotation</span>
+          <span class="settings-row-value" id="rotValue">0°</span>
+        </div>
+        <div id="rot-options" style="display:none;padding:0 0 8px 0">
+          <div class="option-list" id="rotOptionList"></div>
+        </div>
+        <div class="settings-row" data-action="apply-display">
+          <span class="settings-row-label">Appliquer</span>
+          <span class="settings-row-value">✓</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audio tab -->
+    <div id="tab-audio" class="tab-content" style="display:none">
+      <div class="section-title">Audio</div>
+      <div class="settings-group">
+        <div class="settings-row" id="row-audio-out">
+          <span class="settings-row-label">Sortie audio</span>
+          <span class="settings-row-value" id="audioOutVal">HDMI</span>
+        </div>
+        <div id="audio-out-options" style="display:none;padding:0 0 8px 0">
+          <div class="option-list" id="audioOutOptionList"></div>
+        </div>
+        <div class="settings-row" id="row-volume">
+          <span class="settings-row-label">Volume</span>
+          <span class="settings-row-value" id="volumeVal">80%</span>
+        </div>
+        <div id="volume-options" style="display:none;padding:0 0 8px 0">
+          <div class="option-list" id="volumeOptionList"></div>
+        </div>
+        <div class="settings-row" data-action="apply-audio">
+          <span class="settings-row-label">Appliquer</span>
+          <span class="settings-row-value">✓</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Network tab -->
+    <div id="tab-network" class="tab-content" style="display:none">
+      <div class="section-title">Réseau</div>
+      <div class="settings-group">
+        <div class="settings-row" data-action="wifi-scan">
+          <span class="settings-row-label">Scanner les réseaux WiFi</span>
+          <span class="settings-row-value" id="wifiScanStatus">↻</span>
+        </div>
+        <div class="wifi-list" id="wifiList"></div>
+      </div>
+      <div class="settings-group" style="margin-top:24px">
+        <div class="section-title" style="font-size:clamp(10px,1.2vw,14px)">Interfaces</div>
+        <div class="iface-list" id="ifaceList"></div>
+      </div>
+    </div>
+
+    <!-- Bluetooth tab -->
+    <div id="tab-bluetooth" class="tab-content" style="display:none">
+      <div class="section-title">Bluetooth</div>
+      <div class="settings-group">
+        <div class="settings-row" id="row-bt-power">
+          <span class="settings-row-label">Bluetooth</span>
+          <div class="toggle" id="btToggle"></div>
+        </div>
+        <div class="settings-row" data-action="bt-scan">
+          <span class="settings-row-label">Rechercher des appareils</span>
+          <span class="settings-row-value" id="btScanStatus">↻</span>
+        </div>
+        <div class="bt-list" id="btPairedList"></div>
+        <div class="section-title" style="font-size:clamp(10px,1.2vw,14px);margin-top:16px">Appareils trouvés</div>
+        <div class="bt-list" id="btScanList"></div>
+      </div>
+    </div>
+
+    <!-- Controllers tab -->
+    <div id="tab-controllers" class="tab-content" style="display:none">
+      <div class="section-title">Manettes & Télécommandes</div>
+      <div class="settings-group">
+        <div class="hint" style="text-align:left;margin-bottom:12px">
+          Les mappages sauvegardés ici sont utilisés pour convertir les entrées de chaque périphérique en touches clavier.
+        </div>
+        <div class="device-list" id="deviceMapList"></div>
+        <div class="settings-row" data-action="clear-maps" style="margin-top:12px">
+          <span class="settings-row-label">Réinitialiser tous les mappages</span>
+          <span class="settings-row-value">✕</span>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- WiFi password keyboard -->
+<div class="kb-overlay" id="kbOverlay">
+  <div class="kb-label" id="kbLabel">Mot de passe WiFi</div>
+  <div class="kb-display" id="kbDisplay">|</div>
+  <div class="kb-panel">
+    <div class="kb-modes">
+      <button class="kb-mode-btn on" id="kbModeLetters">A-Z</button>
+      <button class="kb-mode-btn" id="kbModeNums">0-9</button>
+    </div>
+    <div id="kbRows"></div>
+  </div>
+</div>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">Chargement…</div>
+</div>
+
+<!-- Input mapper -->
+<div class="mapper-overlay" id="mapperOverlay"></div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<div class="version-info" id="versionInfo"></div>
+
+<script src="../JSs/input.js"></script>
+<script>
+'use strict';
+
+const toast = new XeInput.Toast(document.getElementById('toast'));
+const mapper = new XeInput.InputMapper();
+const gpPoller = new XeInput.GamepadPoller((raw) => onKey(raw, '__gamepad__'));
+
+let inputReady = false;
+let activeTab = 'system';
+const TABS = ['system','display','audio','network','bluetooth','controllers'];
+
+// per-tab row focus
+let rowFocusMap = {};
+TABS.forEach(t => { rowFocusMap[t] = 0; });
+
+let sidebarFocused = true; // true=sidebar, false=content
+let sidebarFocusIdx = 0;
+let screen = 'main'; // 'main'|'kb'|'mapper'
+
+/* ── Display settings state ───────────────────────────────────────────────── */
+let dispRes = '1920×1080', dispRef = '60Hz', dispRot = '0°';
+const RES_OPTS = ['1280×720','1920×1080','3840×2160'];
+const REF_OPTS = ['30Hz','50Hz','60Hz'];
+const ROT_OPTS = ['0°','90°','180°','270°'];
+let resExpanded = false, refExpanded = false, rotExpanded = false;
+let resSelIdx = 1, refSelIdx = 2, rotSelIdx = 0;
+
+/* ── Audio settings state ─────────────────────────────────────────────────── */
+let audioOut = 'HDMI', audioVol = 80;
+const AUDIO_OUTS = ['HDMI','Analogique'];
+const AUDIO_VOLS = [20,40,60,80,100];
+let audioOutExpanded = false, volExpanded = false;
+let audioOutSelIdx = 0, volSelIdx = 3;
+
+/* ── WiFi state ───────────────────────────────────────────────────────────── */
+let wifiNetworks = [], wifiCurrentSSID = '', wifiFocusIdx = 0;
+let ifaceList = [], ifaceFocusIdx = 0;
+let kbCallback = null;
+
+/* ── Bluetooth state ─────────────────────────────────────────────────────── */
+let btPowered = false, btPaired = [], btScan = [], btPairedFocusIdx = 0, btScanFocusIdx = 0;
+
+/* ── Controller map state ─────────────────────────────────────────────────── */
+let deviceMapFocusIdx = 0;
+
+/* ── Init ────────────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  XeInput.requestWakeLock();
+  gpPoller.start();
+
+  // Sidebar clicks
+  document.querySelectorAll('.sidebar-item').forEach((el, i) => {
+    el.addEventListener('click', () => {
+      sidebarFocusIdx = i;
+      sidebarFocused = true;
+      selectTab(TABS[i]);
+    });
+  });
+
+  // Mode buttons
+  document.getElementById('kbModeLetters').addEventListener('click', () => kb.setMode('letters'));
+  document.getElementById('kbModeNums').addEventListener('click', () => kb.setMode('nums'));
+
+  // Load data
+  loadVersion();
+  loadInterfaces();
+
+  selectTab('system');
+  setTimeout(() => { inputReady = true; }, 700);
+});
+
+window.addEventListener('gamepadconnected', (e) => {
+  if (!mapper.has(e.gamepad.id)) openMapperUI(e.gamepad.id);
+});
+
+/* ── Virtual keyboard ─────────────────────────────────────────────────────── */
+const kb = new XeInput.VirtualKeyboard(
+  document.getElementById('kbRows'),
+  document.getElementById('kbDisplay'),
+  document.getElementById('kbOverlay')
+);
+
+function openKb(label, initial, callback) {
+  document.getElementById('kbLabel').textContent = label;
+  kb.open(initial || '');
+  kbCallback = callback;
+  kb.onConfirm = (val) => { closeKb(); if (kbCallback) kbCallback(val); };
+  kb.onCancel = closeKb;
+  document.getElementById('kbOverlay').classList.add('visible');
+  screen = 'kb';
+}
+function closeKb() {
+  document.getElementById('kbOverlay').classList.remove('visible');
+  screen = 'main';
+}
+
+/* ── Tab management ───────────────────────────────────────────────────────── */
+function selectTab(tabId) {
+  activeTab = tabId;
+  document.querySelectorAll('.tab-content').forEach(el => { el.style.display = 'none'; });
+  const t = document.getElementById('tab-' + tabId);
+  if (t) t.style.display = 'block';
+  document.querySelectorAll('.sidebar-item').forEach((el, i) => {
+    el.classList.toggle('active', TABS[i] === tabId);
+  });
+  if (tabId === 'network') { loadWifi(); loadInterfaces(); }
+  if (tabId === 'bluetooth') { loadBluetooth(); }
+  if (tabId === 'controllers') { renderDeviceMaps(); }
+  rowFocusMap[tabId] = 0;
+  updateContentFocus();
+}
+
+/* ── Sidebar focus ────────────────────────────────────────────────────────── */
+function updateSidebarFocus() {
+  document.querySelectorAll('.sidebar-item').forEach((el, i) => {
+    el.classList.toggle('active', TABS[i] === activeTab);
+    el.classList.toggle('focused', sidebarFocused && i === sidebarFocusIdx);
+  });
+}
+
+/* ── Content rows focus ───────────────────────────────────────────────────── */
+function getContentRows() {
+  const t = document.getElementById('tab-' + activeTab);
+  if (!t) return [];
+  return Array.from(t.querySelectorAll('.settings-row, .wifi-network, .iface-item, .bt-item, .device-item, .option-item, .toggle'));
+}
+
+function updateContentFocus() {
+  updateSidebarFocus();
+  const rows = getContentRows();
+  rows.forEach((el, i) => {
+    el.classList.toggle('active', !sidebarFocused && i === rowFocusMap[activeTab]);
+  });
+}
+
+/* ── System tab ─────────────────────────────────────────────────────────── */
+function loadVersion() {
+  if (!window.xeLauncher) return;
+  window.xeLauncher.getVersion().then(v => {
+    document.getElementById('versionVal').textContent = v;
+    document.getElementById('versionInfo').textContent = 'v' + v;
+  });
+  window.xeLauncher.checkUpdate().then(r => {
+    document.getElementById('updateStatus').textContent = r.available ? r.version + ' dispo' : 'À jour';
+  });
+}
+
+function doUpdate() {
+  if (!window.xeLauncher) return;
+  document.getElementById('loadingText').textContent = 'Mise à jour…';
+  document.getElementById('loadingOverlay').classList.add('visible');
+  window.xeLauncher.systemUpdate().then(ok => {
+    document.getElementById('loadingOverlay').classList.remove('visible');
+    toast.show(ok ? 'Mise à jour terminée' : 'Erreur', !ok);
+  });
+}
+
+/* ── Network tab ─────────────────────────────────────────────────────────── */
+function loadWifi() {
+  if (!window.xeLauncher) return;
+  document.getElementById('wifiScanStatus').textContent = '…';
+  window.xeLauncher.wifiCurrentSSID().then(ssid => { wifiCurrentSSID = ssid || ''; });
+  window.xeLauncher.wifiScan().then(nets => {
+    wifiNetworks = nets || [];
+    document.getElementById('wifiScanStatus').textContent = wifiNetworks.length + ' réseau(x)';
+    renderWifiList();
+  });
+}
+
+function renderWifiList() {
+  const c = document.getElementById('wifiList');
+  c.innerHTML = '';
+  if (!wifiNetworks.length) { c.innerHTML = '<div style="color:var(--text-dim);font-size:12px;letter-spacing:2px;padding:12px">Aucun réseau</div>'; return; }
+  wifiNetworks.forEach((n, i) => {
+    const el = document.createElement('div');
+    el.className = 'wifi-network' + (n.ssid === wifiCurrentSSID ? ' current' : '');
+    const sig = parseInt(n.signal || 0);
+    const bars = sig > 66 ? '███' : sig > 33 ? '██░' : '█░░';
+    el.innerHTML = '<span class="wifi-ssid">' + n.ssid + '</span>' +
+      '<span class="wifi-meta"><span class="wifi-signal">' + bars + '</span>' +
+      (n.ssid === wifiCurrentSSID ? '<span style="color:#a5d6a7">✓</span>' : '') +
+      '<span>' + (n.security || '') + '</span></span>';
+    el.addEventListener('click', () => connectWifi(n));
+    c.appendChild(el);
+  });
+  updateContentFocus();
+}
+
+function connectWifi(net) {
+  if (!window.xeLauncher) return;
+  if (net.ssid === wifiCurrentSSID) { toast.show('Déjà connecté', false); return; }
+  if (net.security && net.security.trim() && net.security !== 'WPA3') {
+    openKb('Mot de passe : ' + net.ssid, '', (pwd) => {
+      doWifiConnect(net.ssid, pwd);
+    });
+  } else {
+    doWifiConnect(net.ssid, '');
+  }
+}
+
+function doWifiConnect(ssid, pwd) {
+  if (!window.xeLauncher) return;
+  document.getElementById('loadingText').textContent = 'Connexion à ' + ssid + '…';
+  document.getElementById('loadingOverlay').classList.add('visible');
+  window.xeLauncher.wifiConnect(ssid, pwd).then(ok => {
+    document.getElementById('loadingOverlay').classList.remove('visible');
+    if (ok) { wifiCurrentSSID = ssid; toast.show('Connecté à ' + ssid, false); renderWifiList(); }
+    else toast.show('Connexion échouée', true);
+  });
+}
+
+function loadInterfaces() {
+  if (!window.xeLauncher) return;
+  window.xeLauncher.getInterfaces().then(ifaces => {
+    ifaceList = ifaces || [];
+    renderIfaceList();
+  });
+}
+
+function renderIfaceList() {
+  const c = document.getElementById('ifaceList');
+  if (!c) return; c.innerHTML = '';
+  ifaceList.forEach(iface => {
+    const el = document.createElement('div');
+    el.className = 'iface-item';
+    el.innerHTML = '<div class="iface-dot ' + iface.state + '"></div>' +
+      '<span class="iface-name">' + iface.name + '</span>' +
+      '<span class="iface-ip">' + (iface.ip || '—') + '</span>';
+    c.appendChild(el);
+  });
+}
+
+/* ── Display tab ─────────────────────────────────────────────────────────── */
+function renderResOptions() {
+  const c = document.getElementById('resOptionList');
+  c.innerHTML = '';
+  RES_OPTS.forEach((r, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-item' + (i === resSelIdx ? ' selected' : '');
+    btn.textContent = r;
+    btn.addEventListener('click', () => { resSelIdx = i; dispRes = r; document.getElementById('resValue').textContent = r; renderResOptions(); });
+    c.appendChild(btn);
+  });
+}
+
+function renderRefOptions() {
+  const c = document.getElementById('refOptionList');
+  c.innerHTML = '';
+  REF_OPTS.forEach((r, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-item' + (i === refSelIdx ? ' selected' : '');
+    btn.textContent = r;
+    btn.addEventListener('click', () => { refSelIdx = i; dispRef = r; document.getElementById('refValue').textContent = r; renderRefOptions(); });
+    c.appendChild(btn);
+  });
+}
+
+function renderRotOptions() {
+  const c = document.getElementById('rotOptionList');
+  c.innerHTML = '';
+  ROT_OPTS.forEach((r, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-item' + (i === rotSelIdx ? ' selected' : '');
+    btn.textContent = r;
+    btn.addEventListener('click', () => { rotSelIdx = i; dispRot = r; document.getElementById('rotValue').textContent = r; renderRotOptions(); });
+    c.appendChild(btn);
+  });
+}
+
+/* ── Audio tab ───────────────────────────────────────────────────────────── */
+function renderAudioOutOptions() {
+  const c = document.getElementById('audioOutOptionList');
+  c.innerHTML = '';
+  AUDIO_OUTS.forEach((o, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-item' + (i === audioOutSelIdx ? ' selected' : '');
+    btn.textContent = o;
+    btn.addEventListener('click', () => { audioOutSelIdx = i; audioOut = o; document.getElementById('audioOutVal').textContent = o; renderAudioOutOptions(); });
+    c.appendChild(btn);
+  });
+}
+
+function renderVolumeOptions() {
+  const c = document.getElementById('volumeOptionList');
+  c.innerHTML = '';
+  AUDIO_VOLS.forEach((v, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option-item' + (i === volSelIdx ? ' selected' : '');
+    btn.textContent = v + '%';
+    btn.addEventListener('click', () => { volSelIdx = i; audioVol = v; document.getElementById('volumeVal').textContent = v + '%'; renderVolumeOptions(); });
+    c.appendChild(btn);
+  });
+}
+
+/* ── Bluetooth tab ────────────────────────────────────────────────────────── */
+function loadBluetooth() {
+  if (!window.xeLauncher) return;
+  window.xeLauncher.btStatus().then(s => {
+    btPowered = s.powered;
+    const tog = document.getElementById('btToggle');
+    if (tog) tog.className = 'toggle' + (btPowered ? ' on' : '');
+  });
+  window.xeLauncher.btListPaired().then(devs => {
+    btPaired = devs || [];
+    renderBtPaired();
+  });
+}
+
+function renderBtPaired() {
+  const c = document.getElementById('btPairedList');
+  c.innerHTML = '';
+  if (!btPaired.length) { c.innerHTML = '<div style="color:var(--text-dim);font-size:12px;letter-spacing:2px;padding:12px">Aucun appareil appairé</div>'; return; }
+  btPaired.forEach(dev => {
+    const el = document.createElement('div');
+    el.className = 'bt-item';
+    el.innerHTML = '<span class="bt-icon">🎮</span>' +
+      '<span class="bt-name">' + dev.name + '</span>' +
+      (dev.connected ? '<span class="bt-connected">● connecté</span>' : '') +
+      '<span class="bt-mac">' + dev.mac + '</span>';
+    el.addEventListener('click', () => {
+      if (dev.connected) window.xeLauncher && window.xeLauncher.btDisconnect(dev.mac).then(() => loadBluetooth());
+      else window.xeLauncher && window.xeLauncher.btConnect(dev.mac).then(() => loadBluetooth());
+    });
+    c.appendChild(el);
+  });
+  updateContentFocus();
+}
+
+function doBtScan() {
+  if (!window.xeLauncher) return;
+  document.getElementById('btScanStatus').textContent = '…';
+  window.xeLauncher.btScan().then(devs => {
+    btScan = (devs || []).filter(d => !btPaired.find(p => p.mac === d.mac));
+    document.getElementById('btScanStatus').textContent = btScan.length + ' trouvé(s)';
+    renderBtScan();
+  });
+}
+
+function renderBtScan() {
+  const c = document.getElementById('btScanList');
+  c.innerHTML = '';
+  if (!btScan.length) { c.innerHTML = '<div style="color:var(--text-dim);font-size:12px;letter-spacing:2px;padding:12px">Aucun appareil trouvé</div>'; return; }
+  btScan.forEach(dev => {
+    const el = document.createElement('div');
+    el.className = 'bt-item';
+    el.innerHTML = '<span class="bt-icon">📡</span>' +
+      '<span class="bt-name">' + dev.name + '</span>' +
+      '<span class="bt-mac">' + dev.mac + '</span>';
+    el.addEventListener('click', () => {
+      if (window.xeLauncher) {
+        document.getElementById('loadingText').textContent = 'Appairage…';
+        document.getElementById('loadingOverlay').classList.add('visible');
+        window.xeLauncher.btPair(dev.mac).then(ok => {
+          document.getElementById('loadingOverlay').classList.remove('visible');
+          toast.show(ok ? 'Appairé !' : 'Échec appairage', !ok);
+          if (ok) {
+            loadBluetooth();
+            // Check if new device needs mapping
+            if (!mapper.has(dev.mac + ':' + dev.name)) openMapperUI(dev.name);
+          }
+        });
+      }
+    });
+    c.appendChild(el);
+  });
+  updateContentFocus();
+}
+
+/* ── Controllers tab ─────────────────────────────────────────────────────── */
+function renderDeviceMaps() {
+  const c = document.getElementById('deviceMapList');
+  c.innerHTML = '';
+  let maps;
+  try { maps = JSON.parse(localStorage.getItem('xelauncher_inputmaps') || '{}'); } catch(e) { maps = {}; }
+  const keys = Object.keys(maps);
+  if (!keys.length) {
+    c.innerHTML = '<div style="color:var(--text-dim);font-size:12px;letter-spacing:2px;padding:12px">Aucun mappage enregistré</div>';
+    return;
+  }
+  keys.forEach((deviceId, i) => {
+    const el = document.createElement('div');
+    el.className = 'device-item';
+    const short = deviceId.substring(0, 40);
+    el.innerHTML = '<span class="device-icon">🎮</span>' +
+      '<span class="device-name">' + short + '</span>' +
+      '<span class="device-status">✓ configuré</span>';
+    el.addEventListener('click', () => {
+      if (confirm('Reconfigurer ce périphérique ?')) openMapperUI(deviceId);
+    });
+    c.appendChild(el);
+  });
+  updateContentFocus();
+}
+
+/* ── Input mapper UI ─────────────────────────────────────────────────────── */
+let mapperActive = false, mapperDeviceId = '', mapperCurrentIdx = 0;
+let mapperResult = {}, mapperWaiting = false;
+
+function openMapperUI(deviceId) {
+  mapperDeviceId = deviceId; mapperCurrentIdx = 0;
+  mapperResult = {}; mapperActive = true; mapperWaiting = false;
+  const el = document.getElementById('mapperOverlay');
+  el.innerHTML = '';
+  el.className = 'mapper-overlay visible';
+  screen = 'mapper';
+
+  const title = document.createElement('div');
+  title.className = 'mapper-title';
+  title.textContent = 'Configuration du périphérique';
+  el.appendChild(title);
+
+  const dev = document.createElement('div');
+  dev.className = 'mapper-device';
+  dev.textContent = deviceId.substring(0, 55);
+  el.appendChild(dev);
+
+  const act = document.createElement('div');
+  act.className = 'mapper-actions';
+  act.id = 'mapperAct2';
+  el.appendChild(act);
+
+  const grid = document.createElement('div');
+  grid.className = 'mapper-grid';
+  grid.id = 'mapperGrid3';
+  el.appendChild(grid);
+
+  const hint = document.createElement('div');
+  hint.className = 'mapper-hint';
+  hint.textContent = 'Appuyez le bouton correspondant à chaque action. ✕ = passer';
+  el.appendChild(hint);
+
+  const skip = document.createElement('button');
+  skip.className = 'btn';
+  skip.style.marginTop = '12px';
+  skip.textContent = 'Utiliser les valeurs par défaut';
+  skip.addEventListener('click', () => { mapper.save(deviceId, mapper.getDefault()); closeMapperUI(); });
+  el.appendChild(skip);
+
+  renderMapperUI2();
+  nextMapperStep2();
+}
+
+function renderMapperUI2() {
+  const grid = document.getElementById('mapperGrid3');
+  if (!grid) return;
+  grid.innerHTML = '';
+  XeInput.ACTION_KEYS.forEach((a, i) => {
+    const item = document.createElement('div');
+    item.className = 'mapper-btn' +
+      (mapperResult[a.id] ? ' assigned' : '') +
+      (i === mapperCurrentIdx && mapperWaiting ? ' current-target' : '');
+    const lbl = document.createElement('span');
+    lbl.textContent = a.label;
+    item.appendChild(lbl);
+    if (mapperResult[a.id]) {
+      const kn = document.createElement('span');
+      kn.className = 'mapper-key-name';
+      kn.textContent = mapperResult[a.id];
+      item.appendChild(kn);
+    }
+    grid.appendChild(item);
+  });
+}
+
+function nextMapperStep2() {
+  if (mapperCurrentIdx >= XeInput.ACTION_KEYS.length) {
+    mapper.save(mapperDeviceId, mapperResult);
+    closeMapperUI();
+    toast.show('Mappage enregistré !', false);
+    if (activeTab === 'controllers') renderDeviceMaps();
+    return;
+  }
+  mapperWaiting = true;
+  const act = document.getElementById('mapperAct2');
+  if (act) act.textContent = 'Appuyez pour : ' + XeInput.ACTION_KEYS[mapperCurrentIdx].label;
+  renderMapperUI2();
+}
+
+function closeMapperUI() {
+  mapperActive = false; mapperWaiting = false;
+  document.getElementById('mapperOverlay').classList.remove('visible');
+  document.getElementById('mapperOverlay').innerHTML = '';
+  screen = 'main';
+}
+
+/* ── Row action handler ───────────────────────────────────────────────────── */
+function activateRow(el) {
+  const action = el.dataset.action;
+  if (action === 'back') { if (window.xeLauncher) window.xeLauncher.goBack(); else window.location.href = 'menu.html'; }
+  else if (action === 'update') doUpdate();
+  else if (action === 'reboot') { if (window.xeLauncher) window.xeLauncher.systemReboot(); }
+  else if (action === 'shutdown') { if (window.xeLauncher) window.xeLauncher.systemShutdown(); }
+  else if (action === 'wifi-scan') loadWifi();
+  else if (action === 'bt-scan') doBtScan();
+  else if (action === 'clear-maps') {
+    localStorage.removeItem('xelauncher_inputmaps');
+    toast.show('Mappages supprimés', false);
+    renderDeviceMaps();
+  }
+  else if (action === 'apply-display') {
+    if (!window.xeLauncher) return;
+    window.xeLauncher.setDisplay({
+      resolution: RES_OPTS[resSelIdx].replace('×','x'),
+      refresh: parseInt(REF_OPTS[refSelIdx]),
+      rotation: ROT_OPTS[rotSelIdx]
+    }).then(ok => toast.show(ok ? 'Affichage mis à jour' : 'Erreur', !ok));
+  }
+  else if (action === 'apply-audio') {
+    if (!window.xeLauncher) return;
+    window.xeLauncher.setAudio({ output: audioOut, volume: audioVol })
+      .then(ok => toast.show(ok ? 'Audio mis à jour' : 'Erreur', !ok));
+  }
+  else if (el.id === 'row-bt-power') {
+    if (!window.xeLauncher) return;
+    btPowered = !btPowered;
+    window.xeLauncher.btPower(btPowered);
+    el.querySelector('.toggle').className = 'toggle' + (btPowered ? ' on' : '');
+  }
+  // Expandable rows
+  else if (el.id === 'row-resolution') {
+    resExpanded = !resExpanded;
+    document.getElementById('res-options').style.display = resExpanded ? 'block' : 'none';
+    if (resExpanded) renderResOptions();
+  }
+  else if (el.id === 'row-refresh') {
+    refExpanded = !refExpanded;
+    document.getElementById('ref-options').style.display = refExpanded ? 'block' : 'none';
+    if (refExpanded) renderRefOptions();
+  }
+  else if (el.id === 'row-rotation') {
+    rotExpanded = !rotExpanded;
+    document.getElementById('rot-options').style.display = rotExpanded ? 'block' : 'none';
+    if (rotExpanded) renderRotOptions();
+  }
+  else if (el.id === 'row-audio-out') {
+    audioOutExpanded = !audioOutExpanded;
+    document.getElementById('audio-out-options').style.display = audioOutExpanded ? 'block' : 'none';
+    if (audioOutExpanded) renderAudioOutOptions();
+  }
+  else if (el.id === 'row-volume') {
+    volExpanded = !volExpanded;
+    document.getElementById('volume-options').style.display = volExpanded ? 'block' : 'none';
+    if (volExpanded) renderVolumeOptions();
+  }
+}
+
+/* ── Input routing ───────────────────────────────────────────────────────── */
+document.addEventListener('keydown', (e) => {
+  if (!inputReady) return;
+  XeInput.requestWakeLock();
+  onKey(e.key, '__keyboard__');
+});
+
+function onKey(raw, deviceId) {
+  if (!inputReady) return;
+
+  if (mapperActive && mapperWaiting) {
+    mapperResult[XeInput.ACTION_KEYS[mapperCurrentIdx].id] = raw;
+    mapperCurrentIdx++;
+    mapperWaiting = false;
+    setTimeout(nextMapperStep2, 200);
+    renderMapperUI2();
+    return;
+  }
+
+  const key = (deviceId && deviceId !== '__keyboard__')
+    ? mapper.resolveKey(deviceId, raw) : raw;
+  if (!key) return;
+
+  if (screen === 'kb') { kb.handleKey(key); return; }
+
+  // Main nav
+  if (key === 'Escape') {
+    if (window.xeLauncher) window.xeLauncher.goBack();
+    else window.location.href = 'menu.html';
+    return;
+  }
+
+  if (sidebarFocused) {
+    if (key === 'ArrowUp') { sidebarFocusIdx = Math.max(0, sidebarFocusIdx - 1); updateSidebarFocus(); }
+    else if (key === 'ArrowDown') { sidebarFocusIdx = Math.min(TABS.length - 1, sidebarFocusIdx + 1); updateSidebarFocus(); }
+    else if (key === 'ArrowRight') { sidebarFocused = false; updateContentFocus(); }
+    else if (key === 'Enter') { selectTab(TABS[sidebarFocusIdx]); sidebarFocused = false; updateContentFocus(); }
+  } else {
+    if (key === 'ArrowLeft') { sidebarFocused = true; updateSidebarFocus(); return; }
+    const rows = getContentRows();
+    const idx = rowFocusMap[activeTab];
+    if (key === 'ArrowUp') {
+      rowFocusMap[activeTab] = Math.max(0, idx - 1);
+      updateContentFocus();
+      rows[rowFocusMap[activeTab]]?.scrollIntoView({ block: 'nearest' });
+    }
+    else if (key === 'ArrowDown') {
+      rowFocusMap[activeTab] = Math.min(rows.length - 1, idx + 1);
+      updateContentFocus();
+      rows[rowFocusMap[activeTab]]?.scrollIntoView({ block: 'nearest' });
+    }
+    else if (key === 'Enter') {
+      const row = rows[idx];
+      if (row) activateRow(row);
+    }
+  }
+}
+
+// Gamepad
+gpPoller.onKey = (raw) => {
+  const gps = navigator.getGamepads ? navigator.getGamepads() : [];
+  let deviceId = '__gamepad__';
+  for (let i = 0; i < gps.length; i++) { if (gps[i]) { deviceId = gps[i].id; break; } }
+  onKey(raw, deviceId);
+};
+</script>
+</body>
+</html>
