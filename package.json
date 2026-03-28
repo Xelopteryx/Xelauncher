@@ -2,7 +2,7 @@
   "name": "xelauncher",
   "version": "1.0.0",
   "description": "XeLauncher - Prometheus Entertainment System Launcher",
-  "main": "src/main.js",
+  "main": "src/JSs/main.js",
   "scripts": {
     "start": "electron ."
   },
