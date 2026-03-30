@@ -317,7 +317,7 @@ install_retropie() {
 }
 
 configure_splashscreen() {
-    local logo="$INSTALL_DIR/src/logos/Prometheus.png"
+    local logo="$INSTALL_DIR/src/logos/prometheus.png"
     if [[ -f "$logo" ]]; then
         mkdir -p "$RETROPIE_SPLASH_DIR"
         cp "$logo" "$RETROPIE_SPLASH_DIR/prometheus.png"
