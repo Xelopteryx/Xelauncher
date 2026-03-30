@@ -476,7 +476,7 @@ configure_sudoers() {
 }
 
 create_required_dirs() {
-    mkdir -p "$INSTALL_DIR/avatars"
+    mkdir -p "$INSTALL_DIR/src/AVATARs"
     ok "Dossiers requis créés"
 }
 
