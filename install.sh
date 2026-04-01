@@ -113,7 +113,7 @@ interactive_menu() {
         echo -e "  ${RED}[q]${RESET} Quitter"
         echo ""
         while true; do
-            read -rp "  Votre choix : " choice
+            read -rp "  Votre choix : " choice </dev/tty
             case "$choice" in
                 i|I) MODE="install"; break ;;
                 q|Q) echo "Annulé."; exit 0 ;;
@@ -127,7 +127,7 @@ interactive_menu() {
         echo -e "  ${YELLOW}[q]${RESET} Quitter"
         echo ""
         while true; do
-            read -rp "  Votre choix : " choice
+            read -rp "  Votre choix : " choice </dev/tty
             case "$choice" in
                 i|I) MODE="install"; break ;;
                 u|U) MODE="uninstall"; break ;;
@@ -153,7 +153,7 @@ interactive_menu() {
     echo ""
     local confirm=""
     while true; do
-        read -rp "  Confirmer ? (y/n) : " confirm
+        read -rp "  Confirmer ? (y/n) : " confirm </dev/tty
         case "$confirm" in
             y|Y) break ;;
             n|N) echo "Annulé."; exit 0 ;;
@@ -651,27 +651,27 @@ print_summary() {
 #  MAIN
 # ─────────────────────────────────────────────
 main() {
-    # Rediriger logs
-    exec > >(tee -a "$LOG_FILE") 2>&1
-
-    # Vérifications préalables
+    # Vérifications préalables — AVANT exec tee pour garder stdin intact
     if [[ $EUID -eq 0 ]]; then
-        error "N'exécutez pas ce script en root. Utilisez un utilisateur normal avec sudo."
+        echo -e "\033[1;31m✖\033[0m N'exécutez pas ce script en root." >&2
         exit 1
     fi
-
-    sudo -v || { error "Droits sudo requis"; exit 1; }
 
     REAL_USER="${SUDO_USER:-$USER}"
     export HOME="/home/$REAL_USER"
 
-    curl -Is https://github.com | head -n1 | grep -q 200 \
-        || { error "Connexion Internet requise"; exit 1; }
+    sudo -v || { echo "Droits sudo requis" >&2; exit 1; }
 
-    # Menu interactif (avant le trap pour ne pas interrompre sur Ctrl+C propre)
+    curl -Is https://github.com | head -n1 | grep -q 200 \
+        || { echo "Connexion Internet requise" >&2; exit 1; }
+
+    # Menu interactif — AVANT la redirection tee (stdin doit rester sur le TTY)
     interactive_menu
 
-    # Activer le trap d'erreur après le menu
+    # Rediriger stdout/stderr vers log APRÈS le menu
+    exec > >(tee -a "$LOG_FILE") 2>&1
+
+    # Activer le trap d'erreur
     setup_trap
 
     if [[ "$MODE" == "uninstall" ]]; then
