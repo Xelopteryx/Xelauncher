@@ -5,7 +5,10 @@
 # |                 Version interactive & automatisee            |
 # +--------------------------------------------------------------+
 
-set -euo pipefail
+# NOTE: set -e retiré intentionnellement — il causait des sorties silencieuses
+# sur des commandes légitimement non-nulles (flatpak update, git stash, md5sum...).
+# Les erreurs critiques sont gérées explicitement avec || { error "..."; exit 1; }
+set -uo pipefail
 
 # Variables
 readonly REPO_URL="https://github.com/Xelopteryx/Xelauncher.git"
@@ -21,7 +24,6 @@ readonly GREEN='\033[1;32m'
 readonly YELLOW='\033[1;33m'
 readonly CYAN='\033[0;36m'
 readonly WHITE='\033[1;37m'
-readonly BLUE='\033[1;34m'
 readonly RESET='\033[0m'
 
 # Mode non-interactif
@@ -32,10 +34,10 @@ MODE=""        # Variable globale pour le mode choisi
 ACTIONS_DONE=()
 
 # Logging
-log()     { echo -e "${CYAN}→${RESET} $1"; }
-ok()      { echo -e "${GREEN}✔${RESET} $1"; }
-warn()    { echo -e "${YELLOW}!${RESET} $1"; }
-error()   { echo -e "${RED}✖${RESET} $1" >&2; }
+log()         { echo -e "${CYAN}→${RESET} $1"; }
+ok()          { echo -e "${GREEN}✔${RESET} $1"; }
+warn()        { echo -e "${YELLOW}!${RESET} $1"; }
+error()       { echo -e "${RED}✖${RESET} $1" >&2; }
 done_action() { ACTIONS_DONE+=("$1"); }
 
 section() {
@@ -98,7 +100,6 @@ print_state() {
 #  VERIFICATION SI XELAUNCHER EST INSTALLE
 # ─────────────────────────────────────────────
 is_xelauncher_installed() {
-    # Retourne 0 (vrai) si rien n'est installe, 1 (faux) si au moins un composant est installe
     if [[ -d "$INSTALL_DIR" ]] || \
        [[ -f "$HOME/.xinitrc" ]] || \
        grep -q "XeLauncher" "$HOME/.bash_profile" 2>/dev/null || \
@@ -116,7 +117,6 @@ is_xelauncher_installed() {
 #  MENU INTERACTIF
 # ─────────────────────────────────────────────
 interactive_menu() {
-    # Si un mode a ete passe en argument, on bypasse le menu
     if [[ -n "$AUTO_MODE" ]]; then
         MODE="$AUTO_MODE"
         detect_state
@@ -138,7 +138,6 @@ interactive_menu() {
         return 0
     fi
 
-    # Mode interactif normal
     clear
     echo -e "${WHITE}"
     echo "  +--------------------------------------------------+"
@@ -218,7 +217,8 @@ check_and_install_packages() {
     done
     if [[ ${#to_install[@]} -gt 0 ]]; then
         log "Installation des paquets manquants: ${to_install[*]}"
-        sudo apt-get install -y "${to_install[@]}"
+        sudo apt-get install -y "${to_install[@]}" \
+            || { error "Echec installation paquets: ${to_install[*]}"; exit 1; }
         done_action "Paquets systeme installes : ${to_install[*]}"
     fi
 }
@@ -229,10 +229,12 @@ install_nodejs() {
         return 0
     fi
     log "Installation de Node.js 20.x"
-    curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/node_setup.sh
+    curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/node_setup.sh \
+        || { error "Impossible de telecharger le script NodeSource"; exit 1; }
     sudo bash /tmp/node_setup.sh
     rm -f /tmp/node_setup.sh
-    sudo apt-get install -y nodejs
+    sudo apt-get install -y nodejs \
+        || { error "Echec installation nodejs"; exit 1; }
     ok "Node.js installe : $(node -v)"
     done_action "Node.js $(node -v) installe"
 }
@@ -243,7 +245,8 @@ install_tailscale() {
         return 0
     fi
     log "Installation de Tailscale"
-    curl -fsSL https://tailscale.com/install.sh -o /tmp/tailscale_install.sh
+    curl -fsSL https://tailscale.com/install.sh -o /tmp/tailscale_install.sh \
+        || { error "Impossible de telecharger le script Tailscale"; exit 1; }
     sudo bash /tmp/tailscale_install.sh
     rm -f /tmp/tailscale_install.sh
     sudo systemctl enable --now tailscaled 2>/dev/null || true
@@ -253,7 +256,8 @@ install_tailscale() {
 
 install_flatpak_jellyfin() {
     if ! command -v flatpak >/dev/null 2>&1; then
-        sudo apt-get install -y flatpak
+        sudo apt-get install -y flatpak \
+            || { error "Echec installation flatpak"; exit 1; }
         done_action "Flatpak installe"
     fi
 
@@ -261,15 +265,18 @@ install_flatpak_jellyfin() {
 
     if [[ $HAS_JELLYFIN -eq 0 ]]; then
         log "Installation de Jellyfin Media Player"
-        exec >/dev/tty 2>&1
-        sudo flatpak install -y flathub com.github.iwalton3.jellyfin-media-player
-        exec > >(tee -a "$LOG_FILE") 2>&1
+        # FIX: on passe directement sur le TTY sans re-ouvrir tee ensuite,
+        # ce qui evite la pollution de sequences ANSI dans le flux bash.
+        # La sortie est capturee proprement via script(1) pour le log.
+        sudo flatpak install -y flathub com.github.iwalton3.jellyfin-media-player \
+            2>&1 | grep -v $'^\033' | tee -a "$LOG_FILE" || \
+            { error "Echec installation Jellyfin"; exit 1; }
         ok "Jellyfin Media Player installe"
         done_action "Jellyfin Media Player installe via flatpak"
     else
         log "Mise a jour de Jellyfin Media Player"
-        flatpak update -y com.github.iwalton3.jellyfin-media-player 2>/dev/null && \
-            done_action "Jellyfin Media Player mis a jour" || true
+        flatpak update -y com.github.iwalton3.jellyfin-media-player 2>/dev/null \
+            && done_action "Jellyfin Media Player mis a jour" || true
         ok "Jellyfin a jour"
     fi
 
@@ -288,14 +295,16 @@ install_flatpak_jellyfin() {
 clone_or_update_repo() {
     if [[ ! -d "$INSTALL_DIR" ]]; then
         log "Clonage du depot XeLauncher"
-        git clone "$REPO_URL" "$INSTALL_DIR"
+        git clone "$REPO_URL" "$INSTALL_DIR" \
+            || { error "Echec du clonage du depot"; exit 1; }
         ok "Depot clone"
         done_action "Depot XeLauncher clone dans $INSTALL_DIR"
     else
         log "Mise a jour du depot"
         cd "$INSTALL_DIR"
         git stash push -m "auto-stash" 2>/dev/null || true
-        git pull --rebase || { error "Echec de la mise a jour du depot"; exit 1; }
+        git pull --rebase \
+            || { error "Echec de la mise a jour du depot"; exit 1; }
         ok "Depot mis a jour"
         done_action "Depot XeLauncher mis a jour"
     fi
@@ -348,8 +357,8 @@ install_npm_deps() {
         needs_install=1
     else
         local pkg_hash lock_hash
-        pkg_hash=$(md5sum package.json 2>/dev/null | cut -d' ' -f1 || echo "")
-        lock_hash=$(cat "node_modules/.pkg.hash" 2>/dev/null || echo "")
+        pkg_hash=$(md5sum package.json 2>/dev/null | cut -d' ' -f1) || pkg_hash=""
+        lock_hash=$(cat "node_modules/.pkg.hash" 2>/dev/null) || lock_hash=""
         [[ "$pkg_hash" != "$lock_hash" ]] && needs_install=1
     fi
 
@@ -359,7 +368,7 @@ install_npm_deps() {
     fi
 
     log "Installation des dependances npm"
-    npm install
+    npm install || { error "Echec npm install"; exit 1; }
     md5sum package.json 2>/dev/null | cut -d' ' -f1 > node_modules/.pkg.hash || true
     ok "Dependances npm installees"
     done_action "Dependances npm installees"
@@ -374,15 +383,18 @@ install_retropie() {
     log "Installation de RetroPie (20-40 minutes)"
 
     if [[ ! -d "$HOME/RetroPie-Setup" ]]; then
-        git clone --depth=1 https://github.com/RetroPie/RetroPie-Setup.git "$HOME/RetroPie-Setup"
+        git clone --depth=1 https://github.com/RetroPie/RetroPie-Setup.git "$HOME/RetroPie-Setup" \
+            || { error "Echec clonage RetroPie-Setup"; exit 1; }
     fi
 
     cd "$HOME/RetroPie-Setup"
     git pull --rebase 2>/dev/null || true
 
-    exec >/dev/tty 2>&1
-    sudo __nodialog=1 ./retropie_packages.sh setup basic_install
-    exec > >(tee -a "$LOG_FILE") 2>&1
+    # FIX: on laisse RetroPie s'afficher directement sur le TTY sans
+    # redirection intermediaire — cela evite toute pollution ANSI dans bash.
+    log "Lancement de l'installation RetroPie (affichage direct sur TTY)..."
+    sudo __nodialog=1 ./retropie_packages.sh setup basic_install \
+        || { error "Echec installation RetroPie"; exit 1; }
 
     mkdir -p "$HOME/RetroPie/roms"/{nes,snes,gb,gba,n64,psx,mame,arcade}
 
@@ -556,7 +568,6 @@ create_required_dirs() {
 uninstall_all() {
     section "Desinstallation de XeLauncher"
 
-    # Verifier si quelque chose est installe
     if ! is_xelauncher_installed; then
         echo ""
         echo -e "${YELLOW}⚠  XeLauncher n'est pas installe sur ce systeme.${RESET}"
@@ -624,9 +635,7 @@ uninstall_all() {
         log "Desinstallation de RetroPie"
         if [[ -d "$HOME/RetroPie-Setup" ]]; then
             cd "$HOME/RetroPie-Setup"
-            exec >/dev/tty 2>&1
             sudo __nodialog=1 ./retropie_packages.sh setup remove_all 2>/dev/null || true
-            exec > >(tee -a "$LOG_FILE") 2>&1
         fi
         rm -rf "$HOME/RetroPie-Setup"
         ok "RetroPie desinstalle"
@@ -720,7 +729,7 @@ main() {
         esac
     done
 
-    # Verifications preliminaires — AVANT exec tee pour garder stdin intact
+    # Verifications preliminaires
     if [[ $EUID -eq 0 ]]; then
         echo -e "\033[1;31m✖\033[0m N'executez pas ce script en root." >&2
         exit 1
@@ -731,14 +740,17 @@ main() {
 
     sudo -v || { echo "Droits sudo requis" >&2; exit 1; }
 
-    curl -Is https://github.com | head -n1 | grep -q 200 \
-        || { echo "Connexion Internet requise" >&2; exit 1; }
+    # FIX: verification connexion Internet tolerante aux redirections (301/302)
+    curl -sSf --max-time 10 https://github.com > /dev/null 2>&1 \
+        || { echo "Connexion Internet requise (github.com injoignable)" >&2; exit 1; }
 
     # Menu interactif — AVANT la redirection tee (stdin doit rester sur le TTY)
     interactive_menu
 
-    # Rediriger stdout/stderr vers log APRES le menu
-    exec > >(tee -a "$LOG_FILE") 2>&1
+    # FIX: filtrage des sequences ANSI parasites via sed dans le pipe tee.
+    # Cela evite que les codes de position de curseur emis par flatpak/retropie
+    # ne se retrouvent dans le flux bash et ne causent des erreurs de syntaxe.
+    exec > >(sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\[[0-9;]*[Rr]//g' | tee -a "$LOG_FILE") 2>&1
 
     # Activer le trap d'erreur
     setup_trap
