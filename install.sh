@@ -2,12 +2,10 @@
 # +--------------------------------------------------------------+
 # |              XeLauncher — Script d'installation              |
 # |           Prometheus Entertainment System — RPI5/PC          |
-# |                 Version interactive & optimisee              |
 # +--------------------------------------------------------------+
 
 set -uo pipefail
 
-# Variables
 readonly REPO_URL="https://github.com/Xelopteryx/Xelauncher.git"
 readonly INSTALL_DIR="$HOME/xelauncher"
 readonly LOCK_FILE="/var/tmp/xelauncher_install.lock"
@@ -23,12 +21,10 @@ readonly CYAN='\033[0;36m'
 readonly WHITE='\033[1;37m'
 readonly RESET='\033[0m'
 
-# Mode non-interactif
 AUTO_MODE=""
 MODE=""
 ACTIONS_DONE=()
 
-# Logging
 log()         { echo -e "${CYAN}→${RESET} $1"; }
 ok()          { echo -e "${GREEN}✔${RESET} $1"; }
 warn()        { echo -e "${YELLOW}!${RESET} $1"; }
@@ -42,7 +38,6 @@ section() {
     echo -e "${WHITE}------------------------------------------------------------${RESET}"
 }
 
-# Détection du modèle Raspberry Pi
 detect_platform() {
     if [[ -f /proc/device-tree/model ]]; then
         local model=$(cat /proc/device-tree/model)
@@ -63,7 +58,6 @@ detect_platform() {
 PLATFORM=$(detect_platform)
 log "Plateforme détectée: $PLATFORM"
 
-# Vérification de l'espace disque
 check_disk_space() {
     local required_gb=8
     local available=$(df --output=avail /home 2>/dev/null | tail -1 || df --output=avail / 2>/dev/null | tail -1)
@@ -77,7 +71,6 @@ check_disk_space() {
     fi
 }
 
-# Téléchargement avec reprise
 download_with_retry() {
     local url=$1
     local output=$2
@@ -95,7 +88,6 @@ download_with_retry() {
     return 1
 }
 
-# Détection de l'état d'installation
 detect_state() {
     HAS_RETROPIE=0
     HAS_JELLYFIN=0
@@ -137,7 +129,6 @@ print_state() {
     echo ""
 }
 
-# Menu interactif
 interactive_menu() {
     if [[ -n "$AUTO_MODE" ]]; then
         MODE="$AUTO_MODE"
@@ -224,7 +215,6 @@ interactive_menu() {
     echo ""
 }
 
-# Installation des paquets
 check_and_install_packages() {
     local to_install=()
     for pkg in "$@"; do
@@ -394,10 +384,8 @@ install_retropie() {
         return 0
     fi
 
-    # Optimisation pour RPI5
     if [[ "$PLATFORM" == "rpi5" ]]; then
         log "Installation de RetroPie sur Raspberry Pi 5 (optimisee)"
-        # Ajout des optimisations spécifiques RPI5
         if ! grep -q "dtoverlay=vc4-kms-v3d" /boot/config.txt 2>/dev/null; then
             echo "dtoverlay=vc4-kms-v3d" | sudo tee -a /boot/config.txt
             log "Configuration GPU ajoutee (redemarrage requis plus tard)"
@@ -581,11 +569,10 @@ create_required_dirs() {
         "$INSTALL_DIR/src/JSs" \
         "$INSTALL_DIR/src/CSSs" \
         "$INSTALL_DIR/src/FONTs"
-    ok "Dossiers src/ crees (AVATARs, LOGOs, HTMLs, JSs, CSSs, FONTs)"
+    ok "Dossiers src/ crees"
     done_action "Dossiers src/ crees/verifies"
 }
 
-# Desinstallation
 uninstall_all() {
     section "Desinstallation de XeLauncher"
 
@@ -727,7 +714,6 @@ print_summary() {
     echo ""
 }
 
-# MAIN
 main() {
     for arg in "$@"; do
         case "$arg" in
@@ -736,8 +722,6 @@ main() {
             *)
                 echo -e "${RED}✖${RESET} Argument inconnu : $arg" >&2
                 echo "  Usage : $0 [--i | --u]" >&2
-                echo "    --i  Installer directement sans menu interactif" >&2
-                echo "    --u  Desinstaller directement sans menu interactif" >&2
                 exit 1
                 ;;
         esac
@@ -753,7 +737,6 @@ main() {
 
     sudo -v || { echo "Droits sudo requis" >&2; exit 1; }
 
-    # Vérification connexion Internet
     curl -sSf --max-time 10 https://github.com > /dev/null 2>&1 \
         || { echo "Connexion Internet requise (github.com injoignable)" >&2; exit 1; }
 
@@ -769,7 +752,6 @@ main() {
         exit 0
     fi
 
-    # Installation
     section "1/9 — Mise a jour systeme"
     sudo apt-get update -q
     ok "Paquets a jour"
@@ -786,7 +768,8 @@ main() {
         fbi \
         libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
         libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 \
-        libxss1 libxtst6 libgtk-3-0
+        libxss1 libxtst6 libgtk-3-0 \
+        chromium-browser || true
 
     section "3/9 — Node.js"
     install_nodejs
