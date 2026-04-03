@@ -26,12 +26,9 @@ readonly RESET='\033[0m'
 
 # Mode non-interactif
 AUTO_MODE=""   # "" = interactif, "install" = --i, "uninstall" = --u
+MODE=""        # Variable globale pour le mode choisi
 
-
-declare -g MODE=""
-
-
-# Suivi de ce qui a été réellement fait
+# Suivi de ce qui a ete reellement fait
 ACTIONS_DONE=()
 
 # Logging
@@ -48,13 +45,13 @@ section() {
     echo -e "${WHITE}------------------------------------------------------------${RESET}"
 }
 
-# Trap d'erreur (activé après le menu)
+# Trap d'erreur (active apres le menu)
 setup_trap() {
-    trap 'error "Erreur fatale à la ligne $LINENO. Voir $LOG_FILE"' ERR
+    trap 'error "Erreur fatale a la ligne $LINENO. Voir $LOG_FILE"' ERR
 }
 
 # ─────────────────────────────────────────────
-#  DÉTECTION DE L'ÉTAT D'INSTALLATION
+#  DETECTION DE L'ETAT D'INSTALLATION
 # ─────────────────────────────────────────────
 detect_state() {
     HAS_RETROPIE=0
@@ -83,7 +80,7 @@ detect_state() {
 
 print_state() {
     echo ""
-    echo -e "${WHITE}État actuel du système :${RESET}"
+    echo -e "${WHITE}Etat actuel du systeme :${RESET}"
     local check_yes="${GREEN}✔${RESET}"
     local check_no="${RED}✖${RESET}"
 
@@ -91,7 +88,7 @@ print_state() {
     [[ $HAS_TAILSCALE -eq 1 ]] && echo -e "  $check_yes Tailscale"          || echo -e "  $check_no Tailscale"
     [[ $HAS_JELLYFIN -eq 1 ]]  && echo -e "  $check_yes Jellyfin (flatpak)" || echo -e "  $check_no Jellyfin (flatpak)"
     [[ $HAS_X -eq 1 ]]         && echo -e "  $check_yes Serveur X (xinit)"  || echo -e "  $check_no Serveur X (xinit)"
-    [[ $HAS_REPO -eq 1 ]]      && echo -e "  $check_yes Dépôt XeLauncher"   || echo -e "  $check_no Dépôt XeLauncher"
+    [[ $HAS_REPO -eq 1 ]]      && echo -e "  $check_yes Depot XeLauncher"   || echo -e "  $check_no Depot XeLauncher"
     [[ $HAS_RETROPIE -eq 1 ]]  && echo -e "  $check_yes RetroPie"           || echo -e "  $check_no RetroPie"
     [[ $HAS_AUTOLOGIN -eq 1 ]] && echo -e "  $check_yes Autologin TTY1"     || echo -e "  $check_no Autologin TTY1"
     echo ""
@@ -101,7 +98,7 @@ print_state() {
 #  MENU INTERACTIF
 # ─────────────────────────────────────────────
 interactive_menu() {
-    # Si un mode a été passé en argument, on bypasse le menu
+    # Si un mode a ete passe en argument, on bypasse le menu
     if [[ -n "$AUTO_MODE" ]]; then
         MODE="$AUTO_MODE"
         detect_state
@@ -117,10 +114,10 @@ interactive_menu() {
         if [[ "$MODE" == "install" ]]; then
             echo -e "${YELLOW}⚠  Mode automatique :${RESET} Installation en cours..."
         else
-            echo -e "${RED}⚠  Mode automatique :${RESET} Désinstallation en cours..."
+            echo -e "${RED}⚠  Mode automatique :${RESET} Desinstallation en cours..."
         fi
         echo ""
-        return 0  # ← SORTIE SANS CHOISIR, PERMET DE CONTINUER
+        return 0
     fi
 
     # Mode interactif normal
@@ -145,13 +142,13 @@ interactive_menu() {
             read -rp "  Votre choix : " choice </dev/tty
             case "$choice" in
                 i|I) MODE="install"; break ;;
-                q|Q) echo "Annulé."; exit 0 ;;
+                q|Q) echo "Annule."; exit 0 ;;
                 *) echo "  Tapez 'i' pour installer, ou 'q' pour quitter." ;;
             esac
         done
     else
-        echo -e "  ${CYAN}[i]${RESET} Installer ce qui manque & mettre à jour"
-        echo -e "  ${RED}[u]${RESET} Désinstaller tout ce qu'XeLauncher a installé"
+        echo -e "  ${CYAN}[i]${RESET} Installer ce qui manque & mettre a jour"
+        echo -e "  ${RED}[u]${RESET} Desinstaller tout ce qu'XeLauncher a installe"
         echo -e "  ${YELLOW}[q]${RESET} Quitter"
         echo ""
         while true; do
@@ -159,7 +156,7 @@ interactive_menu() {
             case "$choice" in
                 i|I) MODE="install"; break ;;
                 u|U) MODE="uninstall"; break ;;
-                q|Q) echo "Annulé."; exit 0 ;;
+                q|Q) echo "Annule."; exit 0 ;;
                 *) echo "  Tapez 'i', 'u' ou 'q'." ;;
             esac
         done
@@ -169,22 +166,22 @@ interactive_menu() {
 
     if [[ "$MODE" == "install" ]]; then
         echo -e "${YELLOW}⚠  Attention :${RESET} L'installation peut durer ${WHITE}une heure ou plus${RESET},"
-        echo    "   notamment à cause de RetroPie."
-        echo    "   Assurez-vous que le Raspberry Pi reste allumé et connecté à Internet."
+        echo    "   notamment a cause de RetroPie."
+        echo    "   Assurez-vous que le Raspberry Pi reste allume et connecte a Internet."
     else
-        echo -e "${RED}⚠  Désinstallation :${RESET} Tout ce qu'XeLauncher a installé sera supprimé."
-        echo    "   Cela inclut : le dépôt, l'autologin, le service systemd, les sudoers,"
-        echo    "   Jellyfin (flatpak), et RetroPie si installé par ce script."
-        echo    "   Node.js et Tailscale seront également désinstallés."
+        echo -e "${RED}⚠  Desinstallation :${RESET} Tout ce qu'XeLauncher a installe sera supprime."
+        echo    "   Cela inclut : le depot, l'autologin, le service systemd, les sudoers,"
+        echo    "   Jellyfin (flatpak), et RetroPie si installe par ce script."
+        echo    "   Node.js et Tailscale seront egalement desinstalles."
     fi
 
     echo ""
     local confirm=""
     while true; do
-        read -rp "  Confirmer ? (y/n) : " confirm </dev/tty
+        read -rp "  Confirmer ? (y/N) : " confirm </dev/tty
         case "$confirm" in
             y|Y) break ;;
-            n|N) echo "Annulé."; exit 0 ;;
+            ""|n|N) echo "Annule."; exit 0 ;;
             *) echo "  Tapez 'y' pour confirmer ou 'n' pour annuler." ;;
         esac
     done
@@ -204,13 +201,13 @@ check_and_install_packages() {
     if [[ ${#to_install[@]} -gt 0 ]]; then
         log "Installation des paquets manquants: ${to_install[*]}"
         sudo apt-get install -y "${to_install[@]}"
-        done_action "Paquets système installés : ${to_install[*]}"
+        done_action "Paquets systeme installes : ${to_install[*]}"
     fi
 }
 
 install_nodejs() {
     if [[ $HAS_NODE -eq 1 ]]; then
-        ok "Node.js $(node -v) déjà installé"
+        ok "Node.js $(node -v) deja installe"
         return 0
     fi
     log "Installation de Node.js 20.x"
@@ -218,13 +215,13 @@ install_nodejs() {
     sudo bash /tmp/node_setup.sh
     rm -f /tmp/node_setup.sh
     sudo apt-get install -y nodejs
-    ok "Node.js installé : $(node -v)"
-    done_action "Node.js $(node -v) installé"
+    ok "Node.js installe : $(node -v)"
+    done_action "Node.js $(node -v) installe"
 }
 
 install_tailscale() {
     if [[ $HAS_TAILSCALE -eq 1 ]]; then
-        ok "Tailscale déjà installé"
+        ok "Tailscale deja installe"
         return 0
     fi
     log "Installation de Tailscale"
@@ -232,14 +229,14 @@ install_tailscale() {
     sudo bash /tmp/tailscale_install.sh
     rm -f /tmp/tailscale_install.sh
     sudo systemctl enable --now tailscaled 2>/dev/null || true
-    ok "Tailscale installé"
-    done_action "Tailscale installé et démarré"
+    ok "Tailscale installe"
+    done_action "Tailscale installe et demarre"
 }
 
 install_flatpak_jellyfin() {
     if ! command -v flatpak >/dev/null 2>&1; then
         sudo apt-get install -y flatpak
-        done_action "Flatpak installé"
+        done_action "Flatpak installe"
     fi
 
     sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
@@ -249,13 +246,13 @@ install_flatpak_jellyfin() {
         exec >/dev/tty 2>&1
         sudo flatpak install -y flathub com.github.iwalton3.jellyfin-media-player
         exec > >(tee -a "$LOG_FILE") 2>&1
-        ok "Jellyfin Media Player installé"
-        done_action "Jellyfin Media Player installé via flatpak"
+        ok "Jellyfin Media Player installe"
+        done_action "Jellyfin Media Player installe via flatpak"
     else
-        log "Mise à jour de Jellyfin Media Player"
+        log "Mise a jour de Jellyfin Media Player"
         flatpak update -y com.github.iwalton3.jellyfin-media-player 2>/dev/null && \
-            done_action "Jellyfin Media Player mis à jour" || true
-        ok "Jellyfin à jour"
+            done_action "Jellyfin Media Player mis a jour" || true
+        ok "Jellyfin a jour"
     fi
 
     log "Configuration des permissions flatpak"
@@ -267,22 +264,22 @@ install_flatpak_jellyfin() {
     fi
     flatpak override --user --socket=x11 --share=network \
         com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
-    ok "Flatpak et Jellyfin configurés"
+    ok "Flatpak et Jellyfin configures"
 }
 
 clone_or_update_repo() {
     if [[ ! -d "$INSTALL_DIR" ]]; then
-        log "Clonage du dépôt XeLauncher"
+        log "Clonage du depot XeLauncher"
         git clone "$REPO_URL" "$INSTALL_DIR"
-        ok "Dépôt cloné"
-        done_action "Dépôt XeLauncher cloné dans $INSTALL_DIR"
+        ok "Depot clone"
+        done_action "Depot XeLauncher clone dans $INSTALL_DIR"
     else
-        log "Mise à jour du dépôt"
+        log "Mise a jour du depot"
         cd "$INSTALL_DIR"
         git stash push -m "auto-stash" 2>/dev/null || true
-        git pull --rebase || { error "Échec de la mise à jour du dépôt"; exit 1; }
-        ok "Dépôt mis à jour"
-        done_action "Dépôt XeLauncher mis à jour"
+        git pull --rebase || { error "Echec de la mise a jour du depot"; exit 1; }
+        ok "Depot mis a jour"
+        done_action "Depot XeLauncher mis a jour"
     fi
 }
 
@@ -291,7 +288,7 @@ fix_package_json() {
     local changed=0
 
     if [[ ! -f "package.json" ]]; then
-        log "Création de package.json"
+        log "Creation de package.json"
         cat > package.json <<'EOF'
 {
   "name": "xelauncher",
@@ -321,7 +318,7 @@ EOF
         fi
     fi
 
-    [[ $changed -eq 1 ]] && done_action "package.json créé/corrigé (main: src/JSs/main.js)"
+    [[ $changed -eq 1 ]] && done_action "package.json cree/corrige (main: src/JSs/main.js)"
 }
 
 install_npm_deps() {
@@ -339,20 +336,20 @@ install_npm_deps() {
     fi
 
     if [[ $needs_install -eq 0 ]]; then
-        ok "Dépendances npm déjà à jour"
+        ok "Dependances npm deja a jour"
         return 0
     fi
 
-    log "Installation des dépendances npm"
+    log "Installation des dependances npm"
     npm install
     md5sum package.json 2>/dev/null | cut -d' ' -f1 > node_modules/.pkg.hash || true
-    ok "Dépendances npm installées"
-    done_action "Dépendances npm installées"
+    ok "Dependances npm installees"
+    done_action "Dependances npm installees"
 }
 
 install_retropie() {
     if [[ $HAS_RETROPIE -eq 1 ]]; then
-        ok "RetroPie déjà installé"
+        ok "RetroPie deja installe"
         return 0
     fi
 
@@ -372,10 +369,10 @@ install_retropie() {
     mkdir -p "$HOME/RetroPie/roms"/{nes,snes,gb,gba,n64,psx,mame,arcade}
 
     if command -v emulationstation >/dev/null 2>&1; then
-        ok "RetroPie installé avec succès"
-        done_action "RetroPie installé (basic_install)"
+        ok "RetroPie installe avec succes"
+        done_action "RetroPie installe (basic_install)"
     else
-        warn "RetroPie n'a pas pu être confirmé. Vérifiez $LOG_FILE"
+        warn "RetroPie n'a pas pu etre confirme. Verifiez $LOG_FILE"
     fi
 }
 
@@ -386,10 +383,10 @@ configure_splashscreen() {
         cp "$logo" "$RETROPIE_SPLASH_DIR/prometheus.png"
         sudo mkdir -p "$(dirname "$RETROPIE_SPLASH_LIST")"
         echo "$RETROPIE_SPLASH_DIR/prometheus.png" | sudo tee "$RETROPIE_SPLASH_LIST" >/dev/null
-        ok "Splashscreen RetroPie configuré"
-        done_action "Splashscreen Prometheus configuré"
+        ok "Splashscreen RetroPie configure"
+        done_action "Splashscreen Prometheus configure"
     else
-        warn "Logo introuvable à $logo — splashscreen ignoré"
+        warn "Logo introuvable a $logo — splashscreen ignore"
     fi
 }
 
@@ -399,7 +396,7 @@ create_start_script() {
 exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
 EOF
     chmod +x "$INSTALL_DIR/start.sh"
-    ok "Script start.sh créé"
+    ok "Script start.sh cree"
 
     cat > "$HOME/.xinitrc" <<EOF
 #!/bin/bash
@@ -416,16 +413,16 @@ else
 fi
 EOF
     chmod +x "$HOME/.xinitrc"
-    ok "Fichier .xinitrc créé"
-    done_action "~/.xinitrc et start.sh créés"
+    ok "Fichier .xinitrc cree"
+    done_action "~/.xinitrc et start.sh crees"
 }
 
 configure_autologin() {
     if command -v raspi-config >/dev/null 2>&1; then
         log "Configuration de l'autologin console via raspi-config"
         sudo raspi-config nonint do_boot_behaviour B2
-        ok "Autologin console configuré"
-        done_action "Autologin TTY1 configuré via raspi-config"
+        ok "Autologin console configure"
+        done_action "Autologin TTY1 configure via raspi-config"
     else
         log "Configuration manuelle de l'autologin sur TTY1"
         sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
@@ -435,8 +432,8 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin $REAL_USER --noclear %I \$TERM
 EOF
         sudo systemctl daemon-reload
-        ok "Autologin configuré manuellement"
-        done_action "Autologin TTY1 configuré manuellement (systemd)"
+        ok "Autologin configure manuellement"
+        done_action "Autologin TTY1 configure manuellement (systemd)"
     fi
 
     local BASH_PROFILE="$HOME/.bash_profile"
@@ -449,12 +446,12 @@ EOF
 
 # Lancement de XeLauncher (Prometheus Entertainment System)
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    echo "Démarrage de XeLauncher..."
+    echo "Demarrage de XeLauncher..."
     exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
 fi
 EOF
-        ok "XeLauncher ajouté au démarrage dans .bash_profile"
-        done_action "~/.bash_profile configuré (startx sur TTY1)"
+        ok "XeLauncher ajoute au demarrage dans .bash_profile"
+        done_action "~/.bash_profile configure (startx sur TTY1)"
     else
         if grep -q "exec startx ./start.sh\|cd.*xelauncher" "$BASH_PROFILE" 2>/dev/null; then
             sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$BASH_PROFILE"
@@ -462,20 +459,20 @@ EOF
 
 # Lancement de XeLauncher (Prometheus Entertainment System)
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    echo "Démarrage de XeLauncher..."
+    echo "Demarrage de XeLauncher..."
     exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
 fi
 EOF
-            ok ".bash_profile mis à jour (ancienne entrée corrigée)"
-            done_action "~/.bash_profile corrigé"
+            ok ".bash_profile mis a jour (ancienne entree corrigee)"
+            done_action "~/.bash_profile corrige"
         else
-            ok "XeLauncher déjà correctement configuré dans .bash_profile"
+            ok "XeLauncher deja correctement configure dans .bash_profile"
         fi
     fi
 
     if grep -q "XeLauncher" "$HOME/.profile" 2>/dev/null; then
         sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$HOME/.profile"
-        done_action "~/.profile nettoyé (doublon supprimé)"
+        done_action "~/.profile nettoye (doublon supprime)"
     fi
 }
 
@@ -512,16 +509,16 @@ TimeoutStopSec=10
 WantedBy=multi-user.target
 EOF
     sudo systemctl daemon-reload
-    ok "Service systemd de fallback créé (non activé)"
-    done_action "Service systemd xelauncher.service créé (fallback, non activé)"
+    ok "Service systemd de fallback cree (non active)"
+    done_action "Service systemd xelauncher.service cree (fallback, non active)"
 }
 
 configure_sudoers() {
     echo "$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/tailscale up" \
         | sudo tee "$SUDOERS_FILE" > /dev/null
     sudo chmod 440 "$SUDOERS_FILE"
-    ok "Règles sudoers configurées"
-    done_action "Règles sudoers configurées ($SUDOERS_FILE)"
+    ok "Regles sudoers configurees"
+    done_action "Regles sudoers configurees ($SUDOERS_FILE)"
 }
 
 create_required_dirs() {
@@ -531,38 +528,38 @@ create_required_dirs() {
         "$INSTALL_DIR/src/HTMLs" \
         "$INSTALL_DIR/src/JSs" \
         "$INSTALL_DIR/src/CSSs"
-    ok "Dossiers src/ créés (AVATARs, LOGOs, HTMLs, JSs, CSSs)"
-    done_action "Dossiers src/ créés/vérifiés"
+    ok "Dossiers src/ crees (AVATARs, LOGOs, HTMLs, JSs, CSSs)"
+    done_action "Dossiers src/ crees/verifies"
 }
 
 # ─────────────────────────────────────────────
-#  DÉSINSTALLATION
+#  DESINSTALLATION
 # ─────────────────────────────────────────────
 uninstall_all() {
-    section "Désinstallation de XeLauncher"
+    section "Desinstallation de XeLauncher"
 
     if [[ -d "$INSTALL_DIR" ]]; then
-        log "Suppression du dépôt $INSTALL_DIR"
+        log "Suppression du depot $INSTALL_DIR"
         rm -rf "$INSTALL_DIR"
-        ok "Dépôt supprimé"
-        done_action "Dépôt $INSTALL_DIR supprimé"
+        ok "Depot supprime"
+        done_action "Depot $INSTALL_DIR supprime"
     fi
 
     if [[ -f "$HOME/.xinitrc" ]]; then
         rm -f "$HOME/.xinitrc"
-        ok "~/.xinitrc supprimé"
-        done_action "~/.xinitrc supprimé"
+        ok "~/.xinitrc supprime"
+        done_action "~/.xinitrc supprime"
     fi
 
     if grep -q "XeLauncher" "$HOME/.bash_profile" 2>/dev/null; then
         sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$HOME/.bash_profile"
-        ok ".bash_profile nettoyé"
-        done_action "~/.bash_profile nettoyé"
+        ok ".bash_profile nettoye"
+        done_action "~/.bash_profile nettoye"
     fi
 
     if grep -q "XeLauncher" "$HOME/.profile" 2>/dev/null; then
         sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$HOME/.profile"
-        done_action "~/.profile nettoyé"
+        done_action "~/.profile nettoye"
     fi
 
     if [[ -f "/etc/systemd/system/xelauncher.service" ]]; then
@@ -570,25 +567,25 @@ uninstall_all() {
         sudo systemctl stop xelauncher 2>/dev/null || true
         sudo rm -f /etc/systemd/system/xelauncher.service
         sudo systemctl daemon-reload
-        ok "Service systemd supprimé"
-        done_action "Service systemd xelauncher.service supprimé"
+        ok "Service systemd supprime"
+        done_action "Service systemd xelauncher.service supprime"
     fi
 
     if [[ -f "$SUDOERS_FILE" ]]; then
         sudo rm -f "$SUDOERS_FILE"
-        ok "Règles sudoers supprimées"
-        done_action "Règles sudoers supprimées"
+        ok "Regles sudoers supprimees"
+        done_action "Regles sudoers supprimees"
     fi
 
     if flatpak info com.github.iwalton3.jellyfin-media-player >/dev/null 2>&1; then
-        log "Désinstallation de Jellyfin Media Player"
+        log "Desinstallation de Jellyfin Media Player"
         sudo flatpak uninstall -y com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
-        ok "Jellyfin désinstallé"
-        done_action "Jellyfin Media Player désinstallé"
+        ok "Jellyfin desinstalle"
+        done_action "Jellyfin Media Player desinstalle"
     fi
 
     if command -v emulationstation >/dev/null 2>&1 || [[ -d "$HOME/RetroPie-Setup" ]]; then
-        log "Désinstallation de RetroPie"
+        log "Desinstallation de RetroPie"
         if [[ -d "$HOME/RetroPie-Setup" ]]; then
             cd "$HOME/RetroPie-Setup"
             exec >/dev/tty 2>&1
@@ -596,56 +593,56 @@ uninstall_all() {
             exec > >(tee -a "$LOG_FILE") 2>&1
         fi
         rm -rf "$HOME/RetroPie-Setup"
-        ok "RetroPie désinstallé"
-        done_action "RetroPie désinstallé"
+        ok "RetroPie desinstalle"
+        done_action "RetroPie desinstalle"
     fi
 
     if command -v node >/dev/null 2>&1; then
-        log "Désinstallation de Node.js"
+        log "Desinstallation de Node.js"
         sudo apt-get remove -y nodejs 2>/dev/null || true
         sudo rm -f /etc/apt/sources.list.d/nodesource.list
-        ok "Node.js désinstallé"
-        done_action "Node.js désinstallé"
+        ok "Node.js desinstalle"
+        done_action "Node.js desinstalle"
     fi
 
     if command -v tailscale >/dev/null 2>&1; then
-        log "Désinstallation de Tailscale"
+        log "Desinstallation de Tailscale"
         sudo systemctl stop tailscaled 2>/dev/null || true
         sudo systemctl disable tailscaled 2>/dev/null || true
         sudo apt-get remove -y tailscale 2>/dev/null || true
         sudo rm -f /etc/apt/sources.list.d/tailscale.list
-        ok "Tailscale désinstallé"
-        done_action "Tailscale désinstallé"
+        ok "Tailscale desinstalle"
+        done_action "Tailscale desinstalle"
     fi
 
     if [[ -f "$RETROPIE_SPLASH_DIR/prometheus.png" ]]; then
         rm -f "$RETROPIE_SPLASH_DIR/prometheus.png"
-        done_action "Splashscreen supprimé"
+        done_action "Splashscreen supprime"
     fi
 
     rm -f "$LOCK_FILE"
 
-    ok "Désinstallation terminée"
+    ok "Desinstallation terminee"
 }
 
 # ─────────────────────────────────────────────
-#  RÉSUMÉ FINAL
+#  RESUME FINAL
 # ─────────────────────────────────────────────
 print_summary() {
     echo ""
     echo -e "${WHITE}------------------------------------------------------------${RESET}"
     if [[ "$MODE" == "install" ]]; then
-        echo -e "${GREEN}✔ Installation terminée avec succès !${RESET}"
+        echo -e "${GREEN}✔ Installation terminee avec succes !${RESET}"
     else
-        echo -e "${GREEN}✔ Désinstallation terminée !${RESET}"
+        echo -e "${GREEN}✔ Desinstallation terminee !${RESET}"
     fi
     echo -e "${WHITE}------------------------------------------------------------${RESET}"
     echo ""
 
     if [[ ${#ACTIONS_DONE[@]} -eq 0 ]]; then
-        echo "  Aucune action effectuée (tout était déjà en ordre)."
+        echo "  Aucune action effectuee (tout etait deja en ordre)."
     else
-        echo "  Ce qui a été effectué :"
+        echo "  Ce qui a ete effectue :"
         for action in "${ACTIONS_DONE[@]}"; do
             echo -e "    ${GREEN}•${RESET} $action"
         done
@@ -653,7 +650,7 @@ print_summary() {
 
     echo ""
     if [[ "$MODE" == "install" ]]; then
-        echo -e "  ${CYAN}Redémarrez maintenant :${RESET} sudo reboot"
+        echo -e "  ${CYAN}Redemarrez maintenant :${RESET} sudo reboot"
     fi
     echo ""
 }
@@ -671,15 +668,15 @@ main() {
                 echo -e "${RED}✖${RESET} Argument inconnu : $arg" >&2
                 echo "  Usage : $0 [--i | --u]" >&2
                 echo "    --i  Installer directement sans menu interactif" >&2
-                echo "    --u  Désinstaller directement sans menu interactif" >&2
+                echo "    --u  Desinstaller directement sans menu interactif" >&2
                 exit 1
                 ;;
         esac
     done
 
-    # Vérifications préalables — AVANT exec tee pour garder stdin intact
+    # Verifications preliminaires — AVANT exec tee pour garder stdin intact
     if [[ $EUID -eq 0 ]]; then
-        echo -e "\033[1;31m✖\033[0m N'exécutez pas ce script en root." >&2
+        echo -e "\033[1;31m✖\033[0m N'executez pas ce script en root." >&2
         exit 1
     fi
 
@@ -694,7 +691,7 @@ main() {
     # Menu interactif — AVANT la redirection tee (stdin doit rester sur le TTY)
     interactive_menu
 
-    # Rediriger stdout/stderr vers log APRÈS le menu
+    # Rediriger stdout/stderr vers log APRES le menu
     exec > >(tee -a "$LOG_FILE") 2>&1
 
     # Activer le trap d'erreur
@@ -707,11 +704,11 @@ main() {
     fi
 
     # ── MODE INSTALL ──
-    section "1/9 — Mise à jour système"
+    section "1/9 — Mise a jour systeme"
     sudo apt-get update -q
-    ok "Paquets à jour"
+    ok "Paquets a jour"
 
-    section "2/9 — Dépendances système"
+    section "2/9 — Dependances systeme"
     check_and_install_packages \
         git curl wget \
         network-manager \
@@ -734,16 +731,16 @@ main() {
     section "5/9 — Flatpak + Jellyfin"
     install_flatpak_jellyfin
 
-    section "6/9 — Clonage du dépôt"
+    section "6/9 — Clonage du depot"
     clone_or_update_repo
 
-    section "7/9 — Dépendances Node"
+    section "7/9 — Dependances Node"
     install_npm_deps
 
     section "8/9 — RetroPie"
     install_retropie
 
-    section "9/9 — Configuration du système"
+    section "9/9 — Configuration du systeme"
     configure_splashscreen
     create_start_script
     configure_autologin
