@@ -103,10 +103,10 @@ interactive_menu() {
         detect_state
 
         echo -e "${WHITE}"
-        echo "  ╔══════════════════════════════════════════════════╗"
-        echo "  ║        XeLauncher — Prometheus Entertainment     ║"
-        echo "  ║              Script d'installation               ║"
-        echo "  ╚══════════════════════════════════════════════════╝"
+        echo "  +--------------------------------------------------+"
+        echo "  |        XeLauncher — Prometheus Entertainment     |"
+        echo "  |              Script d'installation               |"
+        echo "  +--------------------------------------------------+"
         echo -e "${RESET}"
         print_state
 
@@ -122,10 +122,10 @@ interactive_menu() {
     # Mode interactif normal
     clear
     echo -e "${WHITE}"
-    echo "  ╔══════════════════════════════════════════════════╗"
-    echo "  ║        XeLauncher — Prometheus Entertainment     ║"
-    echo "  ║              Script d'installation               ║"
-    echo "  ╚══════════════════════════════════════════════════╝"
+    echo "  +--------------------------------------------------+"
+    echo "  |        XeLauncher — Prometheus Entertainment     |"
+    echo "  |              Script d'installation               |"
+    echo "  +--------------------------------------------------+"
     echo -e "${RESET}"
 
     detect_state
