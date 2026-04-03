@@ -1,13 +1,10 @@
 #!/bin/bash
 # +--------------------------------------------------------------+
 # |              XeLauncher — Script d'installation              |
-# |           Prometheus Entertainment System — RPI5             |
-# |                 Version interactive & automatisee            |
+# |           Prometheus Entertainment System — RPI5/PC          |
+# |                 Version interactive & optimisee              |
 # +--------------------------------------------------------------+
 
-# NOTE: set -e retiré intentionnellement — il causait des sorties silencieuses
-# sur des commandes légitimement non-nulles (flatpak update, git stash, md5sum...).
-# Les erreurs critiques sont gérées explicitement avec || { error "..."; exit 1; }
 set -uo pipefail
 
 # Variables
@@ -27,10 +24,8 @@ readonly WHITE='\033[1;37m'
 readonly RESET='\033[0m'
 
 # Mode non-interactif
-AUTO_MODE=""   # "" = interactif, "install" = --i, "uninstall" = --u
-MODE=""        # Variable globale pour le mode choisi
-
-# Suivi de ce qui a ete reellement fait
+AUTO_MODE=""
+MODE=""
 ACTIONS_DONE=()
 
 # Logging
@@ -47,14 +42,60 @@ section() {
     echo -e "${WHITE}------------------------------------------------------------${RESET}"
 }
 
-# Trap d'erreur (active apres le menu)
-setup_trap() {
-    trap 'error "Erreur fatale a la ligne $LINENO. Voir $LOG_FILE"' ERR
+# Détection du modèle Raspberry Pi
+detect_platform() {
+    if [[ -f /proc/device-tree/model ]]; then
+        local model=$(cat /proc/device-tree/model)
+        if echo "$model" | grep -qi "Raspberry Pi 5"; then
+            echo "rpi5"
+        elif echo "$model" | grep -qi "Raspberry Pi 4"; then
+            echo "rpi4"
+        elif echo "$model" | grep -qi "Raspberry Pi"; then
+            echo "rpi"
+        else
+            echo "other"
+        fi
+    else
+        echo "pc"
+    fi
 }
 
-# ─────────────────────────────────────────────
-#  DETECTION DE L'ETAT D'INSTALLATION
-# ─────────────────────────────────────────────
+PLATFORM=$(detect_platform)
+log "Plateforme détectée: $PLATFORM"
+
+# Vérification de l'espace disque
+check_disk_space() {
+    local required_gb=8
+    local available=$(df --output=avail /home 2>/dev/null | tail -1 || df --output=avail / 2>/dev/null | tail -1)
+    if [[ -n "$available" ]]; then
+        local available_gb=$((available / 1024 / 1024))
+        if [[ $available_gb -lt $required_gb ]]; then
+            error "Espace disque insuffisant : ${available_gb}GB disponibles, ${required_gb}GB requis"
+            exit 1
+        fi
+        ok "Espace disque suffisant: ${available_gb}GB"
+    fi
+}
+
+# Téléchargement avec reprise
+download_with_retry() {
+    local url=$1
+    local output=$2
+    local max_retries=3
+    local retry=0
+    
+    while [[ $retry -lt $max_retries ]]; do
+        if curl -fsSL --retry 3 --retry-delay 2 --max-time 30 "$url" -o "$output" 2>/dev/null; then
+            return 0
+        fi
+        retry=$((retry + 1))
+        warn "Téléchargement échoué, tentative $retry/$max_retries"
+        sleep 5
+    done
+    return 1
+}
+
+# Détection de l'état d'installation
 detect_state() {
     HAS_RETROPIE=0
     HAS_JELLYFIN=0
@@ -96,26 +137,7 @@ print_state() {
     echo ""
 }
 
-# ─────────────────────────────────────────────
-#  VERIFICATION SI XELAUNCHER EST INSTALLE
-# ─────────────────────────────────────────────
-is_xelauncher_installed() {
-    if [[ -d "$INSTALL_DIR" ]] || \
-       [[ -f "$HOME/.xinitrc" ]] || \
-       grep -q "XeLauncher" "$HOME/.bash_profile" 2>/dev/null || \
-       [[ -f "/etc/systemd/system/xelauncher.service" ]] || \
-       [[ -f "$SUDOERS_FILE" ]] || \
-       flatpak info com.github.iwalton3.jellyfin-media-player >/dev/null 2>&1 || \
-       command -v emulationstation >/dev/null 2>&1; then
-        return 1  # Au moins un composant est installe
-    else
-        return 0  # Rien n'est installe
-    fi
-}
-
-# ─────────────────────────────────────────────
-#  MENU INTERACTIF
-# ─────────────────────────────────────────────
+# Menu interactif
 interactive_menu() {
     if [[ -n "$AUTO_MODE" ]]; then
         MODE="$AUTO_MODE"
@@ -184,12 +206,9 @@ interactive_menu() {
     if [[ "$MODE" == "install" ]]; then
         echo -e "${YELLOW}⚠  Attention :${RESET} L'installation peut durer ${WHITE}une heure ou plus${RESET},"
         echo    "   notamment a cause de RetroPie."
-        echo    "   Assurez-vous que le Raspberry Pi reste allume et connecte a Internet."
+        echo    "   Assurez-vous que le systeme reste allume et connecte a Internet."
     else
         echo -e "${RED}⚠  Desinstallation :${RESET} Tout ce qu'XeLauncher a installe sera supprime."
-        echo    "   Cela inclut : le depot, l'autologin, le service systemd, les sudoers,"
-        echo    "   Jellyfin (flatpak), et RetroPie si installe par ce script."
-        echo    "   Node.js et Tailscale seront egalement desinstalles."
     fi
 
     echo ""
@@ -205,9 +224,7 @@ interactive_menu() {
     echo ""
 }
 
-# ─────────────────────────────────────────────
-#  FONCTIONS D'INSTALLATION
-# ─────────────────────────────────────────────
+# Installation des paquets
 check_and_install_packages() {
     local to_install=()
     for pkg in "$@"; do
@@ -229,7 +246,7 @@ install_nodejs() {
         return 0
     fi
     log "Installation de Node.js 20.x"
-    curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/node_setup.sh \
+    download_with_retry "https://deb.nodesource.com/setup_20.x" "/tmp/node_setup.sh" \
         || { error "Impossible de telecharger le script NodeSource"; exit 1; }
     sudo bash /tmp/node_setup.sh
     rm -f /tmp/node_setup.sh
@@ -245,7 +262,7 @@ install_tailscale() {
         return 0
     fi
     log "Installation de Tailscale"
-    curl -fsSL https://tailscale.com/install.sh -o /tmp/tailscale_install.sh \
+    download_with_retry "https://tailscale.com/install.sh" "/tmp/tailscale_install.sh" \
         || { error "Impossible de telecharger le script Tailscale"; exit 1; }
     sudo bash /tmp/tailscale_install.sh
     rm -f /tmp/tailscale_install.sh
@@ -265,9 +282,6 @@ install_flatpak_jellyfin() {
 
     if [[ $HAS_JELLYFIN -eq 0 ]]; then
         log "Installation de Jellyfin Media Player"
-        # FIX: on passe directement sur le TTY sans re-ouvrir tee ensuite,
-        # ce qui evite la pollution de sequences ANSI dans le flux bash.
-        # La sortie est capturee proprement via script(1) pour le log.
         sudo flatpak install -y flathub com.github.iwalton3.jellyfin-media-player \
             2>&1 | grep -v $'^\033' | tee -a "$LOG_FILE" || \
             { error "Echec installation Jellyfin"; exit 1; }
@@ -380,7 +394,17 @@ install_retropie() {
         return 0
     fi
 
-    log "Installation de RetroPie (20-40 minutes)"
+    # Optimisation pour RPI5
+    if [[ "$PLATFORM" == "rpi5" ]]; then
+        log "Installation de RetroPie sur Raspberry Pi 5 (optimisee)"
+        # Ajout des optimisations spécifiques RPI5
+        if ! grep -q "dtoverlay=vc4-kms-v3d" /boot/config.txt 2>/dev/null; then
+            echo "dtoverlay=vc4-kms-v3d" | sudo tee -a /boot/config.txt
+            log "Configuration GPU ajoutee (redemarrage requis plus tard)"
+        fi
+    else
+        log "Installation de RetroPie (20-40 minutes)"
+    fi
 
     if [[ ! -d "$HOME/RetroPie-Setup" ]]; then
         git clone --depth=1 https://github.com/RetroPie/RetroPie-Setup.git "$HOME/RetroPie-Setup" \
@@ -390,9 +414,7 @@ install_retropie() {
     cd "$HOME/RetroPie-Setup"
     git pull --rebase 2>/dev/null || true
 
-    # FIX: on laisse RetroPie s'afficher directement sur le TTY sans
-    # redirection intermediaire — cela evite toute pollution ANSI dans bash.
-    log "Lancement de l'installation RetroPie (affichage direct sur TTY)..."
+    log "Lancement de l'installation RetroPie..."
     sudo __nodialog=1 ./retropie_packages.sh setup basic_install \
         || { error "Echec installation RetroPie"; exit 1; }
 
@@ -557,21 +579,19 @@ create_required_dirs() {
         "$INSTALL_DIR/src/LOGOs" \
         "$INSTALL_DIR/src/HTMLs" \
         "$INSTALL_DIR/src/JSs" \
-        "$INSTALL_DIR/src/CSSs"
-    ok "Dossiers src/ crees (AVATARs, LOGOs, HTMLs, JSs, CSSs)"
+        "$INSTALL_DIR/src/CSSs" \
+        "$INSTALL_DIR/src/FONTs"
+    ok "Dossiers src/ crees (AVATARs, LOGOs, HTMLs, JSs, CSSs, FONTs)"
     done_action "Dossiers src/ crees/verifies"
 }
 
-# ─────────────────────────────────────────────
-#  DESINSTALLATION
-# ─────────────────────────────────────────────
+# Desinstallation
 uninstall_all() {
     section "Desinstallation de XeLauncher"
 
-    if ! is_xelauncher_installed; then
+    if [[ ! -d "$INSTALL_DIR" ]] && [[ ! -f "$HOME/.xinitrc" ]] && ! grep -q "XeLauncher" "$HOME/.bash_profile" 2>/dev/null; then
         echo ""
         echo -e "${YELLOW}⚠  XeLauncher n'est pas installe sur ce systeme.${RESET}"
-        echo "    Rien a desinstaller."
         echo ""
         return 0
     fi
@@ -680,9 +700,6 @@ uninstall_all() {
     fi
 }
 
-# ─────────────────────────────────────────────
-#  RESUME FINAL
-# ─────────────────────────────────────────────
 print_summary() {
     echo ""
     echo -e "${WHITE}------------------------------------------------------------${RESET}"
@@ -710,11 +727,8 @@ print_summary() {
     echo ""
 }
 
-# ─────────────────────────────────────────────
-#  MAIN
-# ─────────────────────────────────────────────
+# MAIN
 main() {
-    # Parse des arguments
     for arg in "$@"; do
         case "$arg" in
             --i) AUTO_MODE="install" ;;
@@ -729,7 +743,6 @@ main() {
         esac
     done
 
-    # Verifications preliminaires
     if [[ $EUID -eq 0 ]]; then
         echo -e "\033[1;31m✖\033[0m N'executez pas ce script en root." >&2
         exit 1
@@ -740,20 +753,15 @@ main() {
 
     sudo -v || { echo "Droits sudo requis" >&2; exit 1; }
 
-    # FIX: verification connexion Internet tolerante aux redirections (301/302)
+    # Vérification connexion Internet
     curl -sSf --max-time 10 https://github.com > /dev/null 2>&1 \
         || { echo "Connexion Internet requise (github.com injoignable)" >&2; exit 1; }
 
-    # Menu interactif — AVANT la redirection tee (stdin doit rester sur le TTY)
+    check_disk_space
+
     interactive_menu
 
-    # FIX: filtrage des sequences ANSI parasites via sed dans le pipe tee.
-    # Cela evite que les codes de position de curseur emis par flatpak/retropie
-    # ne se retrouvent dans le flux bash et ne causent des erreurs de syntaxe.
     exec > >(sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\[[0-9;]*[Rr]//g' | tee -a "$LOG_FILE") 2>&1
-
-    # Activer le trap d'erreur
-    setup_trap
 
     if [[ "$MODE" == "uninstall" ]]; then
         uninstall_all
@@ -761,7 +769,7 @@ main() {
         exit 0
     fi
 
-    # ── MODE INSTALL ──
+    # Installation
     section "1/9 — Mise a jour systeme"
     sudo apt-get update -q
     ok "Paquets a jour"
