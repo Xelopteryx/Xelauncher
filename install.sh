@@ -116,7 +116,7 @@ interactive_menu() {
             echo -e "${RED}⚠  Mode automatique :${RESET} Désinstallation en cours..."
         fi
         echo ""
-        return 0
+        return 0  # ← SORTIE SANS CHOISIR, PERMET DE CONTINUER
     fi
 
     # Mode interactif normal
