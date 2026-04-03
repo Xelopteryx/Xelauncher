@@ -27,6 +27,10 @@ readonly RESET='\033[0m'
 # Mode non-interactif
 AUTO_MODE=""   # "" = interactif, "install" = --i, "uninstall" = --u
 
+
+declare -g MODE=""
+
+
 # Suivi de ce qui a été réellement fait
 ACTIONS_DONE=()
 
