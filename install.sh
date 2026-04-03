@@ -24,6 +24,9 @@ readonly WHITE='\033[1;37m'
 readonly BLUE='\033[1;34m'
 readonly RESET='\033[0m'
 
+# Mode non-interactif
+AUTO_MODE=""   # "" = interactif, "install" = --i, "uninstall" = --u
+
 # Suivi de ce qui a été réellement fait
 ACTIONS_DONE=()
 
@@ -94,6 +97,29 @@ print_state() {
 #  MENU INTERACTIF
 # ─────────────────────────────────────────────
 interactive_menu() {
+    # Si un mode a été passé en argument, on bypasse le menu
+    if [[ -n "$AUTO_MODE" ]]; then
+        MODE="$AUTO_MODE"
+        detect_state
+
+        echo -e "${WHITE}"
+        echo "  ╔══════════════════════════════════════════════════╗"
+        echo "  ║        XeLauncher — Prometheus Entertainment     ║"
+        echo "  ║              Script d'installation               ║"
+        echo "  ╚══════════════════════════════════════════════════╝"
+        echo -e "${RESET}"
+        print_state
+
+        if [[ "$MODE" == "install" ]]; then
+            echo -e "${YELLOW}⚠  Mode automatique :${RESET} Installation en cours..."
+        else
+            echo -e "${RED}⚠  Mode automatique :${RESET} Désinstallation en cours..."
+        fi
+        echo ""
+        return 0
+    fi
+
+    # Mode interactif normal
     clear
     echo -e "${WHITE}"
     echo "  ╔══════════════════════════════════════════════════╗"
@@ -108,7 +134,6 @@ interactive_menu() {
     local choice=""
 
     if [[ $ANYTHING_INSTALLED -eq 0 ]]; then
-        # Rien n'est installé → seulement "i"
         echo -e "  ${CYAN}[i]${RESET} Installer XeLauncher (RetroPie, Jellyfin, X, Node...)"
         echo -e "  ${RED}[q]${RESET} Quitter"
         echo ""
@@ -121,7 +146,6 @@ interactive_menu() {
             esac
         done
     else
-        # Quelque chose est déjà installé → "i" ou "u"
         echo -e "  ${CYAN}[i]${RESET} Installer ce qui manque & mettre à jour"
         echo -e "  ${RED}[u]${RESET} Désinstaller tout ce qu'XeLauncher a installé"
         echo -e "  ${YELLOW}[q]${RESET} Quitter"
@@ -352,7 +376,6 @@ install_retropie() {
 }
 
 configure_splashscreen() {
-    # Les LOGOs doivent être dans src/LOGOs (majuscule, s final minuscule)
     local logo="$INSTALL_DIR/src/LOGOs/prometheus.png"
     if [[ -f "$logo" ]]; then
         mkdir -p "$RETROPIE_SPLASH_DIR"
@@ -415,7 +438,6 @@ EOF
     local BASH_PROFILE="$HOME/.bash_profile"
 
     if ! grep -q "XeLauncher" "$BASH_PROFILE" 2>/dev/null; then
-        # S'assurer que .bashrc est chargé
         if ! grep -q '\.bashrc' "$BASH_PROFILE" 2>/dev/null; then
             echo '[ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"' >> "$BASH_PROFILE"
         fi
@@ -430,7 +452,6 @@ EOF
         ok "XeLauncher ajouté au démarrage dans .bash_profile"
         done_action "~/.bash_profile configuré (startx sur TTY1)"
     else
-        # Corriger l'entrée si elle utilise l'ancienne méthode
         if grep -q "exec startx ./start.sh\|cd.*xelauncher" "$BASH_PROFILE" 2>/dev/null; then
             sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$BASH_PROFILE"
             cat >> "$BASH_PROFILE" <<'EOF'
@@ -448,7 +469,6 @@ EOF
         fi
     fi
 
-    # Nettoyer .profile si besoin
     if grep -q "XeLauncher" "$HOME/.profile" 2>/dev/null; then
         sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$HOME/.profile"
         done_action "~/.profile nettoyé (doublon supprimé)"
@@ -501,7 +521,6 @@ configure_sudoers() {
 }
 
 create_required_dirs() {
-    # Convention : dossiers en MAJUSCULE avec 's' final minuscule
     mkdir -p \
         "$INSTALL_DIR/src/AVATARs" \
         "$INSTALL_DIR/src/LOGOs" \
@@ -518,7 +537,6 @@ create_required_dirs() {
 uninstall_all() {
     section "Désinstallation de XeLauncher"
 
-    # Supprimer le dépôt
     if [[ -d "$INSTALL_DIR" ]]; then
         log "Suppression du dépôt $INSTALL_DIR"
         rm -rf "$INSTALL_DIR"
@@ -526,27 +544,23 @@ uninstall_all() {
         done_action "Dépôt $INSTALL_DIR supprimé"
     fi
 
-    # Supprimer .xinitrc
     if [[ -f "$HOME/.xinitrc" ]]; then
         rm -f "$HOME/.xinitrc"
         ok "~/.xinitrc supprimé"
         done_action "~/.xinitrc supprimé"
     fi
 
-    # Nettoyer .bash_profile
     if grep -q "XeLauncher" "$HOME/.bash_profile" 2>/dev/null; then
         sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$HOME/.bash_profile"
         ok ".bash_profile nettoyé"
         done_action "~/.bash_profile nettoyé"
     fi
 
-    # Nettoyer .profile
     if grep -q "XeLauncher" "$HOME/.profile" 2>/dev/null; then
         sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$HOME/.profile"
         done_action "~/.profile nettoyé"
     fi
 
-    # Supprimer le service systemd
     if [[ -f "/etc/systemd/system/xelauncher.service" ]]; then
         sudo systemctl disable xelauncher 2>/dev/null || true
         sudo systemctl stop xelauncher 2>/dev/null || true
@@ -556,14 +570,12 @@ uninstall_all() {
         done_action "Service systemd xelauncher.service supprimé"
     fi
 
-    # Supprimer les sudoers
     if [[ -f "$SUDOERS_FILE" ]]; then
         sudo rm -f "$SUDOERS_FILE"
         ok "Règles sudoers supprimées"
         done_action "Règles sudoers supprimées"
     fi
 
-    # Désinstaller Jellyfin
     if flatpak info com.github.iwalton3.jellyfin-media-player >/dev/null 2>&1; then
         log "Désinstallation de Jellyfin Media Player"
         sudo flatpak uninstall -y com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
@@ -571,7 +583,6 @@ uninstall_all() {
         done_action "Jellyfin Media Player désinstallé"
     fi
 
-    # Désinstaller RetroPie
     if command -v emulationstation >/dev/null 2>&1 || [[ -d "$HOME/RetroPie-Setup" ]]; then
         log "Désinstallation de RetroPie"
         if [[ -d "$HOME/RetroPie-Setup" ]]; then
@@ -585,7 +596,6 @@ uninstall_all() {
         done_action "RetroPie désinstallé"
     fi
 
-    # Désinstaller Node.js
     if command -v node >/dev/null 2>&1; then
         log "Désinstallation de Node.js"
         sudo apt-get remove -y nodejs 2>/dev/null || true
@@ -594,7 +604,6 @@ uninstall_all() {
         done_action "Node.js désinstallé"
     fi
 
-    # Désinstaller Tailscale
     if command -v tailscale >/dev/null 2>&1; then
         log "Désinstallation de Tailscale"
         sudo systemctl stop tailscaled 2>/dev/null || true
@@ -605,13 +614,11 @@ uninstall_all() {
         done_action "Tailscale désinstallé"
     fi
 
-    # Supprimer le splashscreen RetroPie
     if [[ -f "$RETROPIE_SPLASH_DIR/prometheus.png" ]]; then
         rm -f "$RETROPIE_SPLASH_DIR/prometheus.png"
         done_action "Splashscreen supprimé"
     fi
 
-    # Supprimer le lock file
     rm -f "$LOCK_FILE"
 
     ok "Désinstallation terminée"
@@ -651,6 +658,21 @@ print_summary() {
 #  MAIN
 # ─────────────────────────────────────────────
 main() {
+    # Parse des arguments
+    for arg in "$@"; do
+        case "$arg" in
+            --i) AUTO_MODE="install" ;;
+            --u) AUTO_MODE="uninstall" ;;
+            *)
+                echo -e "${RED}✖${RESET} Argument inconnu : $arg" >&2
+                echo "  Usage : $0 [--i | --u]" >&2
+                echo "    --i  Installer directement sans menu interactif" >&2
+                echo "    --u  Désinstaller directement sans menu interactif" >&2
+                exit 1
+                ;;
+        esac
+    done
+
     # Vérifications préalables — AVANT exec tee pour garder stdin intact
     if [[ $EUID -eq 0 ]]; then
         echo -e "\033[1;31m✖\033[0m N'exécutez pas ce script en root." >&2
