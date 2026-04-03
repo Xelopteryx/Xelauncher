@@ -2,7 +2,7 @@
 # +--------------------------------------------------------------+
 # |              XeLauncher — Script d'installation              |
 # |           Prometheus Entertainment System — RPI5             |
-# |                 Version interactive & automatisée            |
+# |                 Version interactive & automatisee            |
 # +--------------------------------------------------------------+
 
 set -euo pipefail
@@ -92,6 +92,24 @@ print_state() {
     [[ $HAS_RETROPIE -eq 1 ]]  && echo -e "  $check_yes RetroPie"           || echo -e "  $check_no RetroPie"
     [[ $HAS_AUTOLOGIN -eq 1 ]] && echo -e "  $check_yes Autologin TTY1"     || echo -e "  $check_no Autologin TTY1"
     echo ""
+}
+
+# ─────────────────────────────────────────────
+#  VERIFICATION SI XELAUNCHER EST INSTALLE
+# ─────────────────────────────────────────────
+is_xelauncher_installed() {
+    # Retourne 0 (vrai) si rien n'est installe, 1 (faux) si au moins un composant est installe
+    if [[ -d "$INSTALL_DIR" ]] || \
+       [[ -f "$HOME/.xinitrc" ]] || \
+       grep -q "XeLauncher" "$HOME/.bash_profile" 2>/dev/null || \
+       [[ -f "/etc/systemd/system/xelauncher.service" ]] || \
+       [[ -f "$SUDOERS_FILE" ]] || \
+       flatpak info com.github.iwalton3.jellyfin-media-player >/dev/null 2>&1 || \
+       command -v emulationstation >/dev/null 2>&1; then
+        return 1  # Au moins un composant est installe
+    else
+        return 0  # Rien n'est installe
+    fi
 }
 
 # ─────────────────────────────────────────────
@@ -538,28 +556,43 @@ create_required_dirs() {
 uninstall_all() {
     section "Desinstallation de XeLauncher"
 
+    # Verifier si quelque chose est installe
+    if ! is_xelauncher_installed; then
+        echo ""
+        echo -e "${YELLOW}⚠  XeLauncher n'est pas installe sur ce systeme.${RESET}"
+        echo "    Rien a desinstaller."
+        echo ""
+        return 0
+    fi
+
+    local anything_done=0
+
     if [[ -d "$INSTALL_DIR" ]]; then
         log "Suppression du depot $INSTALL_DIR"
         rm -rf "$INSTALL_DIR"
         ok "Depot supprime"
         done_action "Depot $INSTALL_DIR supprime"
+        anything_done=1
     fi
 
     if [[ -f "$HOME/.xinitrc" ]]; then
         rm -f "$HOME/.xinitrc"
         ok "~/.xinitrc supprime"
         done_action "~/.xinitrc supprime"
+        anything_done=1
     fi
 
     if grep -q "XeLauncher" "$HOME/.bash_profile" 2>/dev/null; then
         sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$HOME/.bash_profile"
         ok ".bash_profile nettoye"
         done_action "~/.bash_profile nettoye"
+        anything_done=1
     fi
 
     if grep -q "XeLauncher" "$HOME/.profile" 2>/dev/null; then
         sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$HOME/.profile"
         done_action "~/.profile nettoye"
+        anything_done=1
     fi
 
     if [[ -f "/etc/systemd/system/xelauncher.service" ]]; then
@@ -569,12 +602,14 @@ uninstall_all() {
         sudo systemctl daemon-reload
         ok "Service systemd supprime"
         done_action "Service systemd xelauncher.service supprime"
+        anything_done=1
     fi
 
     if [[ -f "$SUDOERS_FILE" ]]; then
         sudo rm -f "$SUDOERS_FILE"
         ok "Regles sudoers supprimees"
         done_action "Regles sudoers supprimees"
+        anything_done=1
     fi
 
     if flatpak info com.github.iwalton3.jellyfin-media-player >/dev/null 2>&1; then
@@ -582,6 +617,7 @@ uninstall_all() {
         sudo flatpak uninstall -y com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
         ok "Jellyfin desinstalle"
         done_action "Jellyfin Media Player desinstalle"
+        anything_done=1
     fi
 
     if command -v emulationstation >/dev/null 2>&1 || [[ -d "$HOME/RetroPie-Setup" ]]; then
@@ -595,6 +631,7 @@ uninstall_all() {
         rm -rf "$HOME/RetroPie-Setup"
         ok "RetroPie desinstalle"
         done_action "RetroPie desinstalle"
+        anything_done=1
     fi
 
     if command -v node >/dev/null 2>&1; then
@@ -603,6 +640,7 @@ uninstall_all() {
         sudo rm -f /etc/apt/sources.list.d/nodesource.list
         ok "Node.js desinstalle"
         done_action "Node.js desinstalle"
+        anything_done=1
     fi
 
     if command -v tailscale >/dev/null 2>&1; then
@@ -613,16 +651,24 @@ uninstall_all() {
         sudo rm -f /etc/apt/sources.list.d/tailscale.list
         ok "Tailscale desinstalle"
         done_action "Tailscale desinstalle"
+        anything_done=1
     fi
 
     if [[ -f "$RETROPIE_SPLASH_DIR/prometheus.png" ]]; then
         rm -f "$RETROPIE_SPLASH_DIR/prometheus.png"
         done_action "Splashscreen supprime"
+        anything_done=1
     fi
 
     rm -f "$LOCK_FILE"
 
-    ok "Desinstallation terminee"
+    if [[ $anything_done -eq 0 ]]; then
+        echo ""
+        echo -e "${YELLOW}⚠  Rien a desinstaller : XeLauncher n'est pas installe sur ce systeme.${RESET}"
+        echo ""
+    else
+        ok "Desinstallation terminee"
+    fi
 }
 
 # ─────────────────────────────────────────────
