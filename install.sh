@@ -460,6 +460,51 @@ EOF
     chmod +x "$INSTALL_DIR/start.sh"
     ok "Script start.sh cree"
 
+    # Déterminer le bon binaire electron
+    local electron_bin="$INSTALL_DIR/node_modules/.bin/electron"
+
+    cat > "$INSTALL_DIR/xelauncher.sh" <<EOF
+#!/bin/bash
+# ============================================================
+#  xelauncher.sh  — Script wrapper XeLauncher
+# ============================================================
+
+SCRIPT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+LAUNCH_FILE="/tmp/xelauncher-launch-next"
+ELECTRON_BIN="$electron_bin"
+MAIN_JS="\$SCRIPT_DIR/src/JSs/main.js"
+
+log() {
+  echo "[xelauncher.sh] \$*" | tee -a "\$SCRIPT_DIR/xelauncher.log"
+}
+
+log "Démarrage — electron: \$ELECTRON_BIN — main: \$MAIN_JS"
+
+while true; do
+  rm -f "\$LAUNCH_FILE"
+  log "Lancement Electron..."
+  "\$ELECTRON_BIN" "\$MAIN_JS" --no-sandbox 2>>"\$SCRIPT_DIR/electron.log"
+  EXIT_CODE=\$?
+  log "Electron terminé (code \$EXIT_CODE)"
+
+  if [ -f "\$LAUNCH_FILE" ]; then
+    CMD=\$(cat "\$LAUNCH_FILE")
+    rm -f "\$LAUNCH_FILE"
+    log "Lancement externe: \$CMD"
+    eval "\$CMD"
+    log "Application externe terminée, retour au launcher"
+    sleep 1
+  else
+    log "Arrêt propre du launcher"
+    break
+  fi
+done
+
+log "xelauncher.sh terminé"
+EOF
+    chmod +x "$INSTALL_DIR/xelauncher.sh"
+    ok "Script xelauncher.sh cree"
+
     cat > "$HOME/.xinitrc" <<EOF
 #!/bin/bash
 xset s off
@@ -470,7 +515,7 @@ exec "$INSTALL_DIR/xelauncher.sh"
 EOF
     chmod +x "$HOME/.xinitrc"
     ok "Fichier .xinitrc cree (avec openbox + xelauncher.sh)"
-    done_action "~/.xinitrc et start.sh crees"
+    done_action "~/.xinitrc, start.sh et xelauncher.sh crees"
 }
 
 configure_autologin() {
