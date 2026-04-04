@@ -677,6 +677,13 @@ uninstall_all() {
     done_action "Tailscale desinstalle"
     anything_done=1
 
+    log "Desinstallation de Xorg / xinit"
+    sudo apt-get remove -y xserver-xorg xinit openbox xdotool 2>/dev/null || true
+    sudo apt-get autoremove -y 2>/dev/null || true
+    ok "Xorg desinstalle"
+    done_action "Xorg / xinit / openbox desinstalle"
+    anything_done=1
+
     if [[ -f "$RETROPIE_SPLASH_DIR/prometheus.png" ]]; then
         rm -f "$RETROPIE_SPLASH_DIR/prometheus.png"
         done_action "Splashscreen supprime"
