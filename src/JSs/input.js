@@ -1,13 +1,12 @@
 /**
- * XeLauncher — Unified Input Manager
+ * XeLauncher � Unified Input Manager
  * Maps ALL hardware inputs (gamepad, keyboard, remote, wiimote) to keyboard events.
- * When RetroArch/Jellyfin are launched, this module becomes inactive.
  */
 
 ;(function(root) {
   'use strict';
 
-  /* ── Keyboard layout ─────────────────────────────────────────────────── */
+  /* -- Keyboard layout --------------------------------------------------- */
   const KB_LAYOUTS = {
     letters: [
       ['a','z','e','r','t','y','u','i','o','p'],
@@ -23,25 +22,26 @@
   const KB_BOTTOM = [
     {label:'MAJ',col:0,span:2},
     {label:'ESPACE',col:2,span:4},
-    {label:'⌫',col:6,span:2},
+    {label:'?',col:6,span:2},
     {label:'OK',col:8,span:2}
   ];
   const KB_COLS = 10;
 
-  /* ── Virtual Keyboard ─────────────────────────────────────────────────── */
+  /* -- Virtual Keyboard --------------------------------------------------- */
   function VirtualKeyboard(containerEl, displayEl, modesEl) {
     this.container = containerEl;
     this.display = displayEl;
     this.modes = modesEl;
     this.mode = 'letters';
     this.caps = false;
-    this.section = 'kb'; // 'top' | 'kb'
+    this.section = 'kb';
     this.topFocus = 0;
     this.row = 0;
     this.col = 0;
     this.value = '';
     this.onConfirm = null;
     this.onCancel = null;
+    this._renderScheduled = false;
     this._render();
   }
 
@@ -68,7 +68,7 @@
     return best;
   };
 
-  VirtualKeyboard.prototype._render = function() {
+  VirtualKeyboard.prototype._doRender = function() {
     if (!this.container) return;
     const layout = KB_LAYOUTS[this.mode];
     this.container.innerHTML = '';
@@ -91,7 +91,6 @@
       this.container.appendChild(rowEl);
     });
 
-    // Bottom row
     const bottomEl = document.createElement('div');
     bottomEl.className = 'kb-row';
     const bri = layout.length;
@@ -112,7 +111,6 @@
     });
     this.container.appendChild(bottomEl);
 
-    // Mode buttons
     if (this.modes) {
       this.modes.querySelectorAll('.kb-mode-btn').forEach((btn, i) => {
         btn.className = 'kb-mode-btn' +
@@ -121,10 +119,18 @@
       });
     }
 
-    // Display
     if (this.display) {
       this.display.textContent = this.value + '|';
     }
+  };
+
+  VirtualKeyboard.prototype._render = function() {
+    if (this._renderScheduled) return;
+    this._renderScheduled = true;
+    requestAnimationFrame(() => {
+      this._renderScheduled = false;
+      this._doRender();
+    });
   };
 
   VirtualKeyboard.prototype._pressKey = function() {
@@ -144,7 +150,7 @@
     const lbl = KB_BOTTOM[bi].label;
     if (lbl === 'MAJ') { this.caps = !this.caps; }
     else if (lbl === 'ESPACE') { this.value += ' '; }
-    else if (lbl === '⌫') { this.value = this.value.slice(0, -1); }
+    else if (lbl === '?') { this.value = this.value.slice(0, -1); }
     else if (lbl === 'OK') {
       if (this.onConfirm) this.onConfirm(this.value);
       return;
@@ -210,22 +216,12 @@
     return handled;
   };
 
-  /* ── Gamepad poller ───────────────────────────────────────────────────── */
+  /* -- Gamepad poller avec vibration --------------------------------------- */
   const GAMEPAD_MAP = {
-    0: 'Enter',    // Cross/A
-    1: 'Escape',   // Circle/B
-    2: 'Square',   // Square/X
-    3: 'Triangle', // Triangle/Y
-    4: 'L1',
-    5: 'R1',
-    6: 'L2',
-    7: 'R2',
-    8: 'Select',   // Share/Back
-    9: 'Start',    // Options/Menu
-    12: 'ArrowUp',
-    13: 'ArrowDown',
-    14: 'ArrowLeft',
-    15: 'ArrowRight',
+    0: 'Enter', 1: 'Escape', 2: 'Square', 3: 'Triangle',
+    4: 'L1', 5: 'R1', 6: 'L2', 7: 'R2',
+    8: 'Select', 9: 'Start',
+    12: 'ArrowUp', 13: 'ArrowDown', 14: 'ArrowLeft', 15: 'ArrowRight',
   };
 
   function GamepadPoller(onKey) {
@@ -233,6 +229,7 @@
     this.state = {};
     this._running = false;
     this._frame = null;
+    this._vibrationCooldown = new Map();
   }
 
   GamepadPoller.prototype.start = function() {
@@ -246,53 +243,82 @@
     if (this._frame) cancelAnimationFrame(this._frame);
   };
 
+  GamepadPoller.prototype._vibrate = function(gamepad, intensity = 0.5, duration = 50) {
+    if (!gamepad.vibrationActuator) return;
+    const now = Date.now();
+    const lastVibe = this._vibrationCooldown.get(gamepad.index) || 0;
+    if (now - lastVibe < 100) return;
+    this._vibrationCooldown.set(gamepad.index, now);
+    gamepad.vibrationActuator.playEffect('dual-rumble', {
+      duration: duration,
+      strongMagnitude: intensity,
+      weakMagnitude: intensity * 0.7
+    }).catch(() => {});
+  };
+
   GamepadPoller.prototype._poll = function() {
     if (!this._running) return;
     const gps = navigator.getGamepads ? navigator.getGamepads() : [];
     for (let i = 0; i < gps.length; i++) {
       const gp = gps[i];
       if (!gp) continue;
-      if (!this.state[i]) this.state[i] = { buttons: [], acH: false, acV: false };
+      if (!this.state[i]) this.state[i] = { buttons: [], acH: false, acV: false, lastAxH: 0, lastAxV: 0 };
       const st = this.state[i];
 
       gp.buttons.forEach((btn, idx) => {
         const p = btn.pressed, w = st.buttons[idx];
-        if (p && !w && GAMEPAD_MAP[idx]) this.onKey(GAMEPAD_MAP[idx]);
+        if (p && !w && GAMEPAD_MAP[idx]) {
+          this.onKey(GAMEPAD_MAP[idx]);
+          if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(GAMEPAD_MAP[idx])) {
+            this._vibrate(gp, 0.3, 40);
+          }
+        }
         st.buttons[idx] = p;
       });
 
-      const T = 0.4;
+      const AXIS_DEADZONE = 0.35;
       let axH = 0, axV = 0;
-      if (Math.abs(gp.axes[0]) > T) axH = gp.axes[0];
-      else if (gp.axes[6] !== undefined && Math.abs(gp.axes[6]) > T) axH = gp.axes[6];
-      if (Math.abs(gp.axes[1]) > T) axV = gp.axes[1];
-      else if (gp.axes[7] !== undefined && Math.abs(gp.axes[7]) > T) axV = gp.axes[7];
+      
+      if (Math.abs(gp.axes[0]) > AXIS_DEADZONE) axH = gp.axes[0];
+      else if (gp.axes[2] !== undefined && Math.abs(gp.axes[2]) > AXIS_DEADZONE) axH = gp.axes[2];
+      else if (gp.axes[6] !== undefined && Math.abs(gp.axes[6]) > AXIS_DEADZONE) axH = gp.axes[6];
+      
+      if (Math.abs(gp.axes[1]) > AXIS_DEADZONE) axV = gp.axes[1];
+      else if (gp.axes[3] !== undefined && Math.abs(gp.axes[3]) > AXIS_DEADZONE) axV = gp.axes[3];
+      else if (gp.axes[7] !== undefined && Math.abs(gp.axes[7]) > AXIS_DEADZONE) axV = gp.axes[7];
+
+      const AXIS_COOLDOWN = 150;
+      const now = Date.now();
 
       if (!st.acH) {
-        if (axH < -T) { this.onKey('ArrowLeft'); st.acH = true; setTimeout(() => { st.acH = false; }, 180); }
-        else if (axH > T) { this.onKey('ArrowRight'); st.acH = true; setTimeout(() => { st.acH = false; }, 180); }
+        if (axH < -AXIS_DEADZONE) { this.onKey('ArrowLeft'); st.acH = true; st.lastAxH = now;
+          setTimeout(() => { if (st.lastAxH === now) st.acH = false; }, AXIS_COOLDOWN); }
+        else if (axH > AXIS_DEADZONE) { this.onKey('ArrowRight'); st.acH = true; st.lastAxH = now;
+          setTimeout(() => { if (st.lastAxH === now) st.acH = false; }, AXIS_COOLDOWN); }
       }
-      if (axH === 0) st.acH = false;
+      if (Math.abs(axH) <= AXIS_DEADZONE && st.acH && now - st.lastAxH > AXIS_COOLDOWN) st.acH = false;
+      
       if (!st.acV) {
-        if (axV < -T) { this.onKey('ArrowUp'); st.acV = true; setTimeout(() => { st.acV = false; }, 180); }
-        else if (axV > T) { this.onKey('ArrowDown'); st.acV = true; setTimeout(() => { st.acV = false; }, 180); }
+        if (axV < -AXIS_DEADZONE) { this.onKey('ArrowUp'); st.acV = true; st.lastAxV = now;
+          setTimeout(() => { if (st.lastAxV === now) st.acV = false; }, AXIS_COOLDOWN); }
+        else if (axV > AXIS_DEADZONE) { this.onKey('ArrowDown'); st.acV = true; st.lastAxV = now;
+          setTimeout(() => { if (st.lastAxV === now) st.acV = false; }, AXIS_COOLDOWN); }
       }
-      if (axV === 0) st.acV = false;
+      if (Math.abs(axV) <= AXIS_DEADZONE && st.acV && now - st.lastAxV > AXIS_COOLDOWN) st.acV = false;
     }
     this._frame = requestAnimationFrame(() => this._poll());
   };
 
-  /* ── Input Mapper ─────────────────────────────────────────────────────── */
-  // ACTION_KEYS: the conceptual actions we need to map
+  /* -- Input Mapper ------------------------------------------------------- */
   const ACTION_KEYS = [
-    { id: 'up',       label: '↑ Haut',        default: 'ArrowUp' },
-    { id: 'down',     label: '↓ Bas',          default: 'ArrowDown' },
-    { id: 'left',     label: '← Gauche',       default: 'ArrowLeft' },
-    { id: 'right',    label: '→ Droite',        default: 'ArrowRight' },
-    { id: 'confirm',  label: '✓ Confirmer',    default: 'Enter' },
-    { id: 'back',     label: '✕ Retour',       default: 'Escape' },
-    { id: 'menu',     label: '☰ Menu',         default: 'Start' },
-    { id: 'action',   label: '△ Action',       default: 'Triangle' },
+    { id: 'up',       label: '? Haut',        default: 'ArrowUp' },
+    { id: 'down',     label: '? Bas',          default: 'ArrowDown' },
+    { id: 'left',     label: '? Gauche',       default: 'ArrowLeft' },
+    { id: 'right',    label: '? Droite',       default: 'ArrowRight' },
+    { id: 'confirm',  label: '? Confirmer',    default: 'Enter' },
+    { id: 'back',     label: '? Retour',       default: 'Escape' },
+    { id: 'menu',     label: '? Menu',         default: 'Start' },
+    { id: 'action',   label: '? Action',       default: 'Triangle' },
   ];
 
   function InputMapper(storageKey) {
@@ -324,23 +350,25 @@
     return m;
   };
 
+  InputMapper.prototype.clearAll = function() {
+    this._maps = {};
+    localStorage.removeItem(this.storageKey);
+  };
+
   InputMapper.prototype.resolveKey = function(deviceId, rawKey) {
-    // If keyboard — just pass through (keyboard is always identity mapped)
     if (deviceId === '__keyboard__') return rawKey;
     const map = this._maps[deviceId];
     if (!map) return rawKey;
-    // Find action whose raw input matches rawKey
     for (const actionId of Object.keys(map)) {
       if (map[actionId] === rawKey) {
-        // Return the default keyboard key for this action
         const a = ACTION_KEYS.find(k => k.id === actionId);
         return a ? a.default : rawKey;
       }
     }
-    return null; // unmapped → ignore
+    return null;
   };
 
-  /* ── Wake lock (screen stay-on) ──────────────────────────────────────── */
+  /* -- Wake lock -------------------------------------------------------- */
   let _wakeLock = null;
   async function requestWakeLock() {
     if ('wakeLock' in navigator) {
@@ -351,11 +379,11 @@
             _wakeLock = await navigator.wakeLock.request('screen');
           }
         });
-      } catch(e) { /* ignore */ }
+      } catch(e) { }
     }
   }
 
-  /* ── Toast utility ───────────────────────────────────────────────────── */
+  /* -- Toast ----------------------------------------------------- */
   function Toast(el) {
     this.el = el;
     this._t = null;
@@ -372,7 +400,7 @@
     if (this._t) clearTimeout(this._t);
   };
 
-  /* ── Expose ──────────────────────────────────────────────────────────── */
+  /* -- Expose ------------------------------------------------------------ */
   root.XeInput = {
     VirtualKeyboard,
     GamepadPoller,

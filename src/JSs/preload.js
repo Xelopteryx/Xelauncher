@@ -7,7 +7,6 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 console.log('Preload script loaded')
 
-// Expose a debug function
 contextBridge.exposeInMainWorld('debug', {
   log: (...args) => console.log('[Renderer]', ...args),
   error: (...args) => console.error('[Renderer]', ...args)
@@ -28,6 +27,7 @@ contextBridge.exposeInMainWorld('xeLauncher', {
   getProfiles:             ()                       => ipcRenderer.invoke('get-profiles'),
   saveProfile:             (profile)                => ipcRenderer.invoke('save-profile', profile),
   deleteProfile:           (id)                     => ipcRenderer.invoke('delete-profile', id),
+  saveServer:              (serverUrl)              => ipcRenderer.invoke('save-server', serverUrl),
   getAvatars:              ()                       => ipcRenderer.invoke('get-avatars'),
   getAvatarData:           (filename)               => ipcRenderer.invoke('get-avatar-data', filename),
 
