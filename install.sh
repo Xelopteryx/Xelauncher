@@ -218,7 +218,7 @@ interactive_menu() {
 check_and_install_packages() {
     local to_install=()
     for pkg in "$@"; do
-        if ! dpkg -s "$pkg" &>/dev/null; then
+        if ! dpkg -s "$pkg" 2>/dev/null | grep -q "^Status: install ok installed"; then
             to_install+=("$pkg")
         fi
     done
