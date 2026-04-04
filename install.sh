@@ -783,7 +783,7 @@ main() {
         libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
         libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 \
         libxss1 libxtst6 libgtk-3-0 \
-        chromium-browser || true
+        chromium || true
 
     section "3/9 — Node.js"
     install_nodejs
