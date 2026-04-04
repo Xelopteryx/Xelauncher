@@ -416,6 +416,28 @@ install_retropie() {
     fi
 }
 
+configure_retropie_menu() {
+    local cfg="/etc/emulationstation/es_systems.cfg"
+    if [[ ! -f "$cfg" ]]; then
+        warn "es_systems.cfg introuvable — configuration RetroPie menu ignoree"
+        return 0
+    fi
+
+    # Vérifier si la modification est déjà en place
+    if grep -q "xterm.*retropiemenu" "$cfg" 2>/dev/null; then
+        ok "es_systems.cfg deja configure (xterm)"
+        return 0
+    fi
+
+    log "Configuration du menu RetroPie pour fonctionner sous X11 (xterm)"
+    sudo sed -i \
+        's|<command>sudo \(.*\)retropie_packages\.sh retropiemenu launch %ROM%.*</command>|<command>xterm -fullscreen -e sudo \1retropie_packages.sh retropiemenu launch %ROM%</command>|' \
+        "$cfg" \
+        && ok "es_systems.cfg mis a jour (xterm -fullscreen)" \
+        && done_action "es_systems.cfg: menu RetroPie lance dans xterm -fullscreen" \
+        || warn "Echec modification es_systems.cfg — a faire manuellement"
+}
+
 configure_splashscreen() {
     local logo="$INSTALL_DIR/src/LOGOs/prometheus.png"
     if [[ -f "$logo" ]]; then
@@ -433,7 +455,7 @@ configure_splashscreen() {
 create_start_script() {
     cat > "$INSTALL_DIR/start.sh" <<'EOF'
 #!/bin/bash
-exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
+exec startx -- :0 vt1 -nolisten tcp
 EOF
     chmod +x "$INSTALL_DIR/start.sh"
     ok "Script start.sh cree"
@@ -443,17 +465,11 @@ EOF
 xset s off
 xset -dpms
 xset s noblank
-
-cd "$INSTALL_DIR"
-
-if [ -f "./node_modules/.bin/electron" ]; then
-    exec ./node_modules/.bin/electron . --no-sandbox --disable-dev-shm-usage
-else
-    exec npx electron . --no-sandbox --disable-dev-shm-usage
-fi
+openbox &
+exec "$INSTALL_DIR/xelauncher.sh"
 EOF
     chmod +x "$HOME/.xinitrc"
-    ok "Fichier .xinitrc cree"
+    ok "Fichier .xinitrc cree (avec openbox + xelauncher.sh)"
     done_action "~/.xinitrc et start.sh crees"
 }
 
@@ -763,7 +779,7 @@ main() {
         bluetooth bluez bluez-tools \
         flatpak \
         xdotool \
-        xserver-xorg xinit \
+        xserver-xorg xinit openbox \
         unzip jq dialog xmlstarlet \
         fbi \
         libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
@@ -791,6 +807,7 @@ main() {
 
     section "9/9 — Configuration du systeme"
     configure_splashscreen
+    configure_retropie_menu
     create_start_script
     configure_autologin
     configure_systemd_service
