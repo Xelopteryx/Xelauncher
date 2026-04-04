@@ -592,13 +592,6 @@ create_required_dirs() {
 uninstall_all() {
     section "Desinstallation de XeLauncher"
 
-    if [[ ! -d "$INSTALL_DIR" ]] && [[ ! -f "$HOME/.xinitrc" ]] && ! grep -q "XeLauncher" "$HOME/.bash_profile" 2>/dev/null; then
-        echo ""
-        echo -e "${YELLOW}⚠  XeLauncher n'est pas installe sur ce systeme.${RESET}"
-        echo ""
-        return 0
-    fi
-
     local anything_done=0
 
     if [[ -d "$INSTALL_DIR" ]]; then
