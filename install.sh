@@ -646,45 +646,43 @@ uninstall_all() {
         anything_done=1
     fi
 
-    if flatpak info com.github.iwalton3.jellyfin-media-player >/dev/null 2>&1; then
-        log "Desinstallation de Jellyfin Media Player"
-        sudo flatpak uninstall -y com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
-        ok "Jellyfin desinstalle"
-        done_action "Jellyfin Media Player desinstalle"
-        anything_done=1
-    fi
+    log "Desinstallation de Jellyfin Media Player"
+    sudo flatpak uninstall -y com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
+    sudo flatpak uninstall -y --unused 2>/dev/null || true
+    ok "Jellyfin desinstalle"
+    done_action "Jellyfin Media Player desinstalle"
+    anything_done=1
 
-    if command -v emulationstation >/dev/null 2>&1 || [[ -d "$HOME/RetroPie-Setup" ]]; then
-        log "Desinstallation de RetroPie"
-        if [[ -d "$HOME/RetroPie-Setup" ]]; then
-            cd "$HOME/RetroPie-Setup"
-            sudo __nodialog=1 ./retropie_packages.sh setup remove_all 2>/dev/null || true
-        fi
-        rm -rf "$HOME/RetroPie-Setup"
-        ok "RetroPie desinstalle"
-        done_action "RetroPie desinstalle"
-        anything_done=1
+    log "Desinstallation de RetroPie"
+    if [[ -d "$HOME/RetroPie-Setup" ]]; then
+        cd "$HOME/RetroPie-Setup"
+        sudo __nodialog=1 ./retropie_packages.sh setup remove_all 2>/dev/null || true
     fi
+    sudo rm -rf "$HOME/RetroPie-Setup"
+    sudo rm -rf "$HOME/RetroPie"
+    sudo rm -rf /opt/retropie
+    sudo rm -f /usr/bin/emulationstation
+    sudo apt-get remove -y emulationstation 2>/dev/null || true
+    ok "RetroPie desinstalle"
+    done_action "RetroPie desinstalle"
+    anything_done=1
 
-    if command -v node >/dev/null 2>&1; then
-        log "Desinstallation de Node.js"
-        sudo apt-get remove -y nodejs 2>/dev/null || true
-        sudo rm -f /etc/apt/sources.list.d/nodesource.list
-        ok "Node.js desinstalle"
-        done_action "Node.js desinstalle"
-        anything_done=1
-    fi
+    log "Desinstallation de Node.js"
+    sudo apt-get remove -y nodejs 2>/dev/null || true
+    sudo rm -f /etc/apt/sources.list.d/nodesource.list
+    sudo rm -f /etc/apt/sources.list.d/nodesource.list.distUpgrade
+    ok "Node.js desinstalle"
+    done_action "Node.js desinstalle"
+    anything_done=1
 
-    if command -v tailscale >/dev/null 2>&1; then
-        log "Desinstallation de Tailscale"
-        sudo systemctl stop tailscaled 2>/dev/null || true
-        sudo systemctl disable tailscaled 2>/dev/null || true
-        sudo apt-get remove -y tailscale 2>/dev/null || true
-        sudo rm -f /etc/apt/sources.list.d/tailscale.list
-        ok "Tailscale desinstalle"
-        done_action "Tailscale desinstalle"
-        anything_done=1
-    fi
+    log "Desinstallation de Tailscale"
+    sudo systemctl stop tailscaled 2>/dev/null || true
+    sudo systemctl disable tailscaled 2>/dev/null || true
+    sudo apt-get remove -y tailscale 2>/dev/null || true
+    sudo rm -f /etc/apt/sources.list.d/tailscale.list
+    ok "Tailscale desinstalle"
+    done_action "Tailscale desinstalle"
+    anything_done=1
 
     if [[ -f "$RETROPIE_SPLASH_DIR/prometheus.png" ]]; then
         rm -f "$RETROPIE_SPLASH_DIR/prometheus.png"
