@@ -337,3 +337,15 @@ html, body {
   text-transform: uppercase;
   text-align: center;
 }
+
+/* Désactiver complètement le curseur souris */
+* {
+    cursor: none !important;
+}
+
+/* Désactiver les événements de sélection de texte */
+body {
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}

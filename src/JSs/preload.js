@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld('xeLauncher', {
   openSettings:            ()                       => ipcRenderer.invoke('open-settings'),
   launchRetropie:          ()                       => ipcRenderer.invoke('launch-retropie'),
   launchJellyfin:          ()                       => ipcRenderer.invoke('launch-jellyfin'),
-  launchJellyfinWithToken: (server, token, userId)  => ipcRenderer.invoke('launch-jellyfin-token', server, token, userId),
+  launchJellyfinWithToken: (server, token, userId, serverId) => ipcRenderer.invoke('launch-jellyfin-token', server, token, userId, serverId),
 
   /* Jellyfin auth */
   jellyfinAuthenticate:    (server, user, pass)     => ipcRenderer.invoke('jellyfin-authenticate', server, user, pass),

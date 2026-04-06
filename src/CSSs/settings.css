@@ -1,240 +1,638 @@
 /* settings.css */
-.settings-screen {
-  width: 100vw; height: 100vh;
-  display: flex;
-  position: relative;
+:root {
+  --bg-dark: #0a0a0f;
+  --bg-card: rgba(15, 20, 30, 0.85);
+  --primary: #7c4dff;
+  --primary-dark: #5e35b1;
+  --text-light: #f0f0f0;
+  --text-dim: #a0a0b0;
+  --border: #2a2a3a;
+  --success: #4caf50;
+  --warning: #ff9800;
+  --error: #f44336;
+  --hover-bg: rgba(124, 77, 255, 0.2);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg-dark);
+  color: var(--text-light);
   overflow: hidden;
-  animation: fadeIn 0.5s ease-in both;
+  height: 100vh;
+}
+
+/* Background */
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(124, 77, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 77, 255, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.vignette {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.4) 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Settings Screen */
+.settings-screen {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: 100vh;
+  backdrop-filter: blur(10px);
 }
 
 /* Sidebar */
 .settings-sidebar {
-  width: clamp(180px,22vw,280px);
-  height: 100%;
+  width: 280px;
+  background: rgba(10, 10, 15, 0.9);
+  backdrop-filter: blur(20px);
   border-right: 1px solid var(--border);
-  display: flex; flex-direction: column;
-  padding: clamp(16px,3vh,32px) 0;
-  background: rgba(0,0,0,0.3);
-  position: relative; z-index: 1;
-  flex-shrink: 0;
-}
-.settings-logo {
-  display: flex; flex-direction: column;
-  align-items: center; gap: 8px;
-  padding: 0 16px clamp(14px,2.5vh,24px) 16px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: clamp(10px,2vh,18px);
-}
-.settings-logo img { width: 32px; height: 32px; object-fit: contain; opacity: 0.7; }
-.settings-logo-text {
-  font-family: var(--font-title);
-  color: rgba(0,164,220,0.55);
-  font-size: clamp(7px,0.9vw,10px);
-  letter-spacing: 5px;
-  text-transform: uppercase;
-}
-.sidebar-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: clamp(10px,1.6vh,14px) clamp(14px,1.8vw,22px);
-  font-size: clamp(9px,1.05vw,12px);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  cursor: pointer;
-  transition: all 0.15s;
-  border-left: 2px solid transparent;
-}
-.sidebar-item .icon { font-size: clamp(13px,1.5vw,17px); opacity: 0.5; }
-.sidebar-item.active {
-  color: var(--blue);
-  border-left-color: var(--blue);
-  background: var(--blue-bg);
-}
-.sidebar-item.active .icon { opacity: 1; }
-.sidebar-item.focused {
-  color: var(--text);
-  background: rgba(255,255,255,0.05);
-  border-left-color: var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 24px 0;
 }
 
-/* Main content */
+.settings-logo {
+  padding: 0 24px 32px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.settings-logo img {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  margin-bottom: 12px;
+}
+
+.settings-logo-text {
+  font-size: 18px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #7c4dff, #b47cff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.sidebar-item {
+  padding: 12px 24px;
+  margin: 4px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.sidebar-item .icon {
+  font-size: 20px;
+  width: 28px;
+}
+
+.sidebar-item:hover {
+  background: rgba(124, 77, 255, 0.1);
+}
+
+.sidebar-item.active {
+  background: rgba(124, 77, 255, 0.2);
+  border-left: 3px solid var(--primary);
+}
+
+.sidebar-item.focused {
+  background: rgba(124, 77, 255, 0.3);
+  transform: scale(1.02);
+}
+
+/* Main Content */
 .settings-main {
   flex: 1;
-  height: 100%;
   overflow-y: auto;
-  padding: clamp(24px,4vh,48px) clamp(24px,4vw,56px);
-  position: relative; z-index: 1;
+  padding: 32px 48px;
+}
+
+.tab-content {
+  max-width: 800px;
+  margin: 0 auto;
 }
 
 .section-title {
-  font-family: var(--font-title);
-  color: rgba(0,164,220,0.75);
-  font-size: clamp(12px,1.5vw,18px);
-  letter-spacing: 5px;
-  text-transform: uppercase;
-  margin-bottom: clamp(14px,2.5vh,28px);
-  border-bottom: 1px solid rgba(0,164,220,0.2);
-  padding-bottom: 10px;
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: var(--primary);
+  letter-spacing: 1px;
 }
 
 .settings-group {
-  display: flex; flex-direction: column;
-  gap: clamp(14px,2.5vh,22px);
-  margin-bottom: clamp(20px,3.5vh,36px);
+  background: var(--bg-card);
+  border-radius: 16px;
+  padding: 8px 0;
+  margin-bottom: 24px;
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
 }
 
 .settings-row {
-  display: flex; align-items: center;
-  gap: clamp(12px,2vw,20px);
-  padding: clamp(10px,1.6vh,14px) clamp(16px,2.5vw,24px);
-  background: rgba(255,255,255,0.025);
-  border: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  cursor: pointer;
   transition: all 0.15s;
-}
-.settings-row.active {
-  border-color: var(--blue-dim);
-  background: var(--blue-bg);
-}
-.settings-row-label {
-  font-size: clamp(10px,1.1vw,13px);
-  letter-spacing: 2px;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  flex: 1;
-  transition: color 0.15s;
-}
-.settings-row.active .settings-row-label { color: var(--text); }
-.settings-row-value {
-  font-size: clamp(10px,1.1vw,12px);
-  color: rgba(0,164,220,0.7);
-  letter-spacing: 2px;
-  text-align: right;
+  border-left: 3px solid transparent;
 }
 
-/* Toggle */
+.settings-row.active {
+  background: var(--hover-bg);
+  border-left-color: var(--primary);
+}
+
+.settings-row-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.settings-row-value {
+  font-size: 14px;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* Toggle Switch */
 .toggle {
-  width: clamp(36px,4.5vw,52px);
-  height: clamp(18px,2.5vh,24px);
-  background: rgba(255,255,255,0.1);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  width: 48px;
+  height: 24px;
+  background: #3a3a4a;
+  border-radius: 24px;
   position: relative;
   cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
+  transition: 0.2s;
 }
+
 .toggle::after {
   content: '';
   position: absolute;
-  top: 50%; transform: translateY(-50%);
-  left: 3px;
-  width: clamp(12px,1.6vw,18px);
-  height: clamp(12px,1.6vw,18px);
+  width: 20px;
+  height: 20px;
+  background: white;
   border-radius: 50%;
-  background: rgba(255,255,255,0.3);
-  transition: all 0.2s;
+  top: 2px;
+  left: 4px;
+  transition: 0.2s;
 }
-.toggle.on { background: rgba(0,164,220,0.3); border-color: var(--blue); }
-.toggle.on::after { left: calc(100% - 3px); transform: translateY(-50%) translateX(-100%); background: var(--blue); }
 
-/* Select-style option list */
-.option-list {
-  display: flex; flex-wrap: wrap; gap: 8px;
+.toggle.on {
+  background: var(--primary);
 }
-.option-item {
-  font-family: var(--font-mono);
-  font-size: clamp(9px,1vw,11px);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  padding: 5px 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-  outline: none;
-}
-.option-item.selected { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
-.option-item.focused { border-color: rgba(255,255,255,0.25); color: var(--text); }
 
-/* Network */
-.wifi-list { display: flex; flex-direction: column; gap: 6px; }
-.wifi-network {
-  display: flex; align-items: center;
+.toggle.on::after {
+  left: 24px;
+}
+
+/* WiFi / Bluetooth Lists */
+.wifi-list, .bt-list, .iface-list, .device-list {
+  margin-top: 8px;
+}
+
+.wifi-network, .bt-item, .iface-item, .device-item {
+  padding: 12px 20px;
+  display: flex;
   justify-content: space-between;
-  padding: clamp(8px,1.4vh,12px) clamp(14px,2vw,20px);
-  background: rgba(255,255,255,0.025);
-  border: 1px solid var(--border);
+  align-items: center;
+  border-bottom: 1px solid var(--border);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: 0.15s;
 }
-.wifi-network.active { background: var(--blue-bg); border-color: var(--blue); }
-.wifi-network.current { border-color: rgba(165,214,167,0.4); }
-.wifi-ssid { font-size: clamp(10px,1.2vw,13px); letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); }
-.wifi-network.active .wifi-ssid { color: var(--blue); }
-.wifi-network.current .wifi-ssid { color: #a5d6a7; }
-.wifi-meta { display: flex; align-items: center; gap: 10px; font-size: clamp(9px,1vw,11px); color: var(--text-hint); }
-.wifi-signal { color: rgba(0,164,220,0.55); }
 
-/* Interface list */
-.iface-list { display: flex; flex-direction: column; gap: 8px; }
-.iface-item {
-  display: flex; align-items: center;
-  padding: clamp(10px,1.6vh,14px) clamp(14px,2vw,20px);
-  background: rgba(255,255,255,0.025);
+.wifi-network:hover, .bt-item:hover, .iface-item:hover, .device-item:hover {
+  background: var(--hover-bg);
+}
+
+.wifi-network.active, .bt-item.active, .iface-item.active, .device-item.active {
+  background: var(--hover-bg);
+}
+
+.wifi-ssid {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.wifi-meta {
+  display: flex;
+  gap: 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.wifi-signal {
+  font-family: monospace;
+  letter-spacing: 1px;
+}
+
+.iface-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 12px;
+}
+
+.iface-dot.up {
+  background: var(--success);
+  box-shadow: 0 0 4px var(--success);
+}
+
+.iface-dot.down {
+  background: var(--error);
+}
+
+.iface-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.iface-ip {
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--primary);
+}
+
+.bt-icon, .device-icon {
+  font-size: 20px;
+  margin-right: 12px;
+}
+
+.bt-name, .device-name {
+  flex: 1;
+  font-size: 13px;
+}
+
+.bt-connected {
+  font-size: 10px;
+  color: var(--success);
+  margin-right: 12px;
+}
+
+.bt-mac {
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-dim);
+}
+
+/* Options Lists */
+.option-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.option-item {
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.05);
   border: 1px solid var(--border);
-  gap: 16px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s;
+  font-size: 12px;
+  transition: 0.15s;
 }
-.iface-item.active { border-color: var(--blue-dim); background: var(--blue-bg); }
-.iface-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.18); flex-shrink: 0; }
-.iface-dot.up { background: #a5d6a7; }
-.iface-name { font-size: clamp(10px,1.1vw,13px); letter-spacing: 3px; color: var(--text-dim); text-transform: uppercase; flex: 1; }
-.iface-item.active .iface-name { color: var(--text); }
-.iface-ip { font-size: clamp(9px,1vw,11px); color: rgba(0,164,220,0.65); }
 
-/* Gamepad mapping */
-.device-list { display: flex; flex-direction: column; gap: 8px; }
-.device-item {
-  display: flex; align-items: center; gap: 14px;
-  padding: clamp(10px,1.6vh,14px) clamp(14px,2vw,20px);
-  background: rgba(255,255,255,0.025);
+.option-item.selected {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.option-item:hover {
+  background: rgba(124, 77, 255, 0.3);
+}
+
+/* Keyboard Overlay */
+.kb-overlay {
+  position: fixed;
+  bottom: -100%;
+  left: 0;
+  right: 0;
+  background: rgba(10, 10, 15, 0.95);
+  backdrop-filter: blur(20px);
+  border-top: 2px solid var(--primary);
+  padding: 20px;
+  transition: bottom 0.3s ease;
+  z-index: 10000;
+}
+
+.kb-overlay.visible {
+  bottom: 0;
+}
+
+.kb-label {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.kb-display {
+  background: rgba(0,0,0,0.5);
+  padding: 12px;
+  border-radius: 8px;
+  font-family: monospace;
+  font-size: 20px;
+  text-align: center;
+  margin-bottom: 16px;
   border: 1px solid var(--border);
-  cursor: pointer;
-  transition: all 0.15s;
 }
-.device-item.active { border-color: var(--blue-dim); background: var(--blue-bg); }
-.device-icon { font-size: clamp(14px,1.6vw,18px); opacity: 0.5; }
-.device-name { font-size: clamp(10px,1.2vw,13px); letter-spacing: 2px; color: var(--text-dim); flex: 1; text-transform: uppercase; }
-.device-item.active .device-name { color: var(--text); }
-.device-status { font-size: clamp(8px,0.9vw,10px); letter-spacing: 2px; color: rgba(165,214,167,0.7); text-transform: uppercase; }
 
-/* Bluetooth */
-.bt-list { display: flex; flex-direction: column; gap: 8px; }
-.bt-item {
-  display: flex; align-items: center; gap: 14px;
-  padding: clamp(10px,1.6vh,14px) clamp(14px,2vw,20px);
-  background: rgba(255,255,255,0.025);
+.kb-panel {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.kb-modes {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.kb-mode-btn {
+  padding: 8px 24px;
+  background: rgba(255,255,255,0.05);
   border: 1px solid var(--border);
+  border-radius: 24px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: 0.15s;
 }
-.bt-item.active { border-color: var(--blue-dim); background: var(--blue-bg); }
-.bt-icon { font-size: clamp(14px,1.6vw,18px); opacity: 0.5; }
-.bt-name { font-size: clamp(10px,1.2vw,13px); letter-spacing: 2px; color: var(--text-dim); flex: 1; text-transform: uppercase; }
-.bt-item.active .bt-name { color: var(--text); }
-.bt-connected { font-size: clamp(8px,0.9vw,10px); letter-spacing: 2px; color: rgba(165,214,167,0.7); }
-.bt-mac { font-size: clamp(8px,0.9vw,10px); color: var(--text-hint); }
 
-/* Version info */
+.kb-mode-btn.on {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.kb-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+  gap: 6px;
+}
+
+.kb-key {
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.08);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.1s;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.kb-key.kbactive {
+  background: var(--primary);
+  transform: scale(1.05);
+}
+
+.kb-key.invisible {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.kb-key.confirm {
+  background: var(--success);
+}
+
+.kb-key.shift-on {
+  background: var(--warning);
+}
+
+/* Mapper Overlay */
+.mapper-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.9);
+  backdrop-filter: blur(20px);
+  z-index: 20000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.2s;
+}
+
+.mapper-overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.mapper-title {
+  font-size: 28px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.mapper-device {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin-bottom: 32px;
+  font-family: monospace;
+}
+
+.mapper-actions {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 24px;
+}
+
+.mapper-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 200px);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.mapper-btn {
+  padding: 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.mapper-btn.current-target {
+  background: var(--primary);
+  border-color: var(--primary);
+  animation: pulse 1s infinite;
+}
+
+.mapper-btn.assigned {
+  border-color: var(--success);
+}
+
+.mapper-key-name {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.mapper-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 30000;
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.2s;
+}
+
+.loading-overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 3px solid rgba(124, 77, 255, 0.2);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 16px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: rgba(0,0,0,0.9);
+  backdrop-filter: blur(10px);
+  padding: 12px 24px;
+  border-radius: 40px;
+  font-size: 14px;
+  z-index: 40000;
+  transition: 0.3s;
+  opacity: 0;
+  pointer-events: none;
+  border: 1px solid var(--border);
+}
+
+.toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+.toast.error {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+/* Version Info */
 .version-info {
   position: fixed;
-  bottom: clamp(12px,2vh,20px);
-  right: clamp(16px,2.5vw,28px);
-  font-size: clamp(8px,0.9vw,10px);
-  color: var(--text-hint);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  z-index: 1;
+  bottom: 12px;
+  right: 16px;
+  font-size: 10px;
+  color: var(--text-dim);
+  z-index: 100;
+  background: rgba(0,0,0,0.5);
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.05);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 4px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .settings-sidebar {
+    width: 80px;
+  }
+  
+  .settings-logo-text {
+    display: none;
+  }
+  
+  .sidebar-item span:not(.icon) {
+    display: none;
+  }
+  
+  .settings-main {
+    padding: 20px;
+  }
+  
+  .kb-key {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
 }

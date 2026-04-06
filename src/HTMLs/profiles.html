@@ -1,17 +1,19 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>XeLauncher � Profils</title>
-<link rel="stylesheet" href="../CSSs/common.css">
-<link rel="stylesheet" href="../CSSs/profiles.css">
+  <meta charset="UTF-8">
+  <title>XeLauncher — Profils</title>
+  <link rel="stylesheet" href="../CSSs/common.css">
+  <link rel="stylesheet" href="../CSSs/profiles.css">
 </head>
 <body>
+
 <div class="grid-bg"></div>
 <div class="vignette"></div>
 
+<!-- ── Écran principal ─────────────────────────────────────────────── -->
 <div class="profiles-screen" id="profilesScreen">
+
   <button class="back-btn" id="backBtn">
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <polyline points="15 18 9 12 15 6"/>
@@ -19,52 +21,47 @@
     Retour
   </button>
 
+  <!-- Vue : saisie serveur -->
   <div class="server-setup" id="serverSetup" style="display:none">
-    <div class="server-setup-label" id="serverSetupLabel">Entrez l'adresse du serveur Jellyfin</div>
+    <div class="server-setup-label">Adresse du serveur Jellyfin</div>
     <div class="server-input-wrap">
-      <div class="server-input" id="serverInput" tabindex="-1">|</div>
+      <div class="server-input active" id="serverInput">|</div>
       <div class="server-ping-icon" id="serverPingIcon"></div>
     </div>
-    <button class="back-btn" style="position:static;margin-top:8px" id="serverBackBtn">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="15 18 9 12 15 6"/>
-      </svg>
-      Retour
-    </button>
-    <div class="hint">Appuyez sur ? pour saisir � ? pour annuler</div>
+    <div class="hint">✕ saisir · ○ retour</div>
   </div>
 
-  <div id="profilesView" style="display:none; flex-direction:column; align-items:center; gap:clamp(16px,3.5vh,40px); width:100%; position:relative; z-index:1">
+  <!-- Vue : grille des profils -->
+  <div id="profilesView" style="display:none">
     <div class="profiles-header">
-      <img class="header-logo" src="../LOGOs/jellyfin.png" alt="Jellyfin" onerror="this.outerHTML='<span style=&quot;font-size:32px&quot;>??</span>'">
+      <div style="font-size:32px">🎬</div>
       <div class="header-title">Qui regarde ?</div>
     </div>
-
     <div class="profiles-grid" id="profilesGrid"></div>
-
-    <div class="hint">? connecter � ? configurer � ? retour</div>
-
-    <button class="server-btn" id="serverBtn">
-      Serveur : <span class="ip" id="serverBtnIp">�</span>
+    <div class="hint" style="margin-top:8px">✕ connecter · △ configurer · ○ retour</div>
+    <button class="server-btn" id="serverBtn" style="margin-top:8px">
+      Serveur : <span class="ip" id="serverBtnIp">—</span>
     </button>
   </div>
+
 </div>
 
+<!-- ── Éditeur de profil ────────────────────────────────────────────── -->
 <div class="editor-overlay" id="editorOverlay">
   <div class="editor-title" id="editorTitle">Profil</div>
   <img class="editor-avatar-preview" id="editorAvatarPreview" src="" alt="">
   <div class="editor-fields">
     <div class="editor-field">
-      <span class="label">Nom affich�</span>
-      <div class="editor-input" id="eName" tabindex="-1"></div>
+      <span class="label">Nom affiché</span>
+      <div class="editor-input" id="eName"></div>
     </div>
     <div class="editor-field">
       <span class="label">Utilisateur Jellyfin</span>
-      <div class="editor-input" id="eUser" tabindex="-1"></div>
+      <div class="editor-input" id="eUser"></div>
     </div>
     <div class="editor-field">
       <span class="label">Mot de passe</span>
-      <div class="editor-input" id="ePass" tabindex="-1"></div>
+      <div class="editor-input" id="ePass"></div>
     </div>
   </div>
   <div class="editor-actions">
@@ -73,414 +70,451 @@
     <button class="btn danger" id="eBtnDelete" style="display:none">Supprimer</button>
     <button class="btn" id="eBtnCancel">Annuler</button>
   </div>
-  <div class="hint">?? champ � ? ? bouton � ? valider � ? annuler</div>
+  <div class="hint">↑↓ champ · ←→ bouton · ✕ valider · ○ annuler</div>
 </div>
 
+<!-- ── Sélecteur d'avatar ───────────────────────────────────────────── -->
 <div class="avatar-picker" id="avatarPicker">
   <div class="avatar-picker-title">Choisir un avatar</div>
   <div class="avatar-grid" id="avatarGrid"></div>
-  <div class="hint">???? naviguer � ? choisir � ? annuler</div>
+  <div class="hint">↑↓←→ naviguer · ✕ choisir · ○ annuler</div>
 </div>
 
+<!-- ── Clavier virtuel ──────────────────────────────────────────────── -->
 <div class="kb-overlay" id="kbOverlay">
   <div class="kb-label" id="kbLabel">Saisie</div>
   <div class="kb-display" id="kbDisplay">|</div>
   <div class="kb-panel">
     <div class="kb-modes">
       <button class="kb-mode-btn on" id="kbModeLetters">A-Z</button>
-      <button class="kb-mode-btn" id="kbModeNums">0-9</button>
+      <button class="kb-mode-btn"   id="kbModeNums">0-9</button>
+      <button class="kb-mode-btn"   id="kbModeSpecials">!@#</button>
     </div>
     <div id="kbRows"></div>
   </div>
 </div>
 
+<!-- ── Loading ──────────────────────────────────────────────────────── -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="spinner"></div>
-  <div class="loading-text" id="loadingText">Connexion�</div>
+  <div class="loading-text" id="loadingText">Connexion…</div>
 </div>
 
-<div class="mapper-overlay" id="mapperOverlay"></div>
-
+<!-- ── Toast ────────────────────────────────────────────────────────── -->
 <div class="toast" id="toast"></div>
 
+<!-- ── Scripts ──────────────────────────────────────────────────────── -->
+<!-- input.js expose window.XeInput (VirtualKeyboard, GamepadPoller, Toast…) -->
 <script src="../JSs/input.js"></script>
+
 <script>
 'use strict';
 
-const toast = new XeInput.Toast(document.getElementById('toast'));
-const mapper = new XeInput.InputMapper();
-const gpPoller = new XeInput.GamepadPoller((raw) => onKey(raw, '__gamepad__'));
+/* ══════════════════════════════════════════════════════════════════════
+   ÉTAT GLOBAL
+══════════════════════════════════════════════════════════════════════ */
+var serverUrl      = '';
+var profiles       = [];
+var focusZone      = 1;
+var currentScreen  = 'loading'; // loading | server | profiles | editor | avatar | kb
 
-const BUILTIN_AVATAR = '../LOGOs/jellyfin.png';
-const avatarCache = new Map();
+var editingProfile    = null;
+var editorFocusIdx    = 0;
+var editorBtnIdx      = 0;
+var EDITOR_FIELDS     = ['eName', 'eUser', 'ePass'];
+var editorBtnsVisible = [];
 
-async function loadAvatarWithCache(file) {
-  if (avatarCache.has(file)) return avatarCache.get(file);
-  const data = await window.xeLauncher.getAvatarData(file);
-  if (data) avatarCache.set(file, data);
-  return data;
+var avatarList     = [];
+var avatarFocusIdx = 0;
+
+var serverEditValue  = '';
+var serverPingTimer  = null;
+var inputReady       = false;
+
+/* ── Toast (wrapper XeInput) ──────────────────────────────────────── */
+var _toast = null; // initialisé dans DOMContentLoaded
+
+function showToast(msg, isError) {
+  if (_toast) _toast.show(msg, isError);
 }
 
-let serverUrl = '';
-let profiles = [];
-let focusZone = 1;
-let screen = 'loading';
+/* ══════════════════════════════════════════════════════════════════════
+   CLAVIER VIRTUEL  (délégué à XeInput.VirtualKeyboard)
+══════════════════════════════════════════════════════════════════════ */
+var _kb = null;
 
-document.addEventListener('DOMContentLoaded', () => {
-  XeInput.requestWakeLock();
-  gpPoller.start();
-
-  document.getElementById('backBtn').addEventListener('click', goBack);
-  document.getElementById('serverBackBtn').addEventListener('click', goBack);
-  document.getElementById('serverBtn').addEventListener('click', () => openServerSetup());
-  document.getElementById('eBtnAvatar').addEventListener('click', openAvatarPicker);
-  document.getElementById('eBtnSave').addEventListener('click', saveEditor);
-  document.getElementById('eBtnDelete').addEventListener('click', deleteEditor);
-  document.getElementById('eBtnCancel').addEventListener('click', closeEditor);
-  document.getElementById('kbModeLetters').addEventListener('click', () => kb.setMode('letters'));
-  document.getElementById('kbModeNums').addEventListener('click', () => kb.setMode('nums'));
-
-  if (window.xeLauncher) {
-    window.xeLauncher.getProfiles().then(data => {
-      serverUrl = (data && data.server) ? data.server : '';
-      profiles = (data && data.profiles) ? data.profiles : [];
-      if (!serverUrl) {
-        showServerSetup();
-      } else {
-        showProfilesView();
-      }
-    }).catch(() => showServerSetup());
-  } else {
-    showServerSetup();
+function openKb(label, initial, callback, type) {
+  if (_kb) {
+    _kb.value    = initial || '';
+    _kb.type     = (type === 'url') ? 'url' : 'normal';
+    _kb.mode     = _kb.type === 'url' ? 'letters' : 'letters';
+    _kb.caps     = false;
+    _kb.section  = 'kb';
+    _kb.row      = 0;
+    _kb.col      = 0;
+    _kb.topFocus = 0;
+    _kb.onConfirm = function(val) { closeKb(); if (callback) callback(val); };
+    _kb.onCancel  = function() { closeKb(); };
+    document.getElementById('kbLabel').textContent = label;
+    document.getElementById('kbDisplay').textContent = (initial || '') + '|';
+    _kb._render();
   }
-
-  setTimeout(() => { inputReady = true; }, 700);
-});
-
-window.addEventListener('gamepadconnected', (e) => {
-  if (!mapper.has(e.gamepad.id)) openMapperUI(e.gamepad.id);
-});
-
-const kb = new XeInput.VirtualKeyboard(
-  document.getElementById('kbRows'),
-  document.getElementById('kbDisplay'),
-  document.getElementById('kbOverlay')
-);
-let kbCallback = null;
-
-function openKb(label, initial, callback) {
-  document.getElementById('kbLabel').textContent = label;
-  kb.open(initial || '');
-  kbCallback = callback;
-  kb.onConfirm = (val) => { closeKb(); if (kbCallback) kbCallback(val); };
-  kb.onCancel = closeKb;
   document.getElementById('kbOverlay').classList.add('visible');
-  screen = 'kb';
+  currentScreen = 'kb';
 }
 
 function closeKb() {
   document.getElementById('kbOverlay').classList.remove('visible');
-  screen = getPrevScreen();
+  currentScreen = getPrevScreen();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', function() {
+
+  /* Toast */
+  _toast = new XeInput.Toast(document.getElementById('toast'));
+
+  /* Clavier virtuel */
+  _kb = new XeInput.VirtualKeyboard(
+    document.getElementById('kbRows'),
+    document.getElementById('kbDisplay'),
+    document.getElementById('kbOverlay'),
+    'normal'
+  );
+
+  /* Mode buttons du clavier — synchronisation avec XeInput */
+  document.getElementById('kbModeLetters').addEventListener('click', function() { _kb.setMode(_kb.type==='url'?'letters':'letters'); });
+  document.getElementById('kbModeNums').addEventListener('click',    function() { _kb.setMode('nums'); });
+  document.getElementById('kbModeSpecials').addEventListener('click',function() { _kb.setMode('specials'); });
+
+  /* Boutons de l'interface */
+  document.getElementById('backBtn').addEventListener('click', goBack);
+  document.getElementById('serverBtn').addEventListener('click', openServerSetup);
+  document.getElementById('eBtnAvatar').addEventListener('click', openAvatarPicker);
+  document.getElementById('eBtnSave').addEventListener('click', saveEditor);
+  document.getElementById('eBtnDelete').addEventListener('click', deleteEditor);
+  document.getElementById('eBtnCancel').addEventListener('click', closeEditor);
+
+  /* Wake lock */
+  if (XeInput.requestWakeLock) XeInput.requestWakeLock();
+
+  /* Chargement des profils */
+  if (window.xeLauncher) {
+    window.xeLauncher.getProfiles().then(function(data) {
+      serverUrl = (data && data.server)   ? data.server   : '';
+      profiles  = (data && data.profiles) ? data.profiles : [];
+      if (!serverUrl) showServerSetup();
+      else            showProfilesView();
+    }).catch(function() { showServerSetup(); });
+  } else {
+    showServerSetup();
+  }
+
+  /* Clavier physique */
+  document.addEventListener('keydown', function(e) {
+    if (!inputReady) return;
+    handleKey(e.key);
+  });
+
+  /* Gamepad */
+  var gp = new XeInput.GamepadPoller(function(key) {
+    if (inputReady) handleKey(key);
+  });
+  gp.start();
+
+  setTimeout(function() { inputReady = true; }, 700);
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+   UTILITAIRES
+══════════════════════════════════════════════════════════════════════ */
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function getPrevScreen() {
   if (document.getElementById('editorOverlay').classList.contains('visible')) return 'editor';
-  if (document.getElementById('avatarPicker').classList.contains('visible')) return 'avatar';
-  if (document.getElementById('profilesView').style.display !== 'none') return 'profiles';
+  if (document.getElementById('avatarPicker').classList.contains('visible'))  return 'avatar';
+  var pv = document.getElementById('profilesView');
+  if (pv && pv.style.display !== 'none') return 'profiles';
   return 'server';
 }
 
-let serverEditValue = '';
-let serverPingTimer = null;
-
+/* ══════════════════════════════════════════════════════════════════════
+   SERVEUR
+══════════════════════════════════════════════════════════════════════ */
 function showServerSetup() {
-  document.getElementById('serverSetup').style.display = 'flex';
+  document.getElementById('serverSetup').style.display  = 'flex';
   document.getElementById('profilesView').style.display = 'none';
-  screen = 'server';
-  serverEditValue = serverUrl || '';
+  currentScreen    = 'server';
+  serverEditValue  = serverUrl || '';
   updateServerDisplay();
-  setTimeout(() => {
-    const input = document.getElementById('serverInput');
-    if (input) input.classList.add('active');
-  }, 100);
 }
 
+function openServerSetup() { showServerSetup(); }
+
 function updateServerDisplay() {
-  const el = document.getElementById('serverInput');
+  var el = document.getElementById('serverInput');
   el.textContent = (serverEditValue || '') + '|';
-  el.classList.toggle('active', screen === 'server');
+  el.classList.toggle('active', currentScreen === 'server');
   pingServer(serverEditValue);
 }
 
+var _pingAbort = null;
 function pingServer(url) {
-  const icon = document.getElementById('serverPingIcon');
-  if (!url || url.length < 7) { icon.textContent = ''; return; }
-  icon.className = 'server-ping-icon checking';
-  icon.textContent = '?';
-  if (serverPingTimer) clearTimeout(serverPingTimer);
-  serverPingTimer = setTimeout(() => {
-    fetch(url + '/System/Ping', { signal: AbortSignal.timeout(4000) })
-      .then(r => {
-        if (r.ok) { icon.className = 'server-ping-icon ok'; icon.textContent = '? En ligne'; showProfilesView(); }
+  var icon = document.getElementById('serverPingIcon');
+  if (!url || url.length < 4) { icon.textContent = ''; icon.className = 'server-ping-icon'; return; }
+  icon.className   = 'server-ping-icon checking';
+  icon.textContent = '↻';
+  clearTimeout(serverPingTimer);
+  serverPingTimer = setTimeout(function() {
+    var fullUrl = url.indexOf('://') < 0 ? 'http://' + url : url;
+    fetch(fullUrl + '/System/Ping', { signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined })
+      .then(function(r) {
+        if (r.ok || r.status < 500) { icon.className = 'server-ping-icon ok';   icon.textContent = '● En ligne'; }
         else throw new Error();
       })
-      .catch(() => { icon.className = 'server-ping-icon fail'; icon.textContent = '? Hors ligne'; });
-  }, 600);
+      .catch(function() { icon.className = 'server-ping-icon fail'; icon.textContent = '✕ Hors ligne'; });
+  }, 700);
 }
 
-async function confirmServer() {
+function confirmServer() {
   if (!serverEditValue) return;
-  if (window.xeLauncher) {
-    try {
-      await window.xeLauncher.saveServer(serverEditValue);
-      serverUrl = serverEditValue;
-      showProfilesView();
-      toast.show('Serveur sauvegard�', false);
-    } catch(e) {
-      toast.show('Erreur lors de la sauvegarde', true);
-    }
-  } else {
-    serverUrl = serverEditValue;
-    showProfilesView();
+  var fullUrl = serverEditValue.indexOf('://') < 0 ? 'http://' + serverEditValue : serverEditValue;
+  serverUrl = fullUrl;
+  if (window.xeLauncher && window.xeLauncher.saveServer) {
+    window.xeLauncher.saveServer(serverUrl).catch(function() {});
   }
+  showProfilesView();
+  showToast('Serveur configuré', false);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   VUE PROFILS
+══════════════════════════════════════════════════════════════════════ */
 function showProfilesView() {
-  document.getElementById('serverSetup').style.display = 'none';
-  document.getElementById('profilesView').style.display = 'flex';
-  document.getElementById('serverBtnIp').textContent = serverUrl || '�';
-  const pingIcon = document.getElementById('serverPingIcon');
-  document.getElementById('serverBtn').classList.toggle('connected',
-    pingIcon && pingIcon.classList.contains('ok'));
-  screen = 'profiles';
-  focusZone = 1;
+  document.getElementById('serverSetup').style.display  = 'none';
+  var pv = document.getElementById('profilesView');
+  pv.style.display       = 'flex';
+  pv.style.flexDirection = 'column';
+  pv.style.alignItems    = 'center';
+  pv.style.gap           = 'clamp(16px,3.5vh,40px)';
+  pv.style.width         = '100%';
+  pv.style.position      = 'relative';
+  pv.style.zIndex        = '1';
+  document.getElementById('serverBtnIp').textContent = serverUrl || '—';
+  currentScreen = 'profiles';
+  focusZone     = 1;
   renderProfiles();
 }
 
 function renderProfiles() {
-  const grid = document.getElementById('profilesGrid');
+  var grid = document.getElementById('profilesGrid');
   grid.innerHTML = '';
 
-  profiles.forEach((p, i) => {
-    const zone = i + 1;
-    const card = document.createElement('div');
+  profiles.forEach(function(p, i) {
+    var zone = i + 1;
+    var card = document.createElement('div');
     card.className = 'profile-card' + (focusZone === zone ? ' active' : ' inactive');
     card.id = 'pcard-' + i;
+    var avatarSrc = p.avatarData || '';
     card.innerHTML =
-      '<div class="avatar-wrap"><img src="' + (p.avatarData || BUILTIN_AVATAR) +
-      '" alt="' + escHtml(p.name) + '" onerror="this.src=\'' + BUILTIN_AVATAR + '\'"></div>' +
+      '<div class="avatar-wrap"><img src="' + escHtml(avatarSrc) +
+      '" alt="' + escHtml(p.name) + '" onerror="this.style.display=\'none\'"></div>' +
       '<span class="profile-name">' + escHtml(p.name) + '</span>';
-    card.addEventListener('click', () => { focusZone = zone; renderProfiles(); });
-    card.addEventListener('dblclick', () => { focusZone = zone; confirmProfile(); });
+    card.addEventListener('click',    function() { focusZone = zone; renderProfiles(); });
+    card.addEventListener('dblclick', function() { focusZone = zone; confirmProfile(); });
     grid.appendChild(card);
   });
 
-  const addZone = profiles.length + 1;
-  const addCard = document.createElement('div');
+  var addZone = profiles.length + 1;
+  var addCard = document.createElement('div');
   addCard.className = 'profile-card profile-add' + (focusZone === addZone ? ' active' : ' inactive');
   addCard.id = 'pcard-add';
   addCard.innerHTML =
     '<div class="avatar-wrap"><div class="avatar-placeholder"><span class="plus-icon">+</span></div></div>' +
     '<span class="profile-name">Ajouter</span>';
-  addCard.addEventListener('click', () => { focusZone = addZone; renderProfiles(); });
-  addCard.addEventListener('dblclick', () => { focusZone = addZone; confirmProfile(); });
+  addCard.addEventListener('click',    function() { focusZone = addZone; renderProfiles(); });
+  addCard.addEventListener('dblclick', function() { focusZone = addZone; confirmProfile(); });
   grid.appendChild(addCard);
 
-  const serverZone = profiles.length + 2;
+  var serverZone = profiles.length + 2;
   document.getElementById('serverBtn').classList.toggle('active', focusZone === serverZone);
-  document.getElementById('backBtn').classList.toggle('active', focusZone === 0);
+  document.getElementById('backBtn').classList.toggle('active',   focusZone === 0);
 }
 
 function confirmProfile() {
-  const addZone = profiles.length + 1;
-  const serverZone = profiles.length + 2;
-  if (focusZone === 0) { goBack(); return; }
+  var addZone    = profiles.length + 1;
+  var serverZone = profiles.length + 2;
+  if (focusZone === 0)          { goBack(); return; }
   if (focusZone === serverZone) { openServerSetup(); return; }
-  if (focusZone === addZone) { openEditor(null); return; }
-  const profile = profiles[focusZone - 1];
-  const card = document.getElementById('pcard-' + (focusZone - 1));
+  if (focusZone === addZone)    { openEditor(null); return; }
+  var profile = profiles[focusZone - 1];
+  var card    = document.getElementById('pcard-' + (focusZone - 1));
   if (card) card.classList.add('pressing');
-  setTimeout(() => {
+  setTimeout(function() {
     if (card) card.classList.remove('pressing');
     launchProfile(profile);
   }, 350);
 }
 
-function openServerSetup() {
-  showServerSetup();
-  screen = 'server';
+function goBack() {
+  if (window.xeLauncher) window.xeLauncher.goBack();
+  else window.history.back();
 }
 
 function launchProfile(profile) {
-  if (!window.xeLauncher) { toast.show('xeLauncher non disponible', true); return; }
-  document.getElementById('loadingText').textContent = 'Connexion en cours�';
+  if (!window.xeLauncher) { showToast('xeLauncher non disponible', true); return; }
+  document.getElementById('loadingText').textContent = 'Connexion en cours…';
   document.getElementById('loadingOverlay').classList.add('visible');
 
   window.xeLauncher.jellyfinAuthenticate(serverUrl, profile.username, profile.password)
-    .then(result => {
+    .then(function(result) {
       document.getElementById('loadingOverlay').classList.remove('visible');
       if (!result.ok || !result.accessToken) {
-        toast.show('Erreur : ' + (result.error || 'Identifiants incorrects'), true);
+        showToast('Erreur : ' + (result.error || 'Identifiants incorrects'), true);
         return;
       }
-      toast.show('Bienvenue ' + profile.name + ' !', false);
-      console.log('Token re�u:', result.accessToken.substring(0, 20) + '...');
-      console.log('UserId:', result.userId);
-      console.log('Server:', serverUrl);
-      
-      setTimeout(() => {
-        window.xeLauncher.launchJellyfinWithToken(serverUrl, result.accessToken, result.userId);
+      showToast('Bienvenue ' + profile.name + ' !', false);
+      setTimeout(function() {
+        window.xeLauncher.launchJellyfinWithToken(serverUrl, result.accessToken, result.userId, result.serverId);
       }, 800);
     })
-    .catch(e => {
+    .catch(function() {
       document.getElementById('loadingOverlay').classList.remove('visible');
-      console.error('Erreur authentification:', e);
-      toast.show('Erreur r�seau', true);
+      showToast('Erreur réseau', true);
     });
 }
 
-function goBack() {
-  if (window.xeLauncher) window.xeLauncher.goBack();
-  else window.location.href = 'menu.html';
-}
-
-let editingProfile = null;
-let editorFocusIdx = 0;
-let editorBtnIdx = 0;
-const EDITOR_FIELDS = ['eName','eUser','ePass'];
-const EDITOR_BTNS_IDS = ['eBtnAvatar','eBtnSave','eBtnDelete','eBtnCancel'];
-let editorBtnsVisible = [];
-
+/* ══════════════════════════════════════════════════════════════════════
+   ÉDITEUR
+══════════════════════════════════════════════════════════════════════ */
 function openEditor(profile) {
-  editingProfile = profile ? JSON.parse(JSON.stringify(profile)) : {
-    id: 'p_' + Date.now(), name: '', username: '', password: '', avatarData: null
-  };
-  document.getElementById('editorTitle').textContent = profile ? 'Modifier � ' + profile.name : 'Nouveau profil';
-  document.getElementById('eName').textContent = editingProfile.name;
-  document.getElementById('eUser').textContent = editingProfile.username;
-  document.getElementById('ePass').textContent = editingProfile.password ? '��������' : '';
-  document.getElementById('editorAvatarPreview').src = editingProfile.avatarData || BUILTIN_AVATAR;
-  document.getElementById('eBtnDelete').style.display = profile ? '' : 'none';
+  editingProfile = profile
+    ? JSON.parse(JSON.stringify(profile))
+    : { id: 'p_' + Date.now(), name: '', username: '', password: '', avatarData: null };
+
+  document.getElementById('editorTitle').textContent       = profile ? 'Modifier — ' + profile.name : 'Nouveau profil';
+  document.getElementById('eName').textContent             = editingProfile.name;
+  document.getElementById('eUser').textContent             = editingProfile.username;
+  document.getElementById('ePass').textContent             = editingProfile.password ? '••••••••' : '';
+  document.getElementById('editorAvatarPreview').src       = editingProfile.avatarData || '';
+  document.getElementById('eBtnDelete').style.display      = profile ? '' : 'none';
+
   editorBtnsVisible = profile
-    ? ['eBtnAvatar','eBtnSave','eBtnDelete','eBtnCancel']
-    : ['eBtnAvatar','eBtnSave','eBtnCancel'];
-  editorFocusIdx = 0; editorBtnIdx = 0;
+    ? ['eBtnAvatar', 'eBtnSave', 'eBtnDelete', 'eBtnCancel']
+    : ['eBtnAvatar', 'eBtnSave', 'eBtnCancel'];
+  editorFocusIdx = 0;
+  editorBtnIdx   = 0;
   updateEditorFocus();
   document.getElementById('editorOverlay').classList.add('visible');
-  screen = 'editor';
+  currentScreen = 'editor';
 }
 
 function closeEditor() {
   document.getElementById('editorOverlay').classList.remove('visible');
-  screen = 'profiles';
+  currentScreen = 'profiles';
 }
 
 function updateEditorFocus() {
-  EDITOR_FIELDS.forEach((id, i) => {
+  EDITOR_FIELDS.forEach(function(id, i) {
     document.getElementById(id).classList.toggle('active', editorFocusIdx === i);
   });
-  editorBtnsVisible.forEach((id, i) => {
+  editorBtnsVisible.forEach(function(id, i) {
     document.getElementById(id).classList.toggle('active', editorFocusIdx === 3 && editorBtnIdx === i);
   });
 }
 
 function editorConfirm() {
-  const FIELDS = ['name','username','password'];
-  const LABELS = ['Nom affich�','Utilisateur Jellyfin','Mot de passe'];
+  var LABELS = ['Nom affiché', 'Utilisateur Jellyfin', 'Mot de passe'];
+  var KEYS   = ['name', 'username', 'password'];
   if (editorFocusIdx < 3) {
-    const key = FIELDS[editorFocusIdx];
-    const current = editingProfile[key] || '';
-    openKb(LABELS[editorFocusIdx], current, (val) => {
+    var key = KEYS[editorFocusIdx];
+    var cur = editingProfile[key] || '';
+    openKb(LABELS[editorFocusIdx], cur, function(val) {
       editingProfile[key] = val;
-      const elId = EDITOR_FIELDS[editorFocusIdx];
-      document.getElementById(elId).textContent = editorFocusIdx === 2 ? '��������' : val;
-      screen = 'editor';
-    });
+      var elId = EDITOR_FIELDS[editorFocusIdx];
+      document.getElementById(elId).textContent = editorFocusIdx === 2 ? '••••••••' : val;
+      currentScreen = 'editor';
+    }, 'normal');
   } else {
-    const btnId = editorBtnsVisible[editorBtnIdx];
-    if (btnId === 'eBtnAvatar') openAvatarPicker();
-    else if (btnId === 'eBtnSave') saveEditor();
+    var btnId = editorBtnsVisible[editorBtnIdx];
+    if      (btnId === 'eBtnAvatar') openAvatarPicker();
+    else if (btnId === 'eBtnSave')   saveEditor();
     else if (btnId === 'eBtnDelete') deleteEditor();
-    else closeEditor();
+    else                             closeEditor();
   }
 }
 
-async function saveEditor() {
+function saveEditor() {
   if (!editingProfile.name || !editingProfile.username) {
-    toast.show('Nom et utilisateur requis', true); return;
+    showToast('Nom et utilisateur requis', true); return;
   }
   if (!window.xeLauncher) { closeEditor(); return; }
-  
-  try {
-    await window.xeLauncher.saveProfile(editingProfile);
+  window.xeLauncher.saveProfile(editingProfile).then(function() {
     closeEditor();
-    const data = await window.xeLauncher.getProfiles();
-    profiles = data.profiles || [];
-    serverUrl = data.server || serverUrl;
+    return window.xeLauncher.getProfiles();
+  }).then(function(data) {
+    profiles  = data.profiles || [];
+    serverUrl = data.server   || serverUrl;
     renderProfiles();
-    toast.show('Profil sauvegard�', false);
-  } catch(e) {
-    toast.show('Erreur sauvegarde', true);
-  }
+    showToast('Profil sauvegardé', false);
+  }).catch(function() { showToast('Erreur sauvegarde', true); });
 }
 
-async function deleteEditor() {
+function deleteEditor() {
   if (!editingProfile.id || !window.xeLauncher) return;
-  try {
-    await window.xeLauncher.deleteProfile(editingProfile.id);
+  window.xeLauncher.deleteProfile(editingProfile.id).then(function() {
     closeEditor();
-    const data = await window.xeLauncher.getProfiles();
+    return window.xeLauncher.getProfiles();
+  }).then(function(data) {
     profiles = data.profiles || [];
     renderProfiles();
-    toast.show('Profil supprim�', false);
-  } catch(e) {
-    toast.show('Erreur suppression', true);
-  }
+    showToast('Profil supprimé', false);
+  }).catch(function() { showToast('Erreur suppression', true); });
 }
 
-let avatarList = [];
-let avatarFocusIdx = 0;
-const AVATAR_COLS = () => Math.max(3, Math.floor(window.innerWidth * 0.7 / 120));
-
-async function openAvatarPicker() {
+/* ══════════════════════════════════════════════════════════════════════
+   AVATAR PICKER
+══════════════════════════════════════════════════════════════════════ */
+function openAvatarPicker() {
   if (!window.xeLauncher) return;
-  try {
-    const files = await window.xeLauncher.getAvatars();
-    avatarList = files || [];
+  window.xeLauncher.getAvatars().then(function(files) {
+    avatarList     = files || [];
     avatarFocusIdx = 0;
-    await renderAvatarGrid();
+    return renderAvatarGrid();
+  }).then(function() {
     document.getElementById('avatarPicker').classList.add('visible');
-    screen = 'avatar';
-  } catch(e) {
-    toast.show('Erreur chargement avatars', true);
-  }
+    currentScreen = 'avatar';
+  }).catch(function() { showToast('Erreur chargement avatars', true); });
 }
 
-async function renderAvatarGrid() {
-  const grid = document.getElementById('avatarGrid');
+function renderAvatarGrid() {
+  var grid = document.getElementById('avatarGrid');
   grid.innerHTML = '';
   if (!avatarList.length) {
     grid.innerHTML = '<div class="avatar-empty">Aucun avatar dans ~/xelauncher/avatars/</div>';
-    return;
+    return Promise.resolve();
   }
-  
-  for (let i = 0; i < avatarList.length; i++) {
-    const file = avatarList[i];
-    const data = await loadAvatarWithCache(file);
-    if (!data) continue;
-    
-    const img = document.createElement('img');
-    img.className = 'avatar-thumb' + (i === avatarFocusIdx ? ' active' : '');
-    img.src = data;
-    img.dataset.idx = i;
-    img.dataset.src = data;
-    img.addEventListener('click', () => selectAvatar(data));
-    grid.appendChild(img);
-  }
+  var promises = avatarList.map(function(file, i) {
+    return window.xeLauncher.getAvatarData(file).then(function(data) {
+      if (!data) return;
+      var img = document.createElement('img');
+      img.className  = 'avatar-thumb' + (i === avatarFocusIdx ? ' active' : '');
+      img.src        = data;
+      img.dataset.idx = i;
+      img.dataset.src = data;
+      img.addEventListener('click', function() { selectAvatar(data); });
+      grid.appendChild(img);
+    });
+  });
+  return Promise.all(promises);
 }
 
 function updateAvatarFocus() {
-  document.querySelectorAll('.avatar-thumb').forEach((el, i) => {
+  document.querySelectorAll('.avatar-thumb').forEach(function(el, i) {
     el.classList.toggle('active', i === avatarFocusIdx);
   });
 }
@@ -489,199 +523,73 @@ function selectAvatar(data) {
   if (editingProfile) editingProfile.avatarData = data;
   document.getElementById('editorAvatarPreview').src = data;
   document.getElementById('avatarPicker').classList.remove('visible');
-  screen = 'editor';
+  currentScreen = 'editor';
 }
 
-let mapperActive = false, mapperDeviceId = '', mapperCurrentIdx = 0;
-let mapperResult = {}, mapperWaiting = false;
+/* ══════════════════════════════════════════════════════════════════════
+   NAVIGATION CLAVIER / MANETTE
+══════════════════════════════════════════════════════════════════════ */
+function handleKey(key) {
 
-function openMapperUI(deviceId) {
-  mapperDeviceId = deviceId; mapperCurrentIdx = 0;
-  mapperResult = {}; mapperActive = true; mapperWaiting = false;
-  const el = document.getElementById('mapperOverlay');
-  el.innerHTML = '';
-  el.className = 'mapper-overlay visible';
-
-  screen = 'mapper';
-
-  const title = document.createElement('div');
-  title.className = 'mapper-title';
-  title.textContent = 'Nouveau p�riph�rique';
-  el.appendChild(title);
-
-  const dev = document.createElement('div');
-  dev.className = 'mapper-device';
-  dev.textContent = deviceId.substring(0, 55);
-  el.appendChild(dev);
-
-  const act = document.createElement('div');
-  act.className = 'mapper-actions';
-  act.id = 'mapperAct';
-  el.appendChild(act);
-
-  const grid = document.createElement('div');
-  grid.className = 'mapper-grid';
-  grid.id = 'mapperGrid2';
-  el.appendChild(grid);
-
-  const skip = document.createElement('button');
-  skip.className = 'btn';
-  skip.style.marginTop = '12px';
-  skip.textContent = 'Passer (d�fauts)';
-  skip.addEventListener('click', () => {
-    mapper.save(deviceId, mapper.getDefault());
-    closeMapperUI();
-  });
-  el.appendChild(skip);
-
-  renderMapperUI();
-  nextMapperStep();
-}
-
-function renderMapperUI() {
-  const grid = document.getElementById('mapperGrid2');
-  if (!grid) return;
-  grid.innerHTML = '';
-  XeInput.ACTION_KEYS.forEach((a, i) => {
-    const item = document.createElement('div');
-    item.className = 'mapper-btn' +
-      (mapperResult[a.id] ? ' assigned' : '') +
-      (i === mapperCurrentIdx && mapperWaiting ? ' current-target' : '');
-    const lbl = document.createElement('span');
-    lbl.textContent = a.label;
-    item.appendChild(lbl);
-    if (mapperResult[a.id]) {
-      const kn = document.createElement('span');
-      kn.className = 'mapper-key-name';
-      kn.textContent = mapperResult[a.id];
-      item.appendChild(kn);
-    }
-    grid.appendChild(item);
-  });
-}
-
-function nextMapperStep() {
-  if (mapperCurrentIdx >= XeInput.ACTION_KEYS.length) {
-    mapper.save(mapperDeviceId, mapperResult);
-    closeMapperUI();
-    toast.show('Mappage enregistr� !', false);
-    return;
-  }
-  mapperWaiting = true;
-  const act = document.getElementById('mapperAct');
-  if (act) act.textContent = 'Appuyez pour : ' + XeInput.ACTION_KEYS[mapperCurrentIdx].label;
-  renderMapperUI();
-}
-
-function closeMapperUI() {
-  mapperActive = false; mapperWaiting = false;
-  document.getElementById('mapperOverlay').classList.remove('visible');
-  document.getElementById('mapperOverlay').innerHTML = '';
-  screen = getPrevScreen();
-}
-
-function escHtml(s) {
-  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-let inputReady = false;
-
-document.addEventListener('keydown', (e) => {
-  if (!inputReady) return;
-  XeInput.requestWakeLock();
-  onKey(e.key, '__keyboard__');
-});
-
-function onKey(raw, deviceId) {
-  if (!inputReady) return;
-
-  if (mapperActive && mapperWaiting) {
-    mapperResult[XeInput.ACTION_KEYS[mapperCurrentIdx].id] = raw;
-    mapperCurrentIdx++;
-    mapperWaiting = false;
-    setTimeout(nextMapperStep, 200);
-    renderMapperUI();
+  /* Clavier virtuel — délégué à l'instance XeInput.VirtualKeyboard */
+  if (currentScreen === 'kb') {
+    if (_kb && _kb.handleKey(key)) return;
+    if (key === 'Escape') closeKb();
     return;
   }
 
-  const key = (deviceId && deviceId !== '__keyboard__')
-    ? mapper.resolveKey(deviceId, raw)
-    : raw;
-  if (!key) return;
-
-  if (screen === 'kb') { kb.handleKey(key); return; }
-
-  if (screen === 'avatar') {
-    const thumbs = document.querySelectorAll('.avatar-thumb');
-    const cols = AVATAR_COLS();
-    if (key === 'ArrowLeft')  { avatarFocusIdx = Math.max(0, avatarFocusIdx - 1); updateAvatarFocus(); }
+  /* Sélecteur avatar */
+  if (currentScreen === 'avatar') {
+    var thumbs = document.querySelectorAll('.avatar-thumb');
+    var cols   = Math.max(3, Math.floor(window.innerWidth * 0.7 / 120));
+    if      (key === 'ArrowLeft')  { avatarFocusIdx = Math.max(0, avatarFocusIdx - 1);           updateAvatarFocus(); }
     else if (key === 'ArrowRight') { avatarFocusIdx = Math.min(thumbs.length - 1, avatarFocusIdx + 1); updateAvatarFocus(); }
-    else if (key === 'ArrowUp')  { avatarFocusIdx = Math.max(0, avatarFocusIdx - cols); updateAvatarFocus(); }
-    else if (key === 'ArrowDown') { avatarFocusIdx = Math.min(thumbs.length - 1, avatarFocusIdx + cols); updateAvatarFocus(); }
-    else if (key === 'Enter') {
-      const t = thumbs[avatarFocusIdx];
-      if (t) selectAvatar(t.dataset.src);
-    }
-    else if (key === 'Escape') {
-      document.getElementById('avatarPicker').classList.remove('visible');
-      screen = 'editor';
-    }
+    else if (key === 'ArrowUp')    { avatarFocusIdx = Math.max(0, avatarFocusIdx - cols);          updateAvatarFocus(); }
+    else if (key === 'ArrowDown')  { avatarFocusIdx = Math.min(thumbs.length - 1, avatarFocusIdx + cols); updateAvatarFocus(); }
+    else if (key === 'Enter')  { var t = thumbs[avatarFocusIdx]; if (t) selectAvatar(t.dataset.src); }
+    else if (key === 'Escape') { document.getElementById('avatarPicker').classList.remove('visible'); currentScreen = 'editor'; }
     return;
   }
 
-  if (screen === 'editor') {
-    const maxBtn = editorBtnsVisible.length - 1;
-    if (key === 'ArrowUp') { if (editorFocusIdx > 0) { editorFocusIdx--; updateEditorFocus(); } }
-    else if (key === 'ArrowDown') { if (editorFocusIdx < 3) { editorFocusIdx++; updateEditorFocus(); } }
-    else if (key === 'ArrowLeft') { if (editorFocusIdx === 3) { editorBtnIdx = Math.max(0, editorBtnIdx - 1); updateEditorFocus(); } }
+  /* Éditeur */
+  if (currentScreen === 'editor') {
+    var maxBtn = editorBtnsVisible.length - 1;
+    if      (key === 'ArrowUp')    { if (editorFocusIdx > 0) { editorFocusIdx--; updateEditorFocus(); } }
+    else if (key === 'ArrowDown')  { if (editorFocusIdx < 3) { editorFocusIdx++; updateEditorFocus(); } }
+    else if (key === 'ArrowLeft')  { if (editorFocusIdx === 3) { editorBtnIdx = Math.max(0, editorBtnIdx - 1); updateEditorFocus(); } }
     else if (key === 'ArrowRight') { if (editorFocusIdx === 3) { editorBtnIdx = Math.min(maxBtn, editorBtnIdx + 1); updateEditorFocus(); } }
-    else if (key === 'Enter') editorConfirm();
+    else if (key === 'Enter')  editorConfirm();
     else if (key === 'Escape') closeEditor();
     return;
   }
 
-  if (screen === 'server') {
+  /* Saisie serveur */
+  if (currentScreen === 'server') {
     if (key === 'Enter') {
-      if (serverEditValue) {
-        confirmServer();
-      } else {
-        openKb('Adresse du serveur (ex: http://192.168.1.100:8096)', serverEditValue, (val) => {
-          serverEditValue = val;
-          updateServerDisplay();
-          screen = 'server';
-        });
-      }
-    }
-    else if (key === 'Escape') goBack();
+      openKb('Adresse du serveur (ex: 192.168.1.100:8096)', serverEditValue, function(val) {
+        serverEditValue = val;
+        updateServerDisplay();
+        currentScreen = 'server';
+        if (serverEditValue) confirmServer();
+      }, 'url');
+    } else if (key === 'Escape') goBack();
     return;
   }
 
-  if (screen === 'profiles') {
-    const total = profiles.length + 2;
-    if (key === 'ArrowLeft') {
-      if (focusZone > 0) { focusZone--; renderProfiles(); }
-      else { focusZone = total; renderProfiles(); }
-    }
-    else if (key === 'ArrowRight') {
-      if (focusZone < total) { focusZone++; renderProfiles(); }
-      else { focusZone = 0; renderProfiles(); }
-    }
-    else if (key === 'ArrowUp') { focusZone = 0; renderProfiles(); }
-    else if (key === 'ArrowDown') { if (focusZone === 0) { focusZone = 1; renderProfiles(); } }
-    else if (key === 'Enter') confirmProfile();
-    else if (key === 'Triangle') {
-      if (focusZone > 0 && focusZone <= profiles.length) openEditor(profiles[focusZone - 1]);
-    }
-    else if (key === 'Escape') goBack();
+  /* Grille des profils */
+  if (currentScreen === 'profiles') {
+    var total = profiles.length + 2; // 0=back, 1..N=profils, N+1=add, N+2=server
+    if      (key === 'ArrowLeft')  { focusZone = focusZone > 0     ? focusZone - 1 : total; renderProfiles(); }
+    else if (key === 'ArrowRight') { focusZone = focusZone < total ? focusZone + 1 : 0;     renderProfiles(); }
+    else if (key === 'ArrowUp')    { focusZone = 0; renderProfiles(); }
+    else if (key === 'ArrowDown')  { if (focusZone === 0) { focusZone = 1; renderProfiles(); } }
+    else if (key === 'Enter')    confirmProfile();
+    else if (key === 'Triangle') { if (focusZone > 0 && focusZone <= profiles.length) openEditor(profiles[focusZone - 1]); }
+    else if (key === 'Escape')   goBack();
+    return;
   }
 }
-
-gpPoller.onKey = (raw) => {
-  const gps = navigator.getGamepads ? navigator.getGamepads() : [];
-  let deviceId = '__gamepad__';
-  for (let i = 0; i < gps.length; i++) { if (gps[i]) { deviceId = gps[i].id; break; } }
-  onKey(raw, deviceId);
-};
 </script>
+
 </body>
 </html>

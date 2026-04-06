@@ -1,212 +1,454 @@
 /**
- * XeLauncher — Unified Input Manager
- * Maps ALL hardware inputs (gamepad, keyboard, remote, wiimote) to keyboard events.
+ * XeLauncher - Unified Input Manager
+ * Layouts: QWERTY / AZERTY (switch via settings)
+ * Types de clavier: 'normal' (noms/mdp) | 'url' (adresses serveur)
  */
 
 ;(function(root) {
   'use strict';
 
-  /* -- Keyboard layout --------------------------------------------------- */
-  const KB_LAYOUTS = {
+  /* ================================================================
+   * VARIANTES ACCENTUEES
+   * ================================================================ */
+  const ACCENTS = {
+    'a': ['\u00e0','\u00e2','\u00e4','\u00e1','\u00e3','\u00e5','\u00e6'],
+    'e': ['\u00e9','\u00e8','\u00ea','\u00eb','\u011b','\u0119'],
+    'i': ['\u00ee','\u00ef','\u00ed','\u00ec','\u0129'],
+    'o': ['\u00f4','\u00f6','\u00f3','\u00f2','\u00f5','\u00f8','\u0153'],
+    'u': ['\u00f9','\u00fb','\u00fc','\u00fa','\u0169'],
+    'c': ['\u00e7','\u0107','\u010d'],
+    'n': ['\u00f1','\u0144'],
+    'y': ['\u00ff','\u00fd'],
+    's': ['\u0161','\u015b'],
+    'z': ['\u017e','\u017a','\u017c'],
+  };
+
+  /* ================================================================
+   * LAYOUTS
+   * ================================================================ */
+
+  // QWERTY
+  const QWERTY = {
+    letters: [
+      ['q','w','e','r','t','y','u','i','o','p'],
+      ['a','s','d','f','g','h','j','k','l',null],
+      [null,'z','x','c','v','b','n','m',null,null],
+    ],
+    nums: [
+      ['7','8','9',null,null,null,null,null,null,null],
+      ['4','5','6',null,null,null,null,null,null,null],
+      ['1','2','3',null,null,null,null,null,null,null],
+      ['0','.',':',null,null,null,null,null,null,null],
+    ],
+    specials: [
+      ['!','?','.',',',';',':','\'','"','(',')'],
+      ['-','_','&','~','#','{','[','|','`','\\'],
+      [null,'^','@',']','}','=','/','+',' ',null],
+    ],
+  };
+
+  // AZERTY
+  const AZERTY = {
     letters: [
       ['a','z','e','r','t','y','u','i','o','p'],
       ['q','s','d','f','g','h','j','k','l','m'],
-      [null,'w','x','c','v','b','n',',','.',null]
+      [null,'w','x','c','v','b','n',null,null,null],
     ],
     nums: [
-      ['1','2','3','4','5','6','7','8','9','0'],
-      ['!','@','#','$','%','^','&','*','(',')'],
-      [null,'-','_','=','+','[',']','{','}',null]
-    ]
+      ['7','8','9',null,null,null,null,null,null,null],
+      ['4','5','6',null,null,null,null,null,null,null],
+      ['1','2','3',null,null,null,null,null,null,null],
+      ['0','.',':',null,null,null,null,null,null,null],
+    ],
+    specials: [
+      ['!','?','.',',',';',':','\'','"','(',')'],
+      ['-','_','&','~','#','{','[','|','`','\\'],
+      [null,'^','@',']','}','=','/','+',' ',null],
+    ],
   };
-  const KB_BOTTOM = [
-    {label:'MAJ',col:0,span:2},
-    {label:'ESPACE',col:2,span:4},
-    {label:'?',col:6,span:2},
-    {label:'OK',col:8,span:2}
+
+  // Partie numerique et specials URL (commune aux deux layouts)
+  const URL_NUMS = [
+    ['7','8','9',null,null,null,null,null,null,null],
+    ['4','5','6',null,null,null,null,null,null,null],
+    ['1','2','3',null,null,null,null,null,null,null],
+    ['0','.',':',null,null,null,null,null,null,null],
   ];
+  const URL_SPECIALS = [
+    ['-','_','~','.','/','?','#','[',']','@'],
+    ['!','$','&','\'','(',')','*','+',',',';'],
+    [null,'=','%',null,null,null,null,null,null,null],
+  ];
+
+  // Barres du bas
+  const BOTTOM_NORMAL = [
+    { label:'MAJ',    col:0, span:2, action:'shift' },
+    { label:'ESPACE', col:2, span:4, action:'space' },
+    { label:'\u232b', col:6, span:2, action:'back'  },
+    { label:'OK',     col:8, span:2, action:'ok'    },
+  ];
+  const BOTTOM_URL = [
+    { label:'\u232b', col:0, span:4, action:'back' },
+    { label:'OK',     col:6, span:4, action:'ok'   },
+  ];
+
+  const MODES_NORMAL  = ['letters','nums','specials'];
+  const LABELS_NORMAL = ['A-Z','0-9','!@#'];
+  const MODES_URL     = ['letters','nums','specials'];
+  const LABELS_URL    = ['a-z','0-9',':/'];
+
   const KB_COLS = 10;
 
-  /* -- Virtual Keyboard --------------------------------------------------- */
-  function VirtualKeyboard(containerEl, displayEl, modesEl) {
+  /* -- Preference layout ----------------------------------------- */
+  function getLayoutPref() {
+    try { return localStorage.getItem('xelauncher_kb_layout') || 'azerty'; }
+    catch(e) { return 'azerty'; }
+  }
+  function setLayoutPref(v) {
+    try { localStorage.setItem('xelauncher_kb_layout', v); } catch(e) {}
+  }
+
+  /* ================================================================
+   * VirtualKeyboard
+   * ================================================================ */
+  function VirtualKeyboard(containerEl, displayEl, modesEl, type) {
     this.container = containerEl;
-    this.display = displayEl;
-    this.modes = modesEl;
-    this.mode = 'letters';
-    this.caps = false;
-    this.section = 'kb';
+    this.display   = displayEl;
+    this.modes     = modesEl;
+    this.type      = (type === 'url') ? 'url' : 'normal';
+
+    this.mode    = 'letters';
+    this.caps    = false;
+    this._capsLastPress = 0;
+    this.section  = 'kb';
     this.topFocus = 0;
     this.row = 0;
     this.col = 0;
     this.value = '';
     this.onConfirm = null;
-    this.onCancel = null;
+    this.onCancel  = null;
+
+    this._accentKey       = null;
+    this._accentIndex     = -1;
+    this._accentTargetBtn = null;
     this._renderScheduled = false;
     this._render();
   }
 
+  /* -- Helpers --------------------------------------------------- */
+  VirtualKeyboard.prototype._getLayouts = function() {
+    var base = getLayoutPref() === 'qwerty' ? QWERTY : AZERTY;
+    if (this.type === 'url') {
+      return { letters: base.letters, nums: URL_NUMS, specials: URL_SPECIALS };
+    }
+    return base;
+  };
+  VirtualKeyboard.prototype._getModeNames  = function() { return this.type === 'url' ? MODES_URL    : MODES_NORMAL;  };
+  VirtualKeyboard.prototype._getModeLabels = function() { return this.type === 'url' ? LABELS_URL   : LABELS_NORMAL; };
+  VirtualKeyboard.prototype._getBottom     = function() { return this.type === 'url' ? BOTTOM_URL   : BOTTOM_NORMAL; };
+
+  VirtualKeyboard.prototype._rows = function() {
+    var layouts = this._getLayouts();
+    var raw = layouts[this.mode];
+    return raw ? raw.filter(function(r) { return r !== null; }) : [];
+  };
+
   VirtualKeyboard.prototype._nearestCol = function(ri, col) {
-    const layout = KB_LAYOUTS[this.mode];
-    if (ri === layout.length) {
-      let best = 0, bestD = 999;
-      KB_BOTTOM.forEach(b => {
-        const mid = b.col + Math.floor(b.span / 2);
-        const d = Math.abs(mid - col);
+    var rows   = this._rows();
+    var bottom = this._getBottom();
+    if (ri === rows.length) {
+      var best = bottom[0].col, bestD = 999;
+      bottom.forEach(function(b) {
+        var mid = b.col + Math.floor(b.span / 2);
+        var d   = Math.abs(mid - col);
         if (d < bestD) { bestD = d; best = b.col; }
       });
       return best;
     }
-    const row = layout[ri];
+    var row = rows[ri];
     if (row[col] !== null) return col;
-    let best = col, bestD = 999;
-    for (let c = 0; c < KB_COLS; c++) {
+    var bestC = col, bestDC = 999;
+    for (var c = 0; c < KB_COLS; c++) {
       if (row[c] !== null) {
-        const d = Math.abs(c - col);
-        if (d < bestD) { bestD = d; best = c; }
+        var dc = Math.abs(c - col);
+        if (dc < bestDC) { bestDC = dc; bestC = c; }
       }
     }
-    return best;
+    return bestC;
   };
 
+  /* -- Rendu ----------------------------------------------------- */
   VirtualKeyboard.prototype._doRender = function() {
     if (!this.container) return;
-    const layout = KB_LAYOUTS[this.mode];
+    var self       = this;
+    var rows       = this._rows();
+    var bottom     = this._getBottom();
+    var modeNames  = this._getModeNames();
+    var modeLabels = this._getModeLabels();
     this.container.innerHTML = '';
+    this._accentTargetBtn = null;
 
-    layout.forEach((row, ri) => {
-      const rowEl = document.createElement('div');
+    rows.forEach(function(row, ri) {
+      var rowEl = document.createElement('div');
       rowEl.className = 'kb-row';
-      row.forEach((key, ci) => {
-        const btn = document.createElement('div');
-        const isActive = this.section === 'kb' && this.row === ri && this.col === ci;
-        btn.className = 'kb-key' +
-          (key === null ? ' invisible' : '') +
-          (isActive ? ' kbactive' : '');
-        if (key !== null) btn.textContent = (this.caps && key.length === 1) ? key.toUpperCase() : key;
+      row.forEach(function(key, ci) {
+        var btn      = document.createElement('div');
+        var isActive  = self.section === 'kb' && self.row === ri && self.col === ci;
+        var hasAccent = self.type === 'normal' && self.mode === 'letters' && key && ACCENTS[key];
+        var displayKey = key;
+        if (key && self.type === 'normal' && self.mode === 'letters') {
+          displayKey = (self.caps === true || self.caps === 'once') ? key.toUpperCase() : key;
+        }
+        btn.className = 'kb-key'
+          + (key === null  ? ' invisible'  : '')
+          + (isActive      ? ' kbactive'   : '')
+          + (hasAccent     ? ' has-accent' : '');
+        if (key !== null) btn.textContent = displayKey;
+
+        if (isActive && self.section === 'accent' && self._accentKey === key) {
+          self._accentTargetBtn = btn;
+        }
         if (key !== null) {
-          btn.addEventListener('click', () => { this.section='kb'; this.row=ri; this.col=ci; this._pressKey(); });
+          btn.addEventListener('click', function() {
+            self.section = 'kb'; self.row = ri; self.col = ci;
+            self._pressKey();
+          });
         }
         rowEl.appendChild(btn);
       });
-      this.container.appendChild(rowEl);
+      self.container.appendChild(rowEl);
     });
 
-    const bottomEl = document.createElement('div');
+    // Barre du bas
+    var bottomEl = document.createElement('div');
     bottomEl.className = 'kb-row';
-    const bri = layout.length;
-    KB_BOTTOM.forEach((b, bi) => {
-      const btn = document.createElement('div');
-      const isActive = this.section === 'kb' && this.row === bri && this.col === b.col;
-      btn.className = 'kb-key' +
-        (b.label === 'OK' ? ' confirm' : '') +
-        (b.label === 'MAJ' && this.caps ? ' shift-on' : '') +
-        (isActive ? ' kbactive' : '');
+    var bri = rows.length;
+    bottom.forEach(function(b, bi) {
+      var btn = document.createElement('div');
+      var isActive = self.section === 'kb' && self.row === bri && self.col === b.col;
+      btn.className = 'kb-key'
+        + (b.action === 'ok'    ? ' confirm'   : '')
+        + (b.action === 'shift' && (self.caps === 'once' || self.caps === true) ? ' shift-on'  : '')
+        + (b.action === 'shift' && self.caps === true ? ' caps-lock' : '')
+        + (isActive ? ' kbactive' : '');
       btn.style.gridColumn = (b.col + 1) + '/span ' + b.span;
       btn.textContent = b.label;
-      btn.addEventListener('click', () => {
-        this.section = 'kb'; this.row = bri; this.col = b.col;
-        this._pressBottom(bi);
+      btn.addEventListener('click', function() {
+        self.section = 'kb'; self.row = bri; self.col = b.col;
+        self._pressBottom(bi);
       });
       bottomEl.appendChild(btn);
     });
     this.container.appendChild(bottomEl);
 
+    // Boutons de mode
     if (this.modes) {
-      this.modes.querySelectorAll('.kb-mode-btn').forEach((btn, i) => {
-        btn.className = 'kb-mode-btn' +
-          (i === (this.mode === 'letters' ? 0 : 1) ? ' on' : '') +
-          (this.section === 'top' && this.topFocus === i ? ' kbactive' : '');
+      var activeIdx = modeNames.indexOf(this.mode);
+      this.modes.querySelectorAll('.kb-mode-btn').forEach(function(btn, i) {
+        btn.className = 'kb-mode-btn'
+          + (i === activeIdx ? ' on' : '')
+          + (self.section === 'top' && self.topFocus === i ? ' kbactive' : '');
+        btn.textContent = modeLabels[i];
       });
     }
 
-    if (this.display) {
-      this.display.textContent = this.value + '|';
-    }
+    if (this.display) this.display.textContent = this.value + '|';
+    this._renderAccentMenu();
   };
 
   VirtualKeyboard.prototype._render = function() {
     if (this._renderScheduled) return;
     this._renderScheduled = true;
-    requestAnimationFrame(() => {
-      this._renderScheduled = false;
-      this._doRender();
+    var self = this;
+    requestAnimationFrame(function() { self._renderScheduled = false; self._doRender(); });
+  };
+
+  /* -- Menu accent popup fixe ------------------------------------ */
+  VirtualKeyboard.prototype._renderAccentMenu = function() {
+    var existing = document.getElementById('kb-accent-popup');
+    if (existing) existing.parentNode.removeChild(existing);
+    if (this.section !== 'accent' || !this._accentKey) return;
+
+    var self     = this;
+    var variants = ACCENTS[this._accentKey] || [];
+    if (!variants.length) return;
+
+    var menu = document.createElement('div');
+    menu.id        = 'kb-accent-popup';
+    menu.className = 'kb-accent-menu';
+    menu.style.position = 'fixed';
+    menu.style.zIndex   = '99999';
+
+    variants.forEach(function(v, vi) {
+      var item = document.createElement('div');
+      item.className = 'kb-accent-item'
+        + (self._accentIndex >= 0 && vi === self._accentIndex ? ' kbactive' : '');
+      item.textContent = v;
+      item.addEventListener('click', function() {
+        self.value = self.value.slice(0, -1) + v;
+        if (self.caps === 'once') self.caps = false;
+        self._closeAccent();
+      });
+      menu.appendChild(item);
+    });
+
+    document.body.appendChild(menu);
+
+    requestAnimationFrame(function() {
+      var btn = self._accentTargetBtn;
+      if (!btn || !btn.isConnected) return;
+      var rect  = btn.getBoundingClientRect();
+      var menuW = menu.offsetWidth;
+      var menuH = menu.offsetHeight;
+      var left  = rect.left + rect.width / 2 - menuW / 2;
+      var top   = rect.top - menuH - 10;
+      left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
+      if (top < 8) top = rect.bottom + 10;
+      menu.style.left = left + 'px';
+      menu.style.top  = top  + 'px';
     });
   };
 
+  VirtualKeyboard.prototype._closeAccent = function() {
+    this.section          = 'kb';
+    this._accentKey       = null;
+    this._accentTargetBtn = null;
+    var existing = document.getElementById('kb-accent-popup');
+    if (existing) existing.parentNode.removeChild(existing);
+    this._render();
+  };
+
+  /* -- Actions --------------------------------------------------- */
+  VirtualKeyboard.prototype._insertChar = function(ch) {
+    this.value += ch;
+    if (this.caps === 'once') this.caps = false;
+  };
+
   VirtualKeyboard.prototype._pressKey = function() {
-    const layout = KB_LAYOUTS[this.mode];
-    if (this.row === layout.length) {
-      let bi = 0;
-      KB_BOTTOM.forEach((b, i) => { if (this.col >= b.col && this.col < b.col + b.span) bi = i; });
+    var rows = this._rows();
+    if (this.row === rows.length) {
+      var bi = 0, col = this.col;
+      this._getBottom().forEach(function(b, i) { if (col >= b.col && col < b.col + b.span) bi = i; });
       this._pressBottom(bi);
       return;
     }
-    const key = layout[this.row][this.col];
-    if (key) this.value += this.caps ? key.toUpperCase() : key;
+    var key = rows[this.row][this.col];
+    if (!key) return;
+
+    var ch = key;
+    if (this.type === 'normal' && this.mode === 'letters') {
+      ch = (this.caps === true || this.caps === 'once') ? key.toUpperCase() : key;
+    }
+
+    if (this.type === 'normal' && this.mode === 'letters' && ACCENTS[key]) {
+      if (this.section === 'accent' && this._accentKey === key) {
+        this._closeAccent(); return;
+      }
+      if (this.section === 'accent') this.value = this.value.slice(0, -1);
+      this._insertChar(ch);
+      this.section = 'accent'; this._accentKey = key; this._accentIndex = -1;
+      this._render();
+      return;
+    }
+
+    if (this.section === 'accent') this._closeAccent();
+    this._insertChar(ch);
     this._render();
   };
 
   VirtualKeyboard.prototype._pressBottom = function(bi) {
-    const lbl = KB_BOTTOM[bi].label;
-    if (lbl === 'MAJ') { this.caps = !this.caps; }
-    else if (lbl === 'ESPACE') { this.value += ' '; }
-    else if (lbl === '?') { this.value = this.value.slice(0, -1); }
-    else if (lbl === 'OK') {
-      if (this.onConfirm) this.onConfirm(this.value);
-      return;
+    var b = this._getBottom()[bi];
+    if (!b) return;
+    switch (b.action) {
+      case 'shift':
+        if (this.type === 'normal') {
+          var now = Date.now();
+          if (now - this._capsLastPress < 1000 && this.caps === 'once') { this.caps = true; }
+          else if (this.caps === true) { this.caps = false; }
+          else { this.caps = 'once'; }
+          this._capsLastPress = now;
+        }
+        break;
+      case 'space': this.value += ' '; break;
+      case 'back':  this.value = this.value.slice(0, -1); break;
+      case 'ok':
+        if (this.onConfirm) this.onConfirm(this.value);
+        return;
     }
     this._render();
   };
 
   VirtualKeyboard.prototype.setMode = function(m) {
-    this.mode = m; this.section = 'kb'; this.row = 0; this.col = this._nearestCol(0, 0);
+    this.mode = m; this.section = 'kb'; this._accentKey = null;
+    this.row = 0; this.col = this._nearestCol(0, 0);
     this._render();
   };
 
   VirtualKeyboard.prototype.open = function(initialValue, label) {
-    this.value = initialValue || '';
-    this.caps = false; this.mode = 'letters';
-    this.section = 'kb'; this.row = 0; this.col = 0; this.topFocus = 0;
+    this.value = initialValue || ''; this.caps = false;
+    this.mode = 'letters'; this.section = 'kb'; this._accentKey = null;
+    this.row = 0; this.col = 0; this.topFocus = 0;
     if (label && this.display) {
-      const lbl = this.display.previousElementSibling;
+      var lbl = this.display.previousElementSibling;
       if (lbl && lbl.classList.contains('kb-label')) lbl.textContent = label;
     }
     this._render();
   };
 
+  /* -- Navigation clavier physique / manette --------------------- */
   VirtualKeyboard.prototype.handleKey = function(key) {
-    const layout = KB_LAYOUTS[this.mode];
-    const maxRow = layout.length;
-    let handled = true;
+    var rows      = this._rows();
+    var maxRow    = rows.length;
+    var modeNames = this._getModeNames();
+    var bottom    = this._getBottom();
+    var handled   = true;
+
+    if (this.section === 'accent') {
+      var variants = ACCENTS[this._accentKey] || [];
+      if      (key === 'ArrowLeft')  { this._accentIndex = this._accentIndex < 0 ? variants.length - 1 : (this._accentIndex - 1 + variants.length) % variants.length; }
+      else if (key === 'ArrowRight') { this._accentIndex = (this._accentIndex + 1) % variants.length; }
+      else if (key === 'Enter') {
+        if (this._accentIndex >= 0) this.value = this.value.slice(0, -1) + variants[this._accentIndex];
+        this._closeAccent(); return true;
+      }
+      else if (key === 'Escape' || key === 'ArrowUp' || key === 'ArrowDown') { this._closeAccent(); }
+      else { handled = false; }
+      if (handled) this._render();
+      return handled;
+    }
 
     if (key === 'ArrowUp') {
-      if (this.section === 'kb' && this.row === 0) this.section = 'top';
+      if (this.section === 'kb' && this.row === 0) { this.section = 'top'; }
       else if (this.section === 'kb') { this.row--; this.col = this._nearestCol(this.row, this.col); }
     } else if (key === 'ArrowDown') {
       if (this.section === 'top') { this.section = 'kb'; this.row = 0; this.col = this._nearestCol(0, this.col); }
-      else if (this.row < maxRow) { this.row++; this.col = this._nearestCol(this.row, this.col); }
+      else if (this.row < maxRow)  { this.row++; this.col = this._nearestCol(this.row, this.col); }
     } else if (key === 'ArrowLeft') {
-      if (this.section === 'top') { this.topFocus = (this.topFocus - 1 + 2) % 2; }
-      else if (this.row === maxRow) {
-        let bi = 0; KB_BOTTOM.forEach((b, i) => { if (this.col >= b.col && this.col < b.col + b.span) bi = i; });
-        this.col = KB_BOTTOM[(bi - 1 + KB_BOTTOM.length) % KB_BOTTOM.length].col;
+      if (this.section === 'top') {
+        this.topFocus = (this.topFocus - 1 + modeNames.length) % modeNames.length;
+      } else if (this.row === maxRow) {
+        var biL = 0, colL = this.col;
+        bottom.forEach(function(b, i) { if (colL >= b.col && colL < b.col + b.span) biL = i; });
+        this.col = bottom[(biL - 1 + bottom.length) % bottom.length].col;
       } else {
-        let nc = (this.col - 1 + KB_COLS) % KB_COLS, tr = 0;
-        while (layout[this.row][nc] === null && tr < KB_COLS) { nc = (nc - 1 + KB_COLS) % KB_COLS; tr++; }
-        this.col = nc;
+        var ncL = (this.col - 1 + KB_COLS) % KB_COLS, trL = 0;
+        while (rows[this.row][ncL] === null && trL < KB_COLS) { ncL = (ncL - 1 + KB_COLS) % KB_COLS; trL++; }
+        this.col = ncL;
       }
     } else if (key === 'ArrowRight') {
-      if (this.section === 'top') { this.topFocus = (this.topFocus + 1) % 2; }
-      else if (this.row === maxRow) {
-        let bi = 0; KB_BOTTOM.forEach((b, i) => { if (this.col >= b.col && this.col < b.col + b.span) bi = i; });
-        this.col = KB_BOTTOM[(bi + 1) % KB_BOTTOM.length].col;
+      if (this.section === 'top') {
+        this.topFocus = (this.topFocus + 1) % modeNames.length;
+      } else if (this.row === maxRow) {
+        var biR = 0, colR = this.col;
+        bottom.forEach(function(b, i) { if (colR >= b.col && colR < b.col + b.span) biR = i; });
+        this.col = bottom[(biR + 1) % bottom.length].col;
       } else {
-        let nc = (this.col + 1) % KB_COLS, tr = 0;
-        while (layout[this.row][nc] === null && tr < KB_COLS) { nc = (nc + 1) % KB_COLS; tr++; }
-        this.col = nc;
+        var ncR = (this.col + 1) % KB_COLS, trR = 0;
+        while (rows[this.row][ncR] === null && trR < KB_COLS) { ncR = (ncR + 1) % KB_COLS; trR++; }
+        this.col = ncR;
       }
     } else if (key === 'Enter') {
-      if (this.section === 'top') this.setMode(this.topFocus === 0 ? 'letters' : 'nums');
+      if (this.section === 'top') this.setMode(modeNames[this.topFocus]);
       else this._pressKey();
     } else if (key === 'Escape') {
       if (this.onCancel) this.onCancel();
@@ -216,198 +458,260 @@
     return handled;
   };
 
-  /* -- Gamepad poller avec vibration --------------------------------------- */
-  const GAMEPAD_MAP = {
-    0: 'Enter', 1: 'Escape', 2: 'Square', 3: 'Triangle',
-    4: 'L1', 5: 'R1', 6: 'L2', 7: 'R2',
-    8: 'Select', 9: 'Start',
-    12: 'ArrowUp', 13: 'ArrowDown', 14: 'ArrowLeft', 15: 'ArrowRight',
+  /* ================================================================
+   * Gamepad poller
+   * ================================================================ */
+  var GAMEPAD_MAP = {
+    0:'Enter', 1:'Escape', 2:'Square', 3:'Triangle',
+    4:'L1', 5:'R1', 6:'L2', 7:'R2',
+    8:'Select', 9:'Start',
+    12:'ArrowUp', 13:'ArrowDown', 14:'ArrowLeft', 15:'ArrowRight',
   };
 
   function GamepadPoller(onKey) {
-    this.onKey = onKey;
-    this.state = {};
-    this._running = false;
-    this._frame = null;
+    this.onKey = onKey; this.state = {};
+    this._running = false; this._frame = null;
     this._vibrationCooldown = new Map();
   }
-
-  GamepadPoller.prototype.start = function() {
-    if (this._running) return;
-    this._running = true;
-    this._poll();
+  GamepadPoller.prototype.start = function() { if (this._running) return; this._running = true; this._poll(); };
+  GamepadPoller.prototype.stop  = function() { this._running = false; if (this._frame) cancelAnimationFrame(this._frame); };
+  GamepadPoller.prototype._vibrate = function(gp, intensity, duration) {
+    if (!gp.vibrationActuator) return;
+    var now = Date.now(), last = this._vibrationCooldown.get(gp.index) || 0;
+    if (now - last < 100) return;
+    this._vibrationCooldown.set(gp.index, now);
+    gp.vibrationActuator.playEffect('dual-rumble', { duration: duration||50, strongMagnitude: intensity||0.5, weakMagnitude: (intensity||0.5)*0.7 }).catch(function(){});
   };
-
-  GamepadPoller.prototype.stop = function() {
-    this._running = false;
-    if (this._frame) cancelAnimationFrame(this._frame);
-  };
-
-  GamepadPoller.prototype._vibrate = function(gamepad, intensity = 0.5, duration = 50) {
-    if (!gamepad.vibrationActuator) return;
-    const now = Date.now();
-    const lastVibe = this._vibrationCooldown.get(gamepad.index) || 0;
-    if (now - lastVibe < 100) return;
-    this._vibrationCooldown.set(gamepad.index, now);
-    gamepad.vibrationActuator.playEffect('dual-rumble', {
-      duration: duration,
-      strongMagnitude: intensity,
-      weakMagnitude: intensity * 0.7
-    }).catch(() => {});
-  };
-
   GamepadPoller.prototype._poll = function() {
     if (!this._running) return;
-    const gps = navigator.getGamepads ? navigator.getGamepads() : [];
-    for (let i = 0; i < gps.length; i++) {
-      const gp = gps[i];
-      if (!gp) continue;
-      if (!this.state[i]) this.state[i] = { buttons: [], acH: false, acV: false, lastAxH: 0, lastAxV: 0 };
-      const st = this.state[i];
-
-      gp.buttons.forEach((btn, idx) => {
-        const p = btn.pressed, w = st.buttons[idx];
+    var self = this, gps = navigator.getGamepads ? navigator.getGamepads() : [];
+    for (var i = 0; i < gps.length; i++) {
+      var gp = gps[i]; if (!gp) continue;
+      if (!this.state[i]) this.state[i] = { buttons:[], acH:false, acV:false, lastAxH:0, lastAxV:0 };
+      var st = this.state[i];
+      gp.buttons.forEach(function(btn, idx) {
+        var p = btn.pressed, w = st.buttons[idx];
         if (p && !w && GAMEPAD_MAP[idx]) {
-          this.onKey(GAMEPAD_MAP[idx]);
-          if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(GAMEPAD_MAP[idx])) {
-            this._vibrate(gp, 0.3, 40);
-          }
+          self.onKey(GAMEPAD_MAP[idx]);
+          if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(GAMEPAD_MAP[idx])) self._vibrate(gp, 0.3, 40);
         }
         st.buttons[idx] = p;
       });
-
-      const AXIS_DEADZONE = 0.35;
-      let axH = 0, axV = 0;
-      
-      if (Math.abs(gp.axes[0]) > AXIS_DEADZONE) axH = gp.axes[0];
-      else if (gp.axes[2] !== undefined && Math.abs(gp.axes[2]) > AXIS_DEADZONE) axH = gp.axes[2];
-      else if (gp.axes[6] !== undefined && Math.abs(gp.axes[6]) > AXIS_DEADZONE) axH = gp.axes[6];
-      
-      if (Math.abs(gp.axes[1]) > AXIS_DEADZONE) axV = gp.axes[1];
-      else if (gp.axes[3] !== undefined && Math.abs(gp.axes[3]) > AXIS_DEADZONE) axV = gp.axes[3];
-      else if (gp.axes[7] !== undefined && Math.abs(gp.axes[7]) > AXIS_DEADZONE) axV = gp.axes[7];
-
-      const AXIS_COOLDOWN = 150;
-      const now = Date.now();
-
+      var DEAD = 0.35, COOL = 150, now = Date.now(), axH = 0, axV = 0;
+      if (Math.abs(gp.axes[0]) > DEAD) axH = gp.axes[0];
+      else if (gp.axes[2] !== undefined && Math.abs(gp.axes[2]) > DEAD) axH = gp.axes[2];
+      if (Math.abs(gp.axes[1]) > DEAD) axV = gp.axes[1];
+      else if (gp.axes[3] !== undefined && Math.abs(gp.axes[3]) > DEAD) axV = gp.axes[3];
       if (!st.acH) {
-        if (axH < -AXIS_DEADZONE) { this.onKey('ArrowLeft'); st.acH = true; st.lastAxH = now;
-          setTimeout(() => { if (st.lastAxH === now) st.acH = false; }, AXIS_COOLDOWN); }
-        else if (axH > AXIS_DEADZONE) { this.onKey('ArrowRight'); st.acH = true; st.lastAxH = now;
-          setTimeout(() => { if (st.lastAxH === now) st.acH = false; }, AXIS_COOLDOWN); }
+        if      (axH < -DEAD) { self.onKey('ArrowLeft');  st.acH=true; st.lastAxH=now; setTimeout(function(){if(st.lastAxH===now)st.acH=false;},COOL); }
+        else if (axH >  DEAD) { self.onKey('ArrowRight'); st.acH=true; st.lastAxH=now; setTimeout(function(){if(st.lastAxH===now)st.acH=false;},COOL); }
       }
-      if (Math.abs(axH) <= AXIS_DEADZONE && st.acH && now - st.lastAxH > AXIS_COOLDOWN) st.acH = false;
-      
+      if (Math.abs(axH) <= DEAD && st.acH && now - st.lastAxH > COOL) st.acH = false;
       if (!st.acV) {
-        if (axV < -AXIS_DEADZONE) { this.onKey('ArrowUp'); st.acV = true; st.lastAxV = now;
-          setTimeout(() => { if (st.lastAxV === now) st.acV = false; }, AXIS_COOLDOWN); }
-        else if (axV > AXIS_DEADZONE) { this.onKey('ArrowDown'); st.acV = true; st.lastAxV = now;
-          setTimeout(() => { if (st.lastAxV === now) st.acV = false; }, AXIS_COOLDOWN); }
+        if      (axV < -DEAD) { self.onKey('ArrowUp');   st.acV=true; st.lastAxV=now; setTimeout(function(){if(st.lastAxV===now)st.acV=false;},COOL); }
+        else if (axV >  DEAD) { self.onKey('ArrowDown'); st.acV=true; st.lastAxV=now; setTimeout(function(){if(st.lastAxV===now)st.acV=false;},COOL); }
       }
-      if (Math.abs(axV) <= AXIS_DEADZONE && st.acV && now - st.lastAxV > AXIS_COOLDOWN) st.acV = false;
+      if (Math.abs(axV) <= DEAD && st.acV && now - st.lastAxV > COOL) st.acV = false;
     }
-    this._frame = requestAnimationFrame(() => this._poll());
+    this._frame = requestAnimationFrame(function(){ self._poll(); });
   };
 
-  /* -- Input Mapper ------------------------------------------------------- */
-  const ACTION_KEYS = [
-    { id: 'up',       label: '? Haut',        default: 'ArrowUp' },
-    { id: 'down',     label: '? Bas',          default: 'ArrowDown' },
-    { id: 'left',     label: '? Gauche',       default: 'ArrowLeft' },
-    { id: 'right',    label: '? Droite',       default: 'ArrowRight' },
-    { id: 'confirm',  label: '? Confirmer',    default: 'Enter' },
-    { id: 'back',     label: '? Retour',       default: 'Escape' },
-    { id: 'menu',     label: '? Menu',         default: 'Start' },
-    { id: 'action',   label: '? Action',       default: 'Triangle' },
+  /* ================================================================
+   * Input Mapper
+   * ================================================================ */
+  var ACTION_KEYS = [
+    { id:'up',      label:'Haut',      default:'ArrowUp'    },
+    { id:'down',    label:'Bas',       default:'ArrowDown'  },
+    { id:'left',    label:'Gauche',    default:'ArrowLeft'  },
+    { id:'right',   label:'Droite',    default:'ArrowRight' },
+    { id:'confirm', label:'Confirmer', default:'Enter'      },
+    { id:'back',    label:'Retour',    default:'Escape'     },
+    { id:'menu',    label:'Menu',      default:'Start'      },
+    { id:'action',  label:'Action',    default:'Triangle'   },
   ];
 
   function InputMapper(storageKey) {
     this.storageKey = storageKey || 'xelauncher_inputmaps';
     this._maps = this._load();
   }
-
   InputMapper.prototype._load = function() {
-    try { return JSON.parse(localStorage.getItem(this.storageKey) || '{}'); }
-    catch(e) { return {}; }
+    try { return JSON.parse(localStorage.getItem(this.storageKey) || '{}'); } catch(e) { return {}; }
   };
-
-  InputMapper.prototype.save = function(deviceId, mapping) {
-    this._maps[deviceId] = mapping;
+  InputMapper.prototype.save = function(d, m) {
+    this._maps[d] = m;
     try { localStorage.setItem(this.storageKey, JSON.stringify(this._maps)); } catch(e) {}
   };
-
-  InputMapper.prototype.get = function(deviceId) {
-    return this._maps[deviceId] || null;
-  };
-
-  InputMapper.prototype.has = function(deviceId) {
-    return !!this._maps[deviceId];
-  };
-
+  InputMapper.prototype.get      = function(d) { return this._maps[d] || null; };
+  InputMapper.prototype.has      = function(d) { return !!this._maps[d]; };
+  InputMapper.prototype.clearAll = function() { this._maps = {}; localStorage.removeItem(this.storageKey); };
   InputMapper.prototype.getDefault = function() {
-    const m = {};
-    ACTION_KEYS.forEach(a => { m[a.id] = a.default; });
+    var m = {};
+    ACTION_KEYS.forEach(function(a) { m[a.id] = a.default; });
     return m;
   };
-
-  InputMapper.prototype.clearAll = function() {
-    this._maps = {};
-    localStorage.removeItem(this.storageKey);
-  };
-
   InputMapper.prototype.resolveKey = function(deviceId, rawKey) {
     if (deviceId === '__keyboard__') return rawKey;
-    const map = this._maps[deviceId];
+    var map = this._maps[deviceId];
     if (!map) return rawKey;
-    for (const actionId of Object.keys(map)) {
+    for (var actionId in map) {
       if (map[actionId] === rawKey) {
-        const a = ACTION_KEYS.find(k => k.id === actionId);
+        var a = ACTION_KEYS.find(function(k) { return k.id === actionId; });
         return a ? a.default : rawKey;
       }
     }
     return null;
   };
 
-  /* -- Wake lock -------------------------------------------------------- */
-  let _wakeLock = null;
+  /* ================================================================
+   * Remote/Mouse Capture - Convertir mouvements souris en touches
+   * ================================================================ */
+  function RemoteCapture(onKey, mapperGetter) {
+    this.onKey = onKey;
+    this.mapperGetter = mapperGetter;
+    this.deviceId = null;
+    this.active = false;
+    this.lastX = 0;
+    this.lastY = 0;
+    this.threshold = 15;
+    this.cooldown = 150;
+    this.lastMoveTime = 0;
+    this.lastKeyTime = 0;
+    
+    this._handler = this._onMouseMove.bind(this);
+    this._keyHandler = this._onKeyDown.bind(this);
+    this._preventHandler = this._preventDefault.bind(this);
+  }
+
+  RemoteCapture.prototype.start = function(deviceId) {
+    if (this.active) return;
+    this.deviceId = deviceId || 'remote_device';
+    this.active = true;
+    document.addEventListener('mousemove', this._handler);
+    document.addEventListener('keydown', this._keyHandler);
+    document.addEventListener('click', this._preventHandler, true);
+    document.addEventListener('mousedown', this._preventHandler, true);
+    document.body.style.cursor = 'none';
+  };
+
+  RemoteCapture.prototype.stop = function() {
+    if (!this.active) return;
+    this.active = false;
+    document.removeEventListener('mousemove', this._handler);
+    document.removeEventListener('keydown', this._keyHandler);
+    document.removeEventListener('click', this._preventHandler, true);
+    document.removeEventListener('mousedown', this._preventHandler, true);
+    document.body.style.cursor = '';
+  };
+
+  RemoteCapture.prototype._preventDefault = function(e) {
+    // Ne bloquer que si on est dans l'app (pas en configuration)
+    if (!document.getElementById('mapperOverlay')?.classList.contains('visible')) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  RemoteCapture.prototype._onMouseMove = function(e) {
+    if (!this.active) return;
+    
+    const now = Date.now();
+    if (now - this.lastMoveTime < this.cooldown) return;
+    
+    const dx = e.movementX;
+    const dy = e.movementY;
+    
+    if (Math.abs(dx) < this.threshold && Math.abs(dy) < this.threshold) return;
+    
+    let key = null;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      key = dx > 0 ? 'ArrowRight' : 'ArrowLeft';
+    } else {
+      key = dy > 0 ? 'ArrowDown' : 'ArrowUp';
+    }
+    
+    if (key) {
+      this.lastMoveTime = now;
+      const mapper = this.mapperGetter();
+      const resolved = mapper ? (mapper.resolveKey(this.deviceId, key) || key) : key;
+      this.onKey(resolved);
+    }
+  };
+
+  RemoteCapture.prototype._onKeyDown = function(e) {
+    if (!this.active) return;
+
+    const now = Date.now();
+    if (now - this.lastKeyTime < 50) return;
+
+    const key = e.key;
+    const mapperEl = document.getElementById('mapperOverlay');
+    const isMapper = mapperEl && mapperEl.classList.contains('visible');
+
+    if (isMapper) {
+      // Pendant le mapping : toutes les touches, valeur brute (pas de resolveKey)
+      this.lastKeyTime = now;
+      e.preventDefault();
+      e.stopPropagation();
+      this.onKey(key);
+      return;
+    }
+
+    // Navigation normale : touches connues + rÃ©solution du mapping
+    const remoteKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', ' '];
+    if (remoteKeys.includes(key)) {
+      this.lastKeyTime = now;
+      e.preventDefault();
+      e.stopPropagation();
+      var mapper = this.mapperGetter();
+      var resolved = mapper ? (mapper.resolveKey(this.deviceId, key) || key) : key;
+      this.onKey(resolved);
+    }
+  };
+
+  /* ================================================================
+   * Wake lock & Toast
+   * ================================================================ */
+  var _wakeLock = null;
   async function requestWakeLock() {
     if ('wakeLock' in navigator) {
       try {
         _wakeLock = await navigator.wakeLock.request('screen');
-        document.addEventListener('visibilitychange', async () => {
-          if (document.visibilityState === 'visible' && _wakeLock === null) {
+        document.addEventListener('visibilitychange', async function() {
+          if (document.visibilityState === 'visible' && _wakeLock === null)
             _wakeLock = await navigator.wakeLock.request('screen');
-          }
         });
-      } catch(e) { }
+      } catch(e) {}
     }
   }
 
-  /* -- Toast ----------------------------------------------------- */
-  function Toast(el) {
-    this.el = el;
-    this._t = null;
-  }
+  function Toast(el) { this.el = el; this._t = null; }
   Toast.prototype.show = function(msg, isError, duration) {
     if (!this.el) return;
     this.el.textContent = msg;
     this.el.className = 'toast show' + (isError ? ' error' : '');
     if (this._t) clearTimeout(this._t);
-    if (!isError) this._t = setTimeout(() => { this.el.classList.remove('show'); }, duration || 2500);
+    var el = this.el;
+    if (!isError) this._t = setTimeout(function() { el.classList.remove('show'); }, duration || 2500);
   };
   Toast.prototype.hide = function() {
     if (this.el) this.el.classList.remove('show');
     if (this._t) clearTimeout(this._t);
   };
 
-  /* -- Expose ------------------------------------------------------------ */
+  /* ================================================================
+   * Expose
+   * ================================================================ */
   root.XeInput = {
     VirtualKeyboard,
     GamepadPoller,
     InputMapper,
+    RemoteCapture,
     ACTION_KEYS,
     requestWakeLock,
-    Toast
+    Toast,
+    ACCENTS,
+    getLayoutPref,
+    setLayoutPref,
   };
 
 })(typeof window !== 'undefined' ? window : this);

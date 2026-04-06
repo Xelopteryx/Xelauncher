@@ -68,8 +68,8 @@
 'use strict';
 
 /* ── State ──────────────────────────────────────────────────────────────── */
-let current = 0;         // 0=retropie, 1=jellyfin
-let topBarFocusIdx = -1; // -1=none, 0=settings, 1=close
+let current = 0;
+let topBarFocusIdx = -1;
 let powerFocusIdx = 0;
 const POWER_ITEMS = ['pwrRestart','pwrShutdown','pwrCancel'];
 
@@ -81,30 +81,361 @@ let inputReady = false;
 let konamiIdx = 0;
 const KONAMI = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight'];
 
+// Variables pour le mapper
+let mapperActive = false;
+let mapperDeviceId = '';
+let mapperActions = [];
+let mapperCurrentIdx = 0;
+let mapperResult = {};
+let mapperWaitingInput = false;
+let mapperWaitingForMouse = false;  // Attendre un mouvement de souris
+let mouseCaptureTimeout = null;
+
 /* ── Init ───────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
   XeInput.requestWakeLock();
   gpPoller.start();
+  
   setTimeout(() => { inputReady = true; }, 700);
   renderCards();
   setupCardClicks();
   setupPowerBtns();
   setupTopBar();
 
-  // Mode buttons for top bar
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
   document.getElementById('topBarClose').addEventListener('click', closeTopBar);
+  
+  // Capturer les mouvements de souris pour le mapping
+  document.addEventListener('mousemove', onMouseMoveForMapping);
+  
+  // Détecter les périphériques déjà connectés
+  setTimeout(detectInitialDevices, 1000);
 });
+
+function detectInitialDevices() {
+  const gps = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (let i = 0; i < gps.length; i++) {
+    if (gps[i] && !mapper.has(gps[i].id)) {
+      checkNewDevice(gps[i].id, 'gamepad');
+    }
+  }
+}
 
 window.addEventListener('gamepadconnected', (e) => {
-  checkNewDevice(e.gamepad.id, 'gamepad');
+  if (!mapper.has(e.gamepad.id)) {
+    checkNewDevice(e.gamepad.id, 'gamepad');
+  }
 });
 
-/* ── Device mapping check ────────────────────────────────────────────────── */
-function checkNewDevice(deviceId, type) {
-  if (!mapper.has(deviceId)) {
-    openMapper(deviceId, type);
+/* ── Capture des mouvements souris pour le mapping ─────────────────────── */
+function onMouseMoveForMapping(e) {
+  if (!mapperActive || !mapperWaitingForMouse) return;
+  
+  // Empêcher le comportement par défaut
+  e.preventDefault();
+  e.stopPropagation();
+  
+  // Analyser la direction du mouvement
+  const dx = e.movementX;
+  const dy = e.movementY;
+  
+  if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return; // Seuil minimum
+  
+  let mappedKey = null;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    mappedKey = dx > 0 ? 'ArrowRight' : 'ArrowLeft';
+  } else {
+    mappedKey = dy > 0 ? 'ArrowDown' : 'ArrowUp';
   }
+  
+  if (mappedKey) {
+    // Nettoyer le timeout
+    if (mouseCaptureTimeout) clearTimeout(mouseCaptureTimeout);
+    
+    // Enregistrer le mapping
+    mapperResult[mapperActions[mapperCurrentIdx].id] = mappedKey;
+    mapperCurrentIdx++;
+    mapperWaitingForMouse = false;
+    mapperWaitingInput = false;
+    
+    renderMapper();
+    
+    // Passer à l'étape suivante ou terminer
+    if (mapperCurrentIdx >= mapperActions.length) {
+      mapper.save(mapperDeviceId, mapperResult);
+      closeMapper();
+      toast.show('Télécommande configurée !', false);
+    } else {
+      startRemoteMapperStep();
+    }
+  }
+}
+
+/* ── Remote Mapper (télécommande) ───────────────────────────────────────── */
+function openRemoteMapper(deviceId) {
+  if (mapper.has(deviceId)) return;
+  
+  mapperDeviceId = deviceId;
+  mapperActions = [...XeInput.ACTION_KEYS];
+  mapperCurrentIdx = 0;
+  mapperResult = {};
+  mapperActive = true;
+  mapperWaitingInput = false;
+  mapperWaitingForMouse = false;
+
+  const el = document.getElementById('mapperOverlay');
+  el.innerHTML = '';
+  el.className = 'mapper-overlay visible';
+
+  const title = document.createElement('div');
+  title.className = 'mapper-title';
+  title.textContent = 'Configuration de la télécommande';
+  el.appendChild(title);
+
+  const dev = document.createElement('div');
+  dev.className = 'mapper-device';
+  dev.textContent = 'Télécommande (utilisez les flèches directionnelles)';
+  el.appendChild(dev);
+
+  const info = document.createElement('div');
+  info.className = 'mapper-hint';
+  info.style.color = '#ff9800';
+  info.style.marginBottom = '12px';
+  info.innerHTML = '⚠️ Pour configurer les flèches :<br>→ Appuyez sur la FLÈCHE correspondante de votre télécommande';
+  el.appendChild(info);
+
+  const actEl = document.createElement('div');
+  actEl.className = 'mapper-actions';
+  actEl.id = 'mapperCurrentAction';
+  el.appendChild(actEl);
+
+  const grid = document.createElement('div');
+  grid.className = 'mapper-grid';
+  grid.id = 'mapperGrid';
+  el.appendChild(grid);
+
+  const hint = document.createElement('div');
+  hint.className = 'mapper-hint';
+  hint.textContent = 'Pour les boutons (Entrée, Retour), appuyez sur le bouton physique';
+  el.appendChild(hint);
+
+  const skipBtn = document.createElement('button');
+  skipBtn.className = 'btn';
+  skipBtn.textContent = 'Utiliser les valeurs par défaut';
+  skipBtn.style.marginTop = '8px';
+  skipBtn.addEventListener('click', () => {
+    mapper.save(mapperDeviceId, mapper.getDefault());
+    closeMapper();
+    startRemoteCapture(mapperDeviceId);
+    toast.show('Télécommande configurée !', false);
+  });
+  el.appendChild(skipBtn);
+
+  renderMapper();
+  startRemoteMapperStep();
+}
+
+function startRemoteMapperStep() {
+  if (mapperCurrentIdx >= mapperActions.length) {
+    mapper.save(mapperDeviceId, mapperResult);
+    closeMapper();
+    startRemoteCapture(mapperDeviceId);
+    toast.show('Télécommande configurée !', false);
+    return;
+  }
+  
+  mapperWaitingInput = true;
+  mapperWaitingForMouse = false;
+  
+  const actEl = document.getElementById('mapperCurrentAction');
+  const action = mapperActions[mapperCurrentIdx];
+  
+  if (actEl) {
+    if (action.id === 'up' || action.id === 'down' || action.id === 'left' || action.id === 'right') {
+      actEl.innerHTML = '📡 Appuyez sur la FLÈCHE « ' + action.label + ' » de votre télécommande';
+      mapperWaitingForMouse = true;
+      
+      // Timeout pour passer l'action si pas de mouvement
+      if (mouseCaptureTimeout) clearTimeout(mouseCaptureTimeout);
+      mouseCaptureTimeout = setTimeout(() => {
+        if (mapperWaitingForMouse && mapperActive) {
+          console.log('Timeout pour', action.id);
+          mapperResult[action.id] = action.default;
+          mapperCurrentIdx++;
+          mapperWaitingForMouse = false;
+          mapperWaitingInput = false;
+          renderMapper();
+          startRemoteMapperStep();
+        }
+      }, 5000);
+    } else {
+      actEl.innerHTML = '🔘 Appuyez sur le bouton pour : ' + action.label;
+      mapperWaitingForMouse = false;
+    }
+  }
+  renderMapper();
+}
+
+function startRemoteCapture(deviceId) {
+  // Démarrer la capture des mouvements souris pour la navigation
+  document.body.style.cursor = 'none';
+  
+  // Bloquer les événements souris par défaut
+  document.addEventListener('click', preventDefaultMouse, true);
+  document.addEventListener('mousedown', preventDefaultMouse, true);
+  document.addEventListener('mousemove', onRemoteMouseMove);
+}
+
+function preventDefaultMouse(e) {
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+let lastMoveTime = 0;
+let lastMoveDirection = null;
+
+function onRemoteMouseMove(e) {
+  const now = Date.now();
+  if (now - lastMoveTime < 150) return;
+  
+  const dx = e.movementX;
+  const dy = e.movementY;
+  
+  if (Math.abs(dx) < 15 && Math.abs(dy) < 15) return;
+  
+  let key = null;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    key = dx > 0 ? 'ArrowRight' : 'ArrowLeft';
+  } else {
+    key = dy > 0 ? 'ArrowDown' : 'ArrowUp';
+  }
+  
+  if (key && key !== lastMoveDirection) {
+    lastMoveTime = now;
+    lastMoveDirection = key;
+    
+    // Résoudre via le mapper
+    const resolved = mapper.resolveKey('remote_device', key) || key;
+    onKey(resolved, '__keyboard__');
+    
+    // Réinitialiser après un court délai
+    setTimeout(() => { lastMoveDirection = null; }, 200);
+  }
+}
+
+/* ── Gamepad Mapper ─────────────────────────────────────────────────────── */
+function checkNewDevice(deviceId, type) {
+  if (mapper.has(deviceId)) return;
+  
+  if (type === 'gamepad' && !mapper.has(deviceId)) {
+    openGamepadMapper(deviceId);
+  }
+}
+
+function openGamepadMapper(deviceId) {
+  mapperDeviceId = deviceId;
+  mapperActions = [...XeInput.ACTION_KEYS];
+  mapperCurrentIdx = 0;
+  mapperResult = {};
+  mapperActive = true;
+  mapperWaitingInput = false;
+  mapperWaitingForMouse = false;
+
+  const el = document.getElementById('mapperOverlay');
+  el.innerHTML = '';
+  el.className = 'mapper-overlay visible';
+
+  const title = document.createElement('div');
+  title.className = 'mapper-title';
+  title.textContent = 'Configuration de la manette';
+  el.appendChild(title);
+
+  const dev = document.createElement('div');
+  dev.className = 'mapper-device';
+  dev.textContent = deviceId.substring(0, 60);
+  el.appendChild(dev);
+
+  const actEl = document.createElement('div');
+  actEl.className = 'mapper-actions';
+  actEl.id = 'mapperCurrentAction';
+  el.appendChild(actEl);
+
+  const grid = document.createElement('div');
+  grid.className = 'mapper-grid';
+  grid.id = 'mapperGrid';
+  el.appendChild(grid);
+
+  const hint = document.createElement('div');
+  hint.className = 'mapper-hint';
+  hint.textContent = 'Appuyez sur le bouton correspondant à chaque action';
+  el.appendChild(hint);
+
+  const skipBtn = document.createElement('button');
+  skipBtn.className = 'btn';
+  skipBtn.textContent = 'Utiliser les valeurs par défaut';
+  skipBtn.style.marginTop = '8px';
+  skipBtn.addEventListener('click', () => {
+    mapper.save(mapperDeviceId, mapper.getDefault());
+    closeMapper();
+    toast.show('Manette configurée !', false);
+  });
+  el.appendChild(skipBtn);
+
+  renderMapper();
+  startGamepadMapperStep();
+}
+
+function startGamepadMapperStep() {
+  if (mapperCurrentIdx >= mapperActions.length) {
+    mapper.save(mapperDeviceId, mapperResult);
+    closeMapper();
+    toast.show('Manette configurée !', false);
+    return;
+  }
+  mapperWaitingInput = true;
+  const actEl = document.getElementById('mapperCurrentAction');
+  if (actEl) actEl.textContent = 'Appuyez pour : ' + mapperActions[mapperCurrentIdx].label;
+  renderMapper();
+}
+
+function renderMapper() {
+  const grid = document.getElementById('mapperGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  mapperActions.forEach((a, i) => {
+    const item = document.createElement('div');
+    item.className = 'mapper-btn' +
+      (mapperResult[a.id] ? ' assigned' : '') +
+      (i === mapperCurrentIdx && mapperWaitingInput && !mapperWaitingForMouse ? ' current-target' : '');
+    const lbl = document.createElement('span');
+    lbl.textContent = a.label;
+    item.appendChild(lbl);
+    if (mapperResult[a.id]) {
+      const kn = document.createElement('span');
+      kn.className = 'mapper-key-name';
+      kn.textContent = mapperResult[a.id];
+      item.appendChild(kn);
+    }
+    grid.appendChild(item);
+  });
+}
+
+function mapperReceiveInput(rawKey) {
+  if (!mapperWaitingInput || mapperWaitingForMouse) return;
+  mapperResult[mapperActions[mapperCurrentIdx].id] = rawKey;
+  mapperCurrentIdx++;
+  mapperWaitingInput = false;
+  renderMapper();
+  setTimeout(startGamepadMapperStep, 200);
+}
+
+function closeMapper() {
+  mapperActive = false;
+  mapperWaitingInput = false;
+  mapperWaitingForMouse = false;
+  if (mouseCaptureTimeout) clearTimeout(mouseCaptureTimeout);
+  document.getElementById('mapperOverlay').classList.remove('visible');
+  document.getElementById('mapperOverlay').innerHTML = '';
 }
 
 /* ── Render ─────────────────────────────────────────────────────────────── */
@@ -151,7 +482,6 @@ function launchCurrent() {
   setTimeout(() => {
     card.classList.remove('pressing');
     if (current === 0) {
-      // RetroArch/RetroPie: hide window, launch, show when done
       document.getElementById('loadingText').textContent = 'Lancement de RetroPie…';
       document.getElementById('loadingOverlay').classList.add('visible');
       window.xeLauncher.launchRetropie().then(() => {
@@ -209,127 +539,19 @@ function doPower(idx) {
   else window.xeLauncher.systemShutdown();
 }
 
-/* ── Input Mapper UI ─────────────────────────────────────────────────────── */
-let mapperActive = false;
-let mapperDeviceId = '';
-let mapperActions = [];
-let mapperCurrentIdx = 0;
-let mapperResult = {};
-let mapperWaitingInput = false;
-
-function openMapper(deviceId, type) {
-  mapperDeviceId = deviceId;
-  mapperActions = [...XeInput.ACTION_KEYS];
-  mapperCurrentIdx = 0;
-  mapperResult = {};
-  mapperActive = true;
-  mapperWaitingInput = false;
-
-  const el = document.getElementById('mapperOverlay');
-  el.innerHTML = '';
-  el.className = 'mapper-overlay visible';
-
-  const title = document.createElement('div');
-  title.className = 'mapper-title';
-  title.textContent = 'Nouveau périphérique détecté';
-  el.appendChild(title);
-
-  const dev = document.createElement('div');
-  dev.className = 'mapper-device';
-  dev.textContent = deviceId.substring(0, 60);
-  el.appendChild(dev);
-
-  const actEl = document.createElement('div');
-  actEl.className = 'mapper-actions';
-  actEl.id = 'mapperCurrentAction';
-  el.appendChild(actEl);
-
-  const grid = document.createElement('div');
-  grid.className = 'mapper-grid';
-  grid.id = 'mapperGrid';
-  el.appendChild(grid);
-
-  const hint = document.createElement('div');
-  hint.className = 'mapper-hint';
-  hint.textContent = 'Appuyez sur le bouton correspondant à chaque action';
-  el.appendChild(hint);
-
-  const skipBtn = document.createElement('button');
-  skipBtn.className = 'btn';
-  skipBtn.textContent = 'Passer (utiliser valeurs par défaut)';
-  skipBtn.style.marginTop = '8px';
-  skipBtn.addEventListener('click', skipMapper);
-  el.appendChild(skipBtn);
-
-  renderMapper();
-  startMapperStep();
-}
-
-function renderMapper() {
-  const grid = document.getElementById('mapperGrid');
-  if (!grid) return;
-  grid.innerHTML = '';
-  mapperActions.forEach((a, i) => {
-    const item = document.createElement('div');
-    item.className = 'mapper-btn' +
-      (mapperResult[a.id] ? ' assigned' : '') +
-      (i === mapperCurrentIdx && mapperWaitingInput ? ' current-target' : '');
-    const lbl = document.createElement('span');
-    lbl.textContent = a.label;
-    item.appendChild(lbl);
-    if (mapperResult[a.id]) {
-      const kn = document.createElement('span');
-      kn.className = 'mapper-key-name';
-      kn.textContent = mapperResult[a.id];
-      item.appendChild(kn);
-    }
-    grid.appendChild(item);
-  });
-}
-
-function startMapperStep() {
-  if (mapperCurrentIdx >= mapperActions.length) {
-    // Done
-    mapper.save(mapperDeviceId, mapperResult);
-    closeMapper();
-    toast.show('Mappage sauvegardé !', false);
-    return;
-  }
-  mapperWaitingInput = true;
-  const actEl = document.getElementById('mapperCurrentAction');
-  if (actEl) actEl.textContent = 'Appuyez pour : ' + mapperActions[mapperCurrentIdx].label;
-  renderMapper();
-}
-
-function mapperReceiveInput(rawKey) {
-  if (!mapperWaitingInput) return;
-  mapperResult[mapperActions[mapperCurrentIdx].id] = rawKey;
-  mapperCurrentIdx++;
-  mapperWaitingInput = false;
-  renderMapper();
-  setTimeout(startMapperStep, 200);
-}
-
-function skipMapper() {
-  mapper.save(mapperDeviceId, mapper.getDefault());
-  closeMapper();
-}
-
-function closeMapper() {
-  mapperActive = false;
-  mapperWaitingInput = false;
-  document.getElementById('mapperOverlay').classList.remove('visible');
-  document.getElementById('mapperOverlay').innerHTML = '';
-}
-
 /* ── Keyboard input ──────────────────────────────────────────────────────── */
 document.addEventListener('keydown', (e) => {
   if (!inputReady) return;
-  // Wake screen
   XeInput.requestWakeLock();
-
-  // Raw key (keyboard is always identity)
   const raw = e.key;
+  
+  // Pour le mapping des boutons (pas des flèches)
+  if (mapperActive && mapperWaitingInput && !mapperWaitingForMouse) {
+    e.preventDefault();
+    mapperReceiveInput(raw);
+    return;
+  }
+  
   onKey(raw, '__keyboard__');
 });
 
@@ -337,18 +559,12 @@ document.addEventListener('keydown', (e) => {
 function onKey(raw, deviceId) {
   if (!inputReady) return;
 
-  // Device mapping interception
-  if (mapperActive && mapperWaitingInput) {
-    mapperReceiveInput(raw);
-    return;
-  }
-
-  // Resolve key through mapper (keyboard passes through)
+  // Resolve key through mapper
   const key = (deviceId && deviceId !== '__keyboard__')
     ? mapper.resolveKey(deviceId, raw)
     : raw;
 
-  if (!key) return; // unmapped device key
+  if (!key) return;
 
   // Konami
   if (key === KONAMI[konamiIdx]) {
@@ -396,13 +612,17 @@ function onKey(raw, deviceId) {
   else if (key === 'Start') openPower();
 }
 
-// Gamepad sends raw keys, resolve via mapper if device known
-const _origGpOnKey = gpPoller.onKey.bind(gpPoller);
+// Gamepad
 gpPoller.onKey = (rawKey) => {
-  // Find which gamepad triggered (approximate — use first connected)
   const gps = navigator.getGamepads ? navigator.getGamepads() : [];
   let deviceId = '__gamepad__';
   for (let i = 0; i < gps.length; i++) { if (gps[i]) { deviceId = gps[i].id; break; } }
+  
+  if (mapperActive && mapperWaitingInput && !mapperWaitingForMouse) {
+    mapperReceiveInput(rawKey);
+    return;
+  }
+  
   onKey(rawKey, deviceId);
 };
 </script>
