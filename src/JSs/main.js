@@ -767,6 +767,39 @@ ipcMain.handle('set-display', async (_, opts) => {
   })
 })
 
+ipcMain.handle('get-display-modes', async () => new Promise(resolve => {
+  exec('which xrandr', err => {
+    if (err) return resolve({ resolutions: [], refreshRates: [] })
+    exec("xrandr | grep ' connected' | awk '{print $1}' | head -1", (e, out) => {
+      const output = (out || '').trim() || 'HDMI-1'
+      exec(`xrandr --query`, (e2, xout) => {
+        if (e2 || !xout) return resolve({ resolutions: [], refreshRates: [] })
+        // Parser les modes de l'écran connecté
+        const lines = xout.split('\n')
+        let inOutput = false
+        const resSeen = new Set()
+        const rateSeen = new Set()
+        const resolutions = []
+        const refreshRates = []
+        for (const line of lines) {
+          if (line.startsWith(output)) { inOutput = true; continue }
+          else if (inOutput && /^\S/.test(line)) break // autre output
+          if (!inOutput) continue
+          // ligne de mode : ex "   1920x1080     60.00*+  50.00  "
+          const modeMatch = line.match(/^\s+(\d+x\d+)/)
+          if (!modeMatch) continue
+          const res = modeMatch[1].replace('x', '×')
+          if (!resSeen.has(res)) { resSeen.add(res); resolutions.push(res) }
+          // taux de rafraîchissement
+          const rates = [...line.matchAll(/(\d+\.\d+)/g)].map(m => Math.round(parseFloat(m[1])) + 'Hz')
+          rates.forEach(r => { if (!rateSeen.has(r)) { rateSeen.add(r); refreshRates.push(r) } })
+        }
+        resolve({ resolutions, refreshRates })
+      })
+    })
+  })
+}))
+
 /* ── Audio ─────────────────────────────────────────────────────────────────── */
 ipcMain.handle('set-audio', async (_, opts) => {
   const cfg = loadConfig(); cfg.audio = opts; saveConfig(cfg)

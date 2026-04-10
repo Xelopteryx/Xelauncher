@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('xeLauncher', {
   setControllerType:       (type)                   => ipcRenderer.invoke('set-controller-type', type),
 
   /* Display / Audio */
+  getDisplayModes:         ()                       => ipcRenderer.invoke('get-display-modes'),
   setDisplay:              (opts)                   => ipcRenderer.invoke('set-display', opts),
   setAudio:                (opts)                   => ipcRenderer.invoke('set-audio', opts),
 

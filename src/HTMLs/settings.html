@@ -15,8 +15,7 @@
   <!-- Sidebar -->
   <nav class="settings-sidebar" id="sidebar">
     <div class="settings-logo">
-      <img src="../LOGOs/jellyfin.png" alt="XeLauncher" onerror="this.outerHTML='<span style=&quot;font-size:22px&quot;>⚙</span>'">
-      <div class="settings-logo-text">XeLauncher</div>
+      <img src="../LOGOs/prometheus.png" alt="Prometheus" onerror="this.outerHTML='<span style=&quot;font-size:28px;opacity:0.7&quot;>⚙</span>'">
     </div>
     <div class="sidebar-item" data-tab="system"><span class="icon">💻</span>Système</div>
     <div class="sidebar-item" data-tab="display"><span class="icon">🖥</span>Affichage</div>
@@ -28,6 +27,7 @@
 
   <!-- Content -->
   <main class="settings-main" id="settingsMain">
+
     <!-- System tab -->
     <div id="tab-system" class="tab-content">
       <div class="section-title">Système</div>
@@ -49,7 +49,7 @@
         </div>
       </div>
       <div class="settings-group">
-        <div class="section-title" style="font-size:clamp(10px,1.2vw,14px)">Version</div>
+        <div class="section-title" style="font-size:clamp(10px,1.2vw,14px);margin:12px 16px 8px">Version</div>
         <div class="settings-row">
           <span class="settings-row-label">XeLauncher</span>
           <span class="settings-row-value" id="versionVal">—</span>
@@ -123,9 +123,14 @@
           <span class="settings-row-value" id="wifiScanStatus">↻</span>
         </div>
         <div class="wifi-list" id="wifiList"></div>
+        <div class="settings-row" data-action="wifi-hide" style="border-top:1px solid var(--border);margin-top:4px">
+          <span class="settings-row-label">Réseaux masqués</span>
+          <span class="settings-row-value" id="hiddenNetCount">0</span>
+        </div>
+        <div id="hiddenNetList" style="display:none"></div>
       </div>
       <div class="settings-group" style="margin-top:24px">
-        <div class="section-title" style="font-size:clamp(10px,1.2vw,14px)">Interfaces</div>
+        <div class="section-title" style="font-size:clamp(10px,1.2vw,14px);margin:12px 16px 8px">Interfaces réseau</div>
         <div class="iface-list" id="ifaceList"></div>
       </div>
     </div>
@@ -138,38 +143,52 @@
           <span class="settings-row-label">Bluetooth</span>
           <div class="toggle" id="btToggle"></div>
         </div>
-        <div class="settings-row" data-action="bt-scan">
+        <div class="settings-row" id="row-bt-scan" data-action="bt-scan">
           <span class="settings-row-label">Rechercher des appareils</span>
           <span class="settings-row-value" id="btScanStatus">↻</span>
         </div>
         <div class="bt-list" id="btPairedList"></div>
-        <div class="section-title" style="font-size:clamp(10px,1.2vw,14px);margin-top:16px">Appareils trouvés</div>
+        <div id="btFoundHeader" style="padding:12px 16px 4px;font-family:var(--font-mono);font-size:clamp(8px,0.9vw,10px);letter-spacing:3px;color:rgba(0,164,220,0.5);text-transform:uppercase;">Appareils trouvés</div>
         <div class="bt-list" id="btScanList"></div>
       </div>
     </div>
 
     <!-- Controllers tab -->
     <div id="tab-controllers" class="tab-content" style="display:none">
-      <div class="section-title">Manettes & Télécommandes</div>
+      <div class="section-title">Manettes &amp; Télécommandes</div>
       <div class="settings-group">
-        <div class="hint" style="text-align:left;margin-bottom:12px">
-          Les mappages sauvegardés ici sont utilisés pour convertir les entrées de chaque périphérique en touches clavier.
+        <div class="hint" style="padding:10px 16px 4px">
+          Les mappages sauvegardés ici convertissent les entrées de chaque périphérique en touches clavier.
         </div>
         <div class="device-list" id="deviceMapList"></div>
         <div class="settings-row" data-action="map-remote" style="margin-top:4px">
-          <span class="settings-row-label">🔴 Configurer la télécommande</span>
+          <span class="settings-row-label">🔴 Configurer un nouvel appareil</span>
           <span class="settings-row-value">→</span>
         </div>
-        <div class="settings-row" data-action="clear-maps" style="margin-top:12px">
+        <div class="settings-row" data-action="clear-maps" style="margin-top:4px">
           <span class="settings-row-label">Réinitialiser tous les mappages</span>
           <span class="settings-row-value">✕</span>
         </div>
-        <div class="settings-row export-import" style="justify-content:center;gap:20px;margin-top:16px">
+        <div class="settings-row export-import" style="justify-content:center;gap:20px;margin-top:4px">
           <button class="option-item" id="exportMapsBtn" style="padding:8px 16px">📤 Exporter</button>
           <button class="option-item" id="importMapsBtn" style="padding:8px 16px">📥 Importer</button>
         </div>
       </div>
+
+      <!-- Jellyfin mapping section -->
+      <div class="section-title" style="margin-top:32px">Jellyfin — Touches</div>
+      <div class="settings-group">
+        <div class="hint" style="padding:10px 16px 4px">
+          Configurez quelles touches contrôlent Jellyfin Media Player. Choisissez entre 2 et 5 boutons (+ la croix directionnelle).
+        </div>
+        <div class="settings-row" data-action="jf-configure">
+          <span class="settings-row-label">Configurer les touches Jellyfin</span>
+          <span class="settings-row-value" id="jfConfigStatus">→</span>
+        </div>
+        <div id="jfMappingGrid" class="jf-mapping-grid" style="display:none"></div>
+      </div>
     </div>
+
   </main>
 </div>
 
@@ -218,7 +237,6 @@ let inputReady = false;
 let activeTab = 'system';
 const TABS = ['system','display','audio','network','bluetooth','controllers'];
 
-// per-tab row focus
 let rowFocusMap = {};
 TABS.forEach(t => { rowFocusMap[t] = 0; });
 
@@ -226,38 +244,68 @@ let sidebarFocused = true;
 let sidebarFocusIdx = 0;
 let screen = 'main';
 
-/* ── Display settings state ───────────────────────────────────────────────── */
+/* ── Display state ── */
 let dispRes = '1920×1080', dispRef = '60Hz', dispRot = '0°';
-const RES_OPTS = ['1280×720','1920×1080','3840×2160'];
-const REF_OPTS = ['30Hz','50Hz','60Hz'];
+let RES_OPTS = ['1280×720','1920×1080','3840×2160'];
+let REF_OPTS = ['30Hz','50Hz','60Hz'];
 const ROT_OPTS = ['0°','90°','180°','270°'];
 let resExpanded = false, refExpanded = false, rotExpanded = false;
 let resSelIdx = 1, refSelIdx = 2, rotSelIdx = 0;
 
-/* ── Audio settings state ─────────────────────────────────────────────────── */
+/* ── Audio state ── */
 let audioOut = 'HDMI', audioVol = 80;
 const AUDIO_OUTS = ['HDMI','Analogique'];
 const AUDIO_VOLS = [20,40,60,80,100];
 let audioOutExpanded = false, volExpanded = false;
 let audioOutSelIdx = 0, volSelIdx = 3;
 
-/* ── WiFi state ───────────────────────────────────────────────────────────── */
+/* ── Dropdown focus state ── */
+// Quand un menu déroulant est ouvert, on bloque le focus sur ses items.
+// activeDropdown = { opts: [...], selIdx: N, select: fn(i), close: fn }
+let activeDropdown = null;
+
+/* ── WiFi state ── */
 let wifiNetworks = [], wifiCurrentSSID = '', wifiFocusIdx = 0;
-let ifaceList = [], ifaceFocusIdx = 0;
+let ifaceList = [], ifaceExpandedIdx = -1;
+let ifaceConfigState = {};
 let kbCallback = null;
+let kbContextData = null;
+let hiddenNetworks = [];
+let hiddenListExpanded = false;
 
-/* ── Bluetooth state ─────────────────────────────────────────────────────── */
-let btPowered = false, btPaired = [], btScan = [], btPairedFocusIdx = 0, btScanFocusIdx = 0;
+/* ── Bluetooth state ── */
+let btPowered = false, btPaired = [], btScanResults = [], btPairedFocusIdx = 0, btScanFocusIdx = 0;
 
-/* ── Controller map state ─────────────────────────────────────────────────── */
+/* ── Controller map state ── */
 let deviceMapFocusIdx = 0;
 
-/* ── Init ────────────────────────────────────────────────────────────────── */
+/* ── Jellyfin mapping state ── */
+const JF_ACTIONS = [
+  { id:'jf_up',     label:'↑ Haut',          key:'ArrowUp'  },
+  { id:'jf_down',   label:'↓ Bas',           key:'ArrowDown'},
+  { id:'jf_left',   label:'← Gauche',        key:'ArrowLeft'},
+  { id:'jf_right',  label:'→ Droite',        key:'ArrowRight'},
+  { id:'jf_ok',     label:'OK / Entrée',     key:'Enter'    },
+  { id:'jf_back',   label:'Retour',          key:'Escape'   },
+  { id:'jf_menu',   label:'Menu Jellyfin',   key:'m'        },
+  { id:'jf_prev',   label:'◀◀ Retour arrière',key:'j'       },
+  { id:'jf_next',   label:'▶▶ Avancer',      key:'l'        },
+];
+// Les 4 premières (croix directionnelle) sont toujours incluses
+// L'utilisateur choisit entre 2 et 5 boutons supplémentaires (indices 4..8)
+let jfMappingState = {}; // { actionId: rawKey }
+let jfMappingActive = false;
+let jfMappingIdx = 0;    // index dans JF_ACTIONS en cours de mapping
+let jfConfigExpanded = false;
+let jfButtonCount = 5;   // 2..5 boutons en dehors de la croix
+let jfMappingStep = 'choose'; // 'choose' | 'mapping'
+
+/* ── Init ── */
 document.addEventListener('DOMContentLoaded', () => {
   XeInput.requestWakeLock();
   gpPoller.start();
+  loadHiddenNetworks();
 
-  // Sidebar clicks
   document.querySelectorAll('.sidebar-item').forEach((el, i) => {
     el.addEventListener('click', () => {
       sidebarFocusIdx = i;
@@ -266,22 +314,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Mode buttons
   document.getElementById('kbModeLetters').addEventListener('click', () => kb.setMode('letters'));
   document.getElementById('kbModeNums').addEventListener('click', () => kb.setMode('nums'));
 
-  // Export/Import buttons
   const exportBtn = document.getElementById('exportMapsBtn');
   const importBtn = document.getElementById('importMapsBtn');
   if (exportBtn) exportBtn.addEventListener('click', exportMappings);
   if (importBtn) importBtn.addEventListener('click', importMappings);
 
-  // Load data
   loadVersion();
+  loadDisplayModes();
   loadInterfaces();
   loadSavedSettings();
+  loadJfMapping();
 
   selectTab('system');
+  updateSidebarFocus();
   setTimeout(() => { inputReady = true; }, 700);
 });
 
@@ -289,18 +337,19 @@ window.addEventListener('gamepadconnected', (e) => {
   if (!mapper.has(e.gamepad.id)) openMapperUI(e.gamepad.id);
 });
 
-/* ── Virtual keyboard ─────────────────────────────────────────────────────── */
+/* ── Virtual keyboard ── */
 const kb = new XeInput.VirtualKeyboard(
   document.getElementById('kbRows'),
   document.getElementById('kbDisplay'),
   document.getElementById('kbOverlay')
 );
 
-function openKb(label, initial, callback) {
+function openKb(label, initial, callback, contextData) {
   document.getElementById('kbLabel').textContent = label;
   kb.open(initial || '');
   kbCallback = callback;
-  kb.onConfirm = (val) => { closeKb(); if (kbCallback) kbCallback(val); };
+  kbContextData = contextData || null;
+  kb.onConfirm = (val) => { closeKb(); if (kbCallback) kbCallback(val, kbContextData); };
   kb.onCancel = closeKb;
   document.getElementById('kbOverlay').classList.add('visible');
   screen = 'kb';
@@ -311,7 +360,7 @@ function closeKb() {
   screen = 'main';
 }
 
-/* ── Tab management ───────────────────────────────────────────────────────── */
+/* ── Tab management ── */
 function selectTab(tabId) {
   activeTab = tabId;
   document.querySelectorAll('.tab-content').forEach(el => { el.style.display = 'none'; });
@@ -320,14 +369,14 @@ function selectTab(tabId) {
   document.querySelectorAll('.sidebar-item').forEach((el, i) => {
     el.classList.toggle('active', TABS[i] === tabId);
   });
-  if (tabId === 'network') { loadWifi(); loadInterfaces(); }
+  if (tabId === 'network') { loadInterfaces(); }
   if (tabId === 'bluetooth') { loadBluetooth(); }
-  if (tabId === 'controllers') { renderDeviceMaps(); }
+  if (tabId === 'controllers') { renderDeviceMaps(); renderJfMapping(); }
   rowFocusMap[tabId] = 0;
   updateContentFocus();
 }
 
-/* ── Sidebar focus ────────────────────────────────────────────────────────── */
+/* ── Sidebar focus ── */
 function updateSidebarFocus() {
   document.querySelectorAll('.sidebar-item').forEach((el, i) => {
     el.classList.toggle('active', TABS[i] === activeTab);
@@ -335,11 +384,11 @@ function updateSidebarFocus() {
   });
 }
 
-/* ── Content rows focus ───────────────────────────────────────────────────── */
+/* ── Content rows focus ── */
 function getContentRows() {
   const t = document.getElementById('tab-' + activeTab);
   if (!t) return [];
-  return Array.from(t.querySelectorAll('.settings-row, .wifi-network, .iface-item, .bt-item, .device-item, .option-item, .toggle'));
+  return Array.from(t.querySelectorAll('.settings-row, .wifi-network, .iface-item, .iface-field-value, .iface-apply-btn, .bt-item, .device-item, .option-item, .toggle, .jf-key-btn'));
 }
 
 function updateContentFocus() {
@@ -350,7 +399,29 @@ function updateContentFocus() {
   });
 }
 
-/* ── System tab ─────────────────────────────────────────────────────────── */
+/* ── Display modes ── */
+function loadDisplayModes() {
+  if (!window.xeLauncher) return;
+  window.xeLauncher.getDisplayModes().then(modes => {
+    if (modes.resolutions && modes.resolutions.length) {
+      RES_OPTS = modes.resolutions;
+      // Recaler resSelIdx sur la valeur actuelle, ou 0 par défaut
+      const idx = RES_OPTS.indexOf(dispRes);
+      resSelIdx = idx >= 0 ? idx : 0;
+      dispRes = RES_OPTS[resSelIdx];
+      document.getElementById('resValue').textContent = dispRes;
+    }
+    if (modes.refreshRates && modes.refreshRates.length) {
+      REF_OPTS = modes.refreshRates;
+      const idx = REF_OPTS.indexOf(dispRef);
+      refSelIdx = idx >= 0 ? idx : 0;
+      dispRef = REF_OPTS[refSelIdx];
+      document.getElementById('refValue').textContent = dispRef;
+    }
+  });
+}
+
+/* ── System tab ── */
 function loadVersion() {
   if (!window.xeLauncher) return;
   window.xeLauncher.getVersion().then(v => {
@@ -364,18 +435,107 @@ function loadVersion() {
 
 function doUpdate() {
   if (!window.xeLauncher) return;
+  document.getElementById('updateStatus').textContent = '…';
   document.getElementById('loadingText').textContent = 'Mise à jour…';
   document.getElementById('loadingOverlay').classList.add('visible');
   window.xeLauncher.systemUpdate().then(ok => {
     document.getElementById('loadingOverlay').classList.remove('visible');
     toast.show(ok ? 'Mise à jour terminée' : 'Erreur', !ok);
-    if (ok) loadVersion();
+    // Toujours re-vérifier le statut après la tentative de mise à jour
+    document.getElementById('updateStatus').textContent = 'Vérification…';
+    window.xeLauncher.checkUpdate().then(r => {
+      document.getElementById('updateStatus').textContent = r.available ? r.version + ' dispo' : 'À jour';
+    });
   });
 }
 
-/* ── Network tab ─────────────────────────────────────────────────────────── */
-function loadWifi() {
-  if (!window.xeLauncher) return;
+/* ── Network tab ── */
+function loadHiddenNetworks() {
+  try { hiddenNetworks = JSON.parse(localStorage.getItem('xelauncher_hidden_nets') || '[]'); } catch(e) { hiddenNetworks = []; }
+  updateHiddenNetCount();
+}
+
+function saveHiddenNetworks() {
+  localStorage.setItem('xelauncher_hidden_nets', JSON.stringify(hiddenNetworks));
+  updateHiddenNetCount();
+}
+
+function updateHiddenNetCount() {
+  const el = document.getElementById('hiddenNetCount');
+  if (el) el.textContent = hiddenNetworks.length;
+}
+
+function renderWifiList() {
+  const c = document.getElementById('wifiList');
+  c.innerHTML = '';
+  const visible = wifiNetworks.filter(n => !hiddenNetworks.includes(n.ssid));
+  if (!visible.length) {
+    c.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:clamp(9px,1vw,11px);letter-spacing:2px;text-transform:uppercase;padding:12px 16px">Aucun réseau — lancez un scan</div>';
+    updateContentFocus();
+    return;
+  }
+  visible.forEach((n) => {
+    const el = document.createElement('div');
+    el.className = 'wifi-network' + (n.ssid === wifiCurrentSSID ? ' current' : '');
+    const sig = parseInt(n.signal || 0);
+    const lit = sig > 75 ? 4 : sig > 50 ? 3 : sig > 25 ? 2 : 1;
+    const bars = [1,2,3,4].map(b => `<span class="bar${b<=lit?' lit':''}"></span>`).join('');
+    el.innerHTML =
+      '<span class="wifi-ssid">' + n.ssid + '</span>' +
+      '<span class="wifi-meta">' +
+        '<span class="wifi-signal">' + bars + '</span>' +
+        (n.ssid === wifiCurrentSSID ? '<span style="color:#a5d6a7;font-size:11px">✓</span>' : '') +
+        '<span class="wifi-security">' + (n.security || '') + '</span>' +
+      '</span>';
+    // Long press / right click → masquer
+    let pressTimer;
+    el.addEventListener('mousedown', () => { pressTimer = setTimeout(() => promptHideNetwork(n.ssid), 700); });
+    el.addEventListener('mouseup', () => clearTimeout(pressTimer));
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); promptHideNetwork(n.ssid); });
+    el.addEventListener('click', () => connectWifi(n));
+    c.appendChild(el);
+  });
+  updateContentFocus();
+}
+
+function promptHideNetwork(ssid) {
+  if (confirm('Masquer "' + ssid + '" dans la liste ?')) {
+    if (!hiddenNetworks.includes(ssid)) { hiddenNetworks.push(ssid); saveHiddenNetworks(); }
+    renderWifiList();
+    renderHiddenList();
+  }
+}
+
+function renderHiddenList() {
+  const c = document.getElementById('hiddenNetList');
+  c.innerHTML = '';
+  if (!hiddenNetworks.length) {
+    c.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:clamp(9px,1vw,11px);letter-spacing:2px;text-transform:uppercase;padding:10px 16px">Aucun réseau masqué</div>';
+    return;
+  }
+  hiddenNetworks.forEach((ssid, i) => {
+    const el = document.createElement('div');
+    el.className = 'wifi-network';
+    el.style.opacity = '0.6';
+    el.innerHTML =
+      '<span class="wifi-ssid" style="color:var(--text-dim)">' + ssid + '</span>' +
+      '<button class="remove-btn" style="font-family:var(--font-mono);font-size:11px;letter-spacing:1px;color:rgba(192,57,43,0.7);background:none;border:1px solid transparent;cursor:pointer;padding:3px 8px">Afficher</button>';
+    el.querySelector('.remove-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      hiddenNetworks.splice(i, 1);
+      saveHiddenNetworks();
+      renderHiddenList();
+      renderWifiList();
+    });
+    c.appendChild(el);
+  });
+}
+
+function doWifiScan() {
+  if (!window.xeLauncher) {
+    toast.show('API non disponible', true);
+    return;
+  }
   document.getElementById('wifiScanStatus').textContent = '…';
   window.xeLauncher.wifiCurrentSSID().then(ssid => { wifiCurrentSSID = ssid || ''; });
   window.xeLauncher.wifiScan().then(nets => {
@@ -385,32 +545,11 @@ function loadWifi() {
   });
 }
 
-function renderWifiList() {
-  const c = document.getElementById('wifiList');
-  c.innerHTML = '';
-  if (!wifiNetworks.length) { c.innerHTML = '<div style="color:var(--text-dim);font-size:12px;letter-spacing:2px;padding:12px">Aucun réseau</div>'; return; }
-  wifiNetworks.forEach((n, i) => {
-    const el = document.createElement('div');
-    el.className = 'wifi-network' + (n.ssid === wifiCurrentSSID ? ' current' : '');
-    const sig = parseInt(n.signal || 0);
-    const bars = sig > 66 ? '███' : sig > 33 ? '██░' : '█░░';
-    el.innerHTML = '<span class="wifi-ssid">' + n.ssid + '</span>' +
-      '<span class="wifi-meta"><span class="wifi-signal">' + bars + '</span>' +
-      (n.ssid === wifiCurrentSSID ? '<span style="color:#a5d6a7">✓</span>' : '') +
-      '<span>' + (n.security || '') + '</span></span>';
-    el.addEventListener('click', () => connectWifi(n));
-    c.appendChild(el);
-  });
-  updateContentFocus();
-}
-
 function connectWifi(net) {
   if (!window.xeLauncher) return;
   if (net.ssid === wifiCurrentSSID) { toast.show('Déjà connecté', false); return; }
-  if (net.security && net.security.trim() && net.security !== 'WPA3') {
-    openKb('Mot de passe : ' + net.ssid, '', (pwd) => {
-      doWifiConnect(net.ssid, pwd);
-    });
+  if (net.security && net.security.trim() && net.security !== 'Open') {
+    openKb('Mot de passe : ' + net.ssid, '', (pwd) => { doWifiConnect(net.ssid, pwd); });
   } else {
     doWifiConnect(net.ssid, '');
   }
@@ -422,7 +561,7 @@ function doWifiConnect(ssid, pwd) {
   document.getElementById('loadingOverlay').classList.add('visible');
   window.xeLauncher.wifiConnect(ssid, pwd).then(ok => {
     document.getElementById('loadingOverlay').classList.remove('visible');
-    if (ok) { wifiCurrentSSID = ssid; toast.show('Connecté à ' + ssid, false); loadWifi(); }
+    if (ok) { wifiCurrentSSID = ssid; toast.show('Connecté à ' + ssid, false); renderWifiList(); }
     else toast.show('Connexion échouée', true);
   });
 }
@@ -437,32 +576,113 @@ function loadInterfaces() {
 
 function renderIfaceList() {
   const c = document.getElementById('ifaceList');
-  if (!c) return; c.innerHTML = '';
-  ifaceList.forEach(iface => {
+  if (!c) return;
+  c.innerHTML = '';
+  ifaceList.forEach((iface, idx) => {
+    const wrapper = document.createElement('div');
+
     const el = document.createElement('div');
     el.className = 'iface-item';
-    el.innerHTML = '<div class="iface-dot ' + iface.state + '"></div>' +
+    el.innerHTML =
+      '<div class="iface-dot ' + (iface.state || 'down') + '"></div>' +
       '<span class="iface-name">' + iface.name + '</span>' +
       '<span class="iface-ip">' + (iface.ip || '—') + '</span>';
-    el.addEventListener('click', () => showStaticIpDialog(iface));
-    c.appendChild(el);
+    el.addEventListener('click', () => toggleIfacePanel(idx));
+    wrapper.appendChild(el);
+
+    // Expandable config panel
+    const panel = document.createElement('div');
+    panel.className = 'iface-config-panel';
+    panel.id = 'iface-panel-' + idx;
+    panel.style.display = ifaceExpandedIdx === idx ? 'grid' : 'none';
+
+    const cfg = ifaceConfigState[iface.name] || { ip: iface.ip || '', mask: iface.mask || '255.255.255.0', gw: iface.gateway || '', dns: iface.dns || '' };
+
+    const fields = [
+      { key:'ip',   label:'Adresse IP',  val: cfg.ip   },
+      { key:'mask', label:'Masque',      val: cfg.mask },
+      { key:'gw',   label:'Passerelle',  val: cfg.gw   },
+      { key:'dns',  label:'DNS',         val: cfg.dns  },
+    ];
+    fields.forEach(f => {
+      const fd = document.createElement('div');
+      fd.className = 'iface-field';
+      fd.innerHTML = '<span class="iface-field-label">' + f.label + '</span>' +
+        '<div class="iface-field-value" data-iface="' + iface.name + '" data-field="' + f.key + '">' + (f.val || '—') + '</div>';
+      fd.querySelector('.iface-field-value').addEventListener('click', () => {
+        openKb(f.label + ' — ' + iface.name, f.val || '', (val, ctx) => {
+          if (!ifaceConfigState[ctx.iface]) ifaceConfigState[ctx.iface] = {};
+          ifaceConfigState[ctx.iface][ctx.field] = val;
+          renderIfaceList();
+        }, { iface: iface.name, field: f.key });
+      });
+      panel.appendChild(fd);
+    });
+
+    const applyBtn = document.createElement('button');
+    applyBtn.className = 'iface-apply-btn';
+    applyBtn.textContent = 'Appliquer';
+    applyBtn.addEventListener('click', () => applyIfaceConfig(iface.name));
+    panel.appendChild(applyBtn);
+
+    wrapper.appendChild(panel);
+    c.appendChild(wrapper);
   });
   updateContentFocus();
 }
 
-async function showStaticIpDialog(iface) {
-  const currentIp = iface.ip || '';
-  openKb('Adresse IP pour ' + iface.name, currentIp, (ip) => {
-    if (ip && ip !== currentIp) {
-      toast.show('Configuration IP manuelle - ' + ip, false);
-    }
+function toggleIfacePanel(idx) {
+  ifaceExpandedIdx = ifaceExpandedIdx === idx ? -1 : idx;
+  renderIfaceList();
+}
+
+function applyIfaceConfig(ifaceName) {
+  const cfg = ifaceConfigState[ifaceName];
+  if (!cfg || !cfg.ip) { toast.show('IP manquante', true); return; }
+  if (!window.xeLauncher) { toast.show('API non disponible', true); return; }
+  document.getElementById('loadingText').textContent = 'Configuration ' + ifaceName + '…';
+  document.getElementById('loadingOverlay').classList.add('visible');
+  window.xeLauncher.setStaticIp({ iface: ifaceName, ip: cfg.ip, mask: cfg.mask || '255.255.255.0', gateway: cfg.gw || '', dns: cfg.dns || '' })
+    .then(ok => {
+      document.getElementById('loadingOverlay').classList.remove('visible');
+      toast.show(ok ? 'Config réseau appliquée' : 'Erreur config réseau', !ok);
+      if (ok) loadInterfaces();
+    });
+}
+
+/* ── Dropdown helpers ── */
+function openDropdown(opts, currentIdx, selectFn, closeFn) {
+  activeDropdown = { opts, selIdx: 0, select: selectFn, close: closeFn };
+  // updateDropdownFocus appelé après le rendu des options dans le DOM
+  requestAnimationFrame(() => updateDropdownFocus());
+}
+
+function closeDropdown() {
+  if (!activeDropdown) return;
+  activeDropdown.close();
+  activeDropdown = null;
+}
+
+function updateDropdownFocus() {
+  if (!activeDropdown) return;
+  const tab = document.getElementById('tab-' + activeTab);
+  if (!tab) return;
+  // Cherche toutes les option-list dont le conteneur parent est visible
+  const visibleList = Array.from(tab.querySelectorAll('.option-list')).find(el => {
+    const parent = el.parentElement;
+    return parent && parent.style.display !== 'none';
+  });
+  if (!visibleList) return;
+  const items = Array.from(visibleList.querySelectorAll('.option-item'));
+  items.forEach((el, i) => {
+    el.classList.toggle('active', i === activeDropdown.selIdx);
+    if (i === activeDropdown.selIdx) el.scrollIntoView({ block: 'nearest' });
   });
 }
 
-/* ── Display tab ─────────────────────────────────────────────────────────── */
+/* ── Display tab ── */
 function renderResOptions() {
-  const c = document.getElementById('resOptionList');
-  c.innerHTML = '';
+  const c = document.getElementById('resOptionList'); c.innerHTML = '';
   RES_OPTS.forEach((r, i) => {
     const btn = document.createElement('button');
     btn.className = 'option-item' + (i === resSelIdx ? ' selected' : '');
@@ -473,8 +693,7 @@ function renderResOptions() {
 }
 
 function renderRefOptions() {
-  const c = document.getElementById('refOptionList');
-  c.innerHTML = '';
+  const c = document.getElementById('refOptionList'); c.innerHTML = '';
   REF_OPTS.forEach((r, i) => {
     const btn = document.createElement('button');
     btn.className = 'option-item' + (i === refSelIdx ? ' selected' : '');
@@ -485,8 +704,7 @@ function renderRefOptions() {
 }
 
 function renderRotOptions() {
-  const c = document.getElementById('rotOptionList');
-  c.innerHTML = '';
+  const c = document.getElementById('rotOptionList'); c.innerHTML = '';
   ROT_OPTS.forEach((r, i) => {
     const btn = document.createElement('button');
     btn.className = 'option-item' + (i === rotSelIdx ? ' selected' : '');
@@ -496,10 +714,9 @@ function renderRotOptions() {
   });
 }
 
-/* ── Audio tab ───────────────────────────────────────────────────────────── */
+/* ── Audio tab ── */
 function renderAudioOutOptions() {
-  const c = document.getElementById('audioOutOptionList');
-  c.innerHTML = '';
+  const c = document.getElementById('audioOutOptionList'); c.innerHTML = '';
   AUDIO_OUTS.forEach((o, i) => {
     const btn = document.createElement('button');
     btn.className = 'option-item' + (i === audioOutSelIdx ? ' selected' : '');
@@ -510,8 +727,7 @@ function renderAudioOutOptions() {
 }
 
 function renderVolumeOptions() {
-  const c = document.getElementById('volumeOptionList');
-  c.innerHTML = '';
+  const c = document.getElementById('volumeOptionList'); c.innerHTML = '';
   AUDIO_VOLS.forEach((v, i) => {
     const btn = document.createElement('button');
     btn.className = 'option-item' + (i === volSelIdx ? ' selected' : '');
@@ -521,7 +737,7 @@ function renderVolumeOptions() {
   });
 }
 
-/* ── Bluetooth tab ────────────────────────────────────────────────────────── */
+/* ── Bluetooth tab ── */
 function loadBluetooth() {
   if (!window.xeLauncher) return;
   window.xeLauncher.btStatus().then(s => {
@@ -538,12 +754,17 @@ function loadBluetooth() {
 function renderBtPaired() {
   const c = document.getElementById('btPairedList');
   c.innerHTML = '';
-  if (!btPaired.length) { c.innerHTML = '<div style="color:var(--text-dim);font-size:12px;letter-spacing:2px;padding:12px">Aucun appareil appairé</div>'; return; }
+  if (!btPaired.length) {
+    c.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:clamp(9px,1vw,11px);letter-spacing:2px;text-transform:uppercase;padding:10px 16px">Aucun appareil appairé</div>';
+    updateContentFocus(); return;
+  }
   btPaired.forEach(dev => {
     const el = document.createElement('div');
     el.className = 'bt-item';
-    el.innerHTML = '<span class="bt-icon">🎮</span>' +
-      '<span class="bt-name">' + dev.name + '</span>' +
+    const icon = dev.type === 'audio' ? '🎧' : dev.type === 'keyboard' ? '⌨️' : '🎮';
+    el.innerHTML =
+      '<span class="bt-icon">' + icon + '</span>' +
+      '<span class="bt-name">' + (dev.name || dev.mac) + '</span>' +
       (dev.connected ? '<span class="bt-connected">● connecté</span>' : '') +
       '<span class="bt-mac">' + dev.mac + '</span>';
     el.addEventListener('click', () => {
@@ -555,7 +776,7 @@ function renderBtPaired() {
     });
     el.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      if (confirm('Retirer ' + dev.name + ' des appareils appairés ?')) {
+      if (confirm('Retirer "' + (dev.name || dev.mac) + '" des appareils appairés ?')) {
         window.xeLauncher && window.xeLauncher.btRemove(dev.mac).then(() => loadBluetooth());
       }
     });
@@ -565,11 +786,15 @@ function renderBtPaired() {
 }
 
 function doBtScan() {
-  if (!window.xeLauncher) return;
+  if (!window.xeLauncher) { toast.show('API non disponible', true); return; }
+  if (!btPowered) { toast.show('Activez le Bluetooth d\'abord', true); return; }
   document.getElementById('btScanStatus').textContent = '…';
+  document.getElementById('loadingText').textContent = 'Scan Bluetooth…';
+  document.getElementById('loadingOverlay').classList.add('visible');
   window.xeLauncher.btScan().then(devs => {
-    btScan = (devs || []).filter(d => !btPaired.find(p => p.mac === d.mac));
-    document.getElementById('btScanStatus').textContent = btScan.length + ' trouvé(s)';
+    document.getElementById('loadingOverlay').classList.remove('visible');
+    btScanResults = (devs || []).filter(d => !btPaired.find(p => p.mac === d.mac));
+    document.getElementById('btScanStatus').textContent = btScanResults.length + ' trouvé(s)';
     renderBtScan();
   });
 }
@@ -577,23 +802,27 @@ function doBtScan() {
 function renderBtScan() {
   const c = document.getElementById('btScanList');
   c.innerHTML = '';
-  if (!btScan.length) { c.innerHTML = '<div style="color:var(--text-dim);font-size:12px;letter-spacing:2px;padding:12px">Aucun appareil trouvé</div>'; return; }
-  btScan.forEach(dev => {
+  if (!btScanResults.length) {
+    c.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:clamp(9px,1vw,11px);letter-spacing:2px;text-transform:uppercase;padding:10px 16px">Aucun appareil trouvé</div>';
+    updateContentFocus(); return;
+  }
+  btScanResults.forEach(dev => {
     const el = document.createElement('div');
     el.className = 'bt-item';
-    el.innerHTML = '<span class="bt-icon">📡</span>' +
-      '<span class="bt-name">' + dev.name + '</span>' +
+    el.innerHTML =
+      '<span class="bt-icon">📡</span>' +
+      '<span class="bt-name">' + (dev.name || dev.mac) + '</span>' +
       '<span class="bt-mac">' + dev.mac + '</span>';
     el.addEventListener('click', () => {
       if (window.xeLauncher) {
-        document.getElementById('loadingText').textContent = 'Appairage…';
+        document.getElementById('loadingText').textContent = 'Appairage de ' + (dev.name || dev.mac) + '…';
         document.getElementById('loadingOverlay').classList.add('visible');
         window.xeLauncher.btPair(dev.mac).then(ok => {
           document.getElementById('loadingOverlay').classList.remove('visible');
-          toast.show(ok ? 'Appairé !' : 'Échec appairage', !ok);
+          toast.show(ok ? 'Appairé : ' + (dev.name || dev.mac) : 'Échec appairage', !ok);
           if (ok) {
             loadBluetooth();
-            if (!mapper.has(dev.mac + ':' + dev.name)) openMapperUI(dev.name);
+            if (!mapper.has(dev.mac)) openMapperUI(dev.mac);
           }
         });
       }
@@ -603,7 +832,7 @@ function renderBtScan() {
   updateContentFocus();
 }
 
-/* ── Controllers tab ─────────────────────────────────────────────────────── */
+/* ── Controllers tab ── */
 function renderDeviceMaps() {
   const c = document.getElementById('deviceMapList');
   c.innerHTML = '';
@@ -611,16 +840,25 @@ function renderDeviceMaps() {
   try { maps = JSON.parse(localStorage.getItem('xelauncher_inputmaps') || '{}'); } catch(e) { maps = {}; }
   const keys = Object.keys(maps);
   if (!keys.length) {
-    c.innerHTML = '<div style="color:var(--text-dim);font-size:12px;letter-spacing:2px;padding:12px">Aucun mappage enregistré</div>';
+    c.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:clamp(9px,1vw,11px);letter-spacing:2px;text-transform:uppercase;padding:10px 16px">Aucun mappage enregistré</div>';
     return;
   }
-  keys.forEach((deviceId, i) => {
+  keys.forEach((deviceId) => {
     const el = document.createElement('div');
     el.className = 'device-item';
-    const short = deviceId.substring(0, 40);
-    el.innerHTML = '<span class="device-icon">🎮</span>' +
-      '<span class="device-name">' + short + '</span>' +
-      '<span class="device-status">✓ configuré</span>';
+    const short = deviceId === REMOTE_DEVICE_ID ? '📺 Télécommande' : deviceId.substring(0, 40);
+    // Afficher les touches mappées
+    const map = maps[deviceId];
+    const mappedKeys = XeInput.ACTION_KEYS.map(a => {
+      const raw = map[a.id];
+      return raw ? (a.label + ': ' + raw) : null;
+    }).filter(Boolean).join(' · ');
+    el.innerHTML =
+      '<span class="device-icon">🎮</span>' +
+      '<div style="flex:1"><div class="device-name">' + short + '</div>' +
+        (mappedKeys ? '<div style="font-size:clamp(8px,0.85vw,10px);color:var(--text-hint);letter-spacing:1px;margin-top:3px">' + mappedKeys + '</div>' : '') +
+      '</div>' +
+      '<span style="font-size:clamp(9px,1vw,11px);color:rgba(0,164,220,0.6);letter-spacing:1px">configuré</span>';
     el.addEventListener('click', () => {
       if (confirm('Reconfigurer ce périphérique ?')) openMapperUI(deviceId);
     });
@@ -631,27 +869,20 @@ function renderDeviceMaps() {
 
 function exportMappings() {
   const maps = localStorage.getItem('xelauncher_inputmaps');
-  if (!maps) {
-    toast.show('Aucun mappage à exporter', true);
-    return;
-  }
+  if (!maps) { toast.show('Aucun mappage à exporter', true); return; }
   const blob = new Blob([maps], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = `xelauncher_maps_${Date.now()}.json`;
-  a.click();
+  a.href = url; a.download = 'xelauncher_maps_' + Date.now() + '.json'; a.click();
   URL.revokeObjectURL(url);
   toast.show('Mappages exportés', false);
 }
 
 function importMappings() {
   const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.json';
+  input.type = 'file'; input.accept = '.json';
   input.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
@@ -659,27 +890,118 @@ function importMappings() {
         localStorage.setItem('xelauncher_inputmaps', JSON.stringify(maps));
         toast.show('Mappages importés', false);
         renderDeviceMaps();
-      } catch(err) {
-        toast.show('Fichier invalide', true);
-      }
+      } catch(err) { toast.show('Fichier invalide', true); }
     };
     reader.readAsText(file);
   };
   input.click();
 }
 
-/* ── Input mapper UI ─────────────────────────────────────────────────────── */
+/* ── Jellyfin mapping ── */
+function loadJfMapping() {
+  try { jfMappingState = JSON.parse(localStorage.getItem('xelauncher_jf_mapping') || '{}'); } catch(e) { jfMappingState = {}; }
+  try { jfButtonCount = parseInt(localStorage.getItem('xelauncher_jf_btncount') || '5'); } catch(e) { jfButtonCount = 5; }
+  if (jfButtonCount < 2) jfButtonCount = 2;
+  if (jfButtonCount > 5) jfButtonCount = 5;
+}
+
+function saveJfMapping() {
+  localStorage.setItem('xelauncher_jf_mapping', JSON.stringify(jfMappingState));
+  localStorage.setItem('xelauncher_jf_btncount', String(jfButtonCount));
+  updateJfConfigStatus();
+}
+
+function updateJfConfigStatus() {
+  const el = document.getElementById('jfConfigStatus');
+  if (!el) return;
+  // Count mapped: first 4 (dpad) always + jfButtonCount extra
+  const total = 4 + jfButtonCount;
+  const mapped = JF_ACTIONS.slice(0, total).filter(a => jfMappingState[a.id]).length;
+  el.textContent = mapped + '/' + total + ' mappées';
+}
+
+function renderJfMapping() {
+  updateJfConfigStatus();
+  const grid = document.getElementById('jfMappingGrid');
+  if (!grid || !jfConfigExpanded) return;
+  const total = 4 + jfButtonCount;
+  grid.innerHTML = '';
+  JF_ACTIONS.slice(0, total).forEach((a, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'jf-key-btn' + (jfMappingState[a.id] ? ' mapped' : '');
+    if (jfMappingActive && jfMappingIdx === i) btn.classList.add('waiting');
+    btn.innerHTML =
+      '<span>' + a.label + '</span>' +
+      (jfMappingState[a.id] ? '<span class="jf-key-name">' + jfMappingState[a.id] + '</span>' : '');
+    btn.addEventListener('click', () => startJfMappingAt(i));
+    grid.appendChild(btn);
+  });
+  // Boutons pour choisir le nombre de boutons
+  const countRow = document.createElement('div');
+  countRow.style.cssText = 'grid-column:span 2;display:flex;gap:8px;padding:8px 0;align-items:center';
+  countRow.innerHTML = '<span style="font-family:var(--font-mono);font-size:clamp(8px,0.9vw,10px);letter-spacing:2px;color:var(--text-hint);text-transform:uppercase">Boutons (hors croix) :</span>';
+  [2,3,4,5].forEach(n => {
+    const b = document.createElement('button');
+    b.className = 'option-item' + (n === jfButtonCount ? ' selected' : '');
+    b.textContent = n;
+    b.addEventListener('click', () => { jfButtonCount = n; saveJfMapping(); renderJfMapping(); });
+    countRow.appendChild(b);
+  });
+  grid.appendChild(countRow);
+
+  // Bouton tout mapper
+  const mapAll = document.createElement('div');
+  mapAll.className = 'jf-key-btn';
+  mapAll.style.gridColumn = 'span 2';
+  mapAll.innerHTML = '<span>▶ Tout remapper dans l\'ordre</span>';
+  mapAll.addEventListener('click', () => startJfMappingAt(0));
+  grid.appendChild(mapAll);
+
+  // Bouton reset
+  const reset = document.createElement('div');
+  reset.className = 'jf-key-btn';
+  reset.style.gridColumn = 'span 2';
+  reset.innerHTML = '<span>✕ Réinitialiser le mapping Jellyfin</span>';
+  reset.addEventListener('click', () => { jfMappingState = {}; saveJfMapping(); renderJfMapping(); toast.show('Mapping Jellyfin réinitialisé', false); });
+  grid.appendChild(reset);
+
+  updateContentFocus();
+}
+
+function startJfMappingAt(startIdx) {
+  jfMappingActive = true;
+  jfMappingIdx = startIdx;
+  screen = 'jf-mapping';
+  renderJfMapping();
+}
+
+function handleJfMappingKey(rawKey) {
+  const total = 4 + jfButtonCount;
+  if (!jfMappingActive || jfMappingIdx >= total) return;
+  // Skip si Escape (annuler le mapping de cet élément)
+  if (rawKey !== 'Escape') {
+    jfMappingState[JF_ACTIONS[jfMappingIdx].id] = rawKey;
+  }
+  jfMappingIdx++;
+  if (jfMappingIdx >= total) {
+    jfMappingActive = false;
+    screen = 'main';
+    saveJfMapping();
+    toast.show('Mapping Jellyfin enregistré', false);
+  }
+  renderJfMapping();
+}
+
+/* ── Input mapper UI ── */
 let mapperActive = false, mapperDeviceId = '', mapperCurrentIdx = 0;
 let mapperResult = {}, mapperWaiting = false;
 
 function openMapperUI(deviceId) {
   mapperDeviceId = deviceId; mapperCurrentIdx = 0;
   mapperResult = {}; mapperActive = true; mapperWaiting = false;
-  // Activer la télécommande pendant la config si c'est elle qu'on configure
   if (deviceId === REMOTE_DEVICE_ID) remoteCapture.start(REMOTE_DEVICE_ID);
   const el = document.getElementById('mapperOverlay');
-  el.innerHTML = '';
-  el.className = 'mapper-overlay visible';
+  el.innerHTML = ''; el.className = 'mapper-overlay visible';
   screen = 'mapper';
 
   const title = document.createElement('div');
@@ -689,17 +1011,15 @@ function openMapperUI(deviceId) {
 
   const dev = document.createElement('div');
   dev.className = 'mapper-device';
-  dev.textContent = deviceId.substring(0, 55);
+  dev.textContent = deviceId === REMOTE_DEVICE_ID ? 'Télécommande / nouvel appareil' : deviceId.substring(0, 55);
   el.appendChild(dev);
 
   const act = document.createElement('div');
-  act.className = 'mapper-actions';
-  act.id = 'mapperAct2';
+  act.className = 'mapper-actions'; act.id = 'mapperAct2';
   el.appendChild(act);
 
   const grid = document.createElement('div');
-  grid.className = 'mapper-grid';
-  grid.id = 'mapperGrid3';
+  grid.className = 'mapper-grid'; grid.id = 'mapperGrid3';
   el.appendChild(grid);
 
   const hint = document.createElement('div');
@@ -715,13 +1035,11 @@ function openMapperUI(deviceId) {
   el.appendChild(skip);
 
   renderMapperUI2();
-  // Délai pour ignorer les événements résiduels (touches/axes encore actifs)
   setTimeout(() => nextMapperStep2(), 500);
 }
 
 function renderMapperUI2() {
-  const grid = document.getElementById('mapperGrid3');
-  if (!grid) return;
+  const grid = document.getElementById('mapperGrid3'); if (!grid) return;
   grid.innerHTML = '';
   XeInput.ACTION_KEYS.forEach((a, i) => {
     const item = document.createElement('div');
@@ -733,8 +1051,7 @@ function renderMapperUI2() {
     item.appendChild(lbl);
     if (mapperResult[a.id]) {
       const kn = document.createElement('span');
-      kn.className = 'mapper-key-name';
-      kn.textContent = mapperResult[a.id];
+      kn.className = 'mapper-key-name'; kn.textContent = mapperResult[a.id];
       item.appendChild(kn);
     }
     grid.appendChild(item);
@@ -763,56 +1080,42 @@ function closeMapperUI() {
   screen = 'main';
 }
 
-/* ── Save/Load settings ───────────────────────────────────────────────────── */
+/* ── Save/Load settings ── */
 function loadSavedSettings() {
   const saved = localStorage.getItem('xelauncher_settings');
   if (!saved) return;
   try {
     const cfg = JSON.parse(saved);
     if (cfg.display) {
-      if (cfg.display.resolution) {
-        const resIdx = RES_OPTS.indexOf(cfg.display.resolution);
-        if (resIdx >= 0) { resSelIdx = resIdx; dispRes = RES_OPTS[resIdx]; document.getElementById('resValue').textContent = dispRes; }
-      }
-      if (cfg.display.refresh) {
-        const refStr = cfg.display.refresh + 'Hz';
-        const refIdx = REF_OPTS.indexOf(refStr);
-        if (refIdx >= 0) { refSelIdx = refIdx; dispRef = refStr; document.getElementById('refValue').textContent = dispRef; }
-      }
-      if (cfg.display.rotation) {
-        const rotIdx = ROT_OPTS.indexOf(cfg.display.rotation);
-        if (rotIdx >= 0) { rotSelIdx = rotIdx; dispRot = ROT_OPTS[rotIdx]; document.getElementById('rotValue').textContent = dispRot; }
-      }
+      if (cfg.display.resolution) { const i = RES_OPTS.indexOf(cfg.display.resolution); if (i>=0) { resSelIdx=i; dispRes=RES_OPTS[i]; document.getElementById('resValue').textContent=dispRes; } }
+      if (cfg.display.refresh) { const s=cfg.display.refresh+'Hz'; const i=REF_OPTS.indexOf(s); if (i>=0) { refSelIdx=i; dispRef=s; document.getElementById('refValue').textContent=dispRef; } }
+      if (cfg.display.rotation) { const i=ROT_OPTS.indexOf(cfg.display.rotation); if (i>=0) { rotSelIdx=i; dispRot=ROT_OPTS[i]; document.getElementById('rotValue').textContent=dispRot; } }
     }
     if (cfg.audio) {
-      if (cfg.audio.output) {
-        const outIdx = AUDIO_OUTS.indexOf(cfg.audio.output);
-        if (outIdx >= 0) { audioOutSelIdx = outIdx; audioOut = AUDIO_OUTS[outIdx]; document.getElementById('audioOutVal').textContent = audioOut; }
-      }
-      if (cfg.audio.volume) {
-        const volIdx = AUDIO_VOLS.indexOf(cfg.audio.volume);
-        if (volIdx >= 0) { volSelIdx = volIdx; audioVol = AUDIO_VOLS[volIdx]; document.getElementById('volumeVal').textContent = audioVol + '%'; }
-      }
+      if (cfg.audio.output) { const i=AUDIO_OUTS.indexOf(cfg.audio.output); if (i>=0) { audioOutSelIdx=i; audioOut=AUDIO_OUTS[i]; document.getElementById('audioOutVal').textContent=audioOut; } }
+      if (cfg.audio.volume) { const i=AUDIO_VOLS.indexOf(cfg.audio.volume); if (i>=0) { volSelIdx=i; audioVol=AUDIO_VOLS[i]; document.getElementById('volumeVal').textContent=audioVol+'%'; } }
     }
   } catch(e) {}
 }
 
 function saveSettingsAuto() {
-  const config = {
-    display: { resolution: dispRes, refresh: parseInt(dispRef), rotation: dispRot },
-    audio: { output: audioOut, volume: audioVol }
-  };
+  const config = { display: { resolution: dispRes, refresh: parseInt(dispRef), rotation: dispRot }, audio: { output: audioOut, volume: audioVol } };
   localStorage.setItem('xelauncher_settings', JSON.stringify(config));
 }
 
-/* ── Row action handler ───────────────────────────────────────────────────── */
+/* ── Row action handler ── */
 function activateRow(el) {
   const action = el.dataset.action;
   if (action === 'back') { if (window.xeLauncher) window.xeLauncher.goBack(); else window.location.href = 'menu.html'; }
   else if (action === 'update') doUpdate();
   else if (action === 'reboot') { if (window.xeLauncher) window.xeLauncher.systemReboot(); }
   else if (action === 'shutdown') { if (window.xeLauncher) window.xeLauncher.systemShutdown(); }
-  else if (action === 'wifi-scan') loadWifi();
+  else if (action === 'wifi-scan') doWifiScan();
+  else if (action === 'wifi-hide') {
+    hiddenListExpanded = !hiddenListExpanded;
+    const hl = document.getElementById('hiddenNetList');
+    if (hl) { hl.style.display = hiddenListExpanded ? 'block' : 'none'; if (hiddenListExpanded) renderHiddenList(); }
+  }
   else if (action === 'bt-scan') doBtScan();
   else if (action === 'map-remote') { openMapperUI(REMOTE_DEVICE_ID); }
   else if (action === 'clear-maps') {
@@ -820,18 +1123,19 @@ function activateRow(el) {
     toast.show('Mappages supprimés', false);
     renderDeviceMaps();
   }
+  else if (action === 'jf-configure') {
+    jfConfigExpanded = !jfConfigExpanded;
+    const grid = document.getElementById('jfMappingGrid');
+    if (grid) { grid.style.display = jfConfigExpanded ? 'grid' : 'none'; if (jfConfigExpanded) renderJfMapping(); }
+  }
   else if (action === 'apply-display') {
     if (!window.xeLauncher) return;
-    window.xeLauncher.setDisplay({
-      resolution: RES_OPTS[resSelIdx].replace('×','x'),
-      refresh: parseInt(REF_OPTS[refSelIdx]),
-      rotation: ROT_OPTS[rotSelIdx]
-    }).then(ok => toast.show(ok ? 'Affichage mis à jour' : 'Erreur', !ok));
+    window.xeLauncher.setDisplay({ resolution: RES_OPTS[resSelIdx].replace('×','x'), refresh: parseInt(REF_OPTS[refSelIdx]), rotation: ROT_OPTS[rotSelIdx] })
+      .then(ok => toast.show(ok ? 'Affichage mis à jour' : 'Erreur', !ok));
   }
   else if (action === 'apply-audio') {
     if (!window.xeLauncher) return;
-    window.xeLauncher.setAudio({ output: audioOut, volume: audioVol })
-      .then(ok => toast.show(ok ? 'Audio mis à jour' : 'Erreur', !ok));
+    window.xeLauncher.setAudio({ output: audioOut, volume: audioVol }).then(ok => toast.show(ok ? 'Audio mis à jour' : 'Erreur', !ok));
   }
   else if (el.id === 'row-bt-power') {
     if (!window.xeLauncher) return;
@@ -840,38 +1144,36 @@ function activateRow(el) {
     el.querySelector('.toggle').className = 'toggle' + (btPowered ? ' on' : '');
     toast.show(btPowered ? 'Bluetooth activé' : 'Bluetooth désactivé', false);
   }
-  // Expandable rows
   else if (el.id === 'row-resolution') {
-    resExpanded = !resExpanded;
-    document.getElementById('res-options').style.display = resExpanded ? 'block' : 'none';
-    if (resExpanded) renderResOptions();
-  }
+    if (resExpanded) { resExpanded = false; document.getElementById('res-options').style.display='none'; activeDropdown=null; }
+    else { resExpanded = true; document.getElementById('res-options').style.display='block'; renderResOptions();
+      openDropdown(RES_OPTS, resSelIdx, (i) => { resSelIdx=i; dispRes=RES_OPTS[i]; document.getElementById('resValue').textContent=RES_OPTS[i]; renderResOptions(); saveSettingsAuto(); closeDropdown(); },
+        () => { resExpanded=false; document.getElementById('res-options').style.display='none'; }); } }
   else if (el.id === 'row-refresh') {
-    refExpanded = !refExpanded;
-    document.getElementById('ref-options').style.display = refExpanded ? 'block' : 'none';
-    if (refExpanded) renderRefOptions();
-  }
+    if (refExpanded) { refExpanded = false; document.getElementById('ref-options').style.display='none'; activeDropdown=null; }
+    else { refExpanded = true; document.getElementById('ref-options').style.display='block'; renderRefOptions();
+      openDropdown(REF_OPTS, refSelIdx, (i) => { refSelIdx=i; dispRef=REF_OPTS[i]; document.getElementById('refValue').textContent=REF_OPTS[i]; renderRefOptions(); saveSettingsAuto(); closeDropdown(); },
+        () => { refExpanded=false; document.getElementById('ref-options').style.display='none'; }); } }
   else if (el.id === 'row-rotation') {
-    rotExpanded = !rotExpanded;
-    document.getElementById('rot-options').style.display = rotExpanded ? 'block' : 'none';
-    if (rotExpanded) renderRotOptions();
-  }
+    if (rotExpanded) { rotExpanded = false; document.getElementById('rot-options').style.display='none'; activeDropdown=null; }
+    else { rotExpanded = true; document.getElementById('rot-options').style.display='block'; renderRotOptions();
+      openDropdown(ROT_OPTS, rotSelIdx, (i) => { rotSelIdx=i; dispRot=ROT_OPTS[i]; document.getElementById('rotValue').textContent=ROT_OPTS[i]; renderRotOptions(); saveSettingsAuto(); closeDropdown(); },
+        () => { rotExpanded=false; document.getElementById('rot-options').style.display='none'; }); } }
   else if (el.id === 'row-audio-out') {
-    audioOutExpanded = !audioOutExpanded;
-    document.getElementById('audio-out-options').style.display = audioOutExpanded ? 'block' : 'none';
-    if (audioOutExpanded) renderAudioOutOptions();
-  }
+    if (audioOutExpanded) { audioOutExpanded = false; document.getElementById('audio-out-options').style.display='none'; activeDropdown=null; }
+    else { audioOutExpanded = true; document.getElementById('audio-out-options').style.display='block'; renderAudioOutOptions();
+      openDropdown(AUDIO_OUTS, audioOutSelIdx, (i) => { audioOutSelIdx=i; audioOut=AUDIO_OUTS[i]; document.getElementById('audioOutVal').textContent=AUDIO_OUTS[i]; renderAudioOutOptions(); saveSettingsAuto(); closeDropdown(); },
+        () => { audioOutExpanded=false; document.getElementById('audio-out-options').style.display='none'; }); } }
   else if (el.id === 'row-volume') {
-    volExpanded = !volExpanded;
-    document.getElementById('volume-options').style.display = volExpanded ? 'block' : 'none';
-    if (volExpanded) renderVolumeOptions();
-  }
+    if (volExpanded) { volExpanded = false; document.getElementById('volume-options').style.display='none'; activeDropdown=null; }
+    else { volExpanded = true; document.getElementById('volume-options').style.display='block'; renderVolumeOptions();
+      openDropdown(AUDIO_VOLS, volSelIdx, (i) => { volSelIdx=i; audioVol=AUDIO_VOLS[i]; document.getElementById('volumeVal').textContent=AUDIO_VOLS[i]+'%'; renderVolumeOptions(); saveSettingsAuto(); closeDropdown(); },
+        () => { volExpanded=false; document.getElementById('volume-options').style.display='none'; }); } }
 }
 
-/* ── Input routing ───────────────────────────────────────────────────────── */
+/* ── Input routing ── */
 document.addEventListener('keydown', (e) => {
   if (!inputReady) return;
-  // Si remoteCapture est actif, il gère lui-même le keydown — ne pas doubler
   if (remoteCapture && remoteCapture.active) return;
   XeInput.requestWakeLock();
   onKey(e.key, '__keyboard__');
@@ -880,9 +1182,18 @@ document.addEventListener('keydown', (e) => {
 function onKey(raw, deviceId) {
   if (!inputReady) return;
 
+  // Jellyfin mapping capture
+  if (screen === 'jf-mapping' && jfMappingActive) {
+    // Résoudre la touche depuis le device
+    let rawForJf = raw;
+    if (deviceId && deviceId !== '__keyboard__') {
+      rawForJf = mapper.resolveKey(deviceId, raw) || raw;
+    }
+    handleJfMappingKey(rawForJf);
+    return;
+  }
+
   if (mapperActive && mapperWaiting) {
-    // Pour la télécommande : remoteCapture envoie déjà avec deviceId === REMOTE_DEVICE_ID
-    // Pour gamepad/clavier : vérifier que c'est bien le bon périphérique
     if (mapperDeviceId !== REMOTE_DEVICE_ID) {
       if (mapperDeviceId === '__keyboard__' && deviceId !== '__keyboard__') return;
       if (mapperDeviceId !== '__keyboard__' && deviceId !== '__keyboard__' && deviceId !== mapperDeviceId) return;
@@ -901,8 +1212,25 @@ function onKey(raw, deviceId) {
 
   if (screen === 'kb') { kb.handleKey(key); return; }
 
-  // Main nav
-  if (key === 'Escape') {
+  // ── Mode dropdown : focus bloqué dans le menu déroulant ──
+  if (activeDropdown) {
+    const dd = activeDropdown;
+    if (key === 'ArrowLeft') {
+      dd.selIdx = Math.max(0, dd.selIdx - 1);
+      updateDropdownFocus();
+    } else if (key === 'ArrowRight') {
+      dd.selIdx = Math.min(dd.opts.length - 1, dd.selIdx + 1);
+      updateDropdownFocus();
+    } else if (key === 'Enter') {
+      dd.select(dd.selIdx);
+    } else if (key === 'Escape' || key === 'Backspace' || key === 'Back') {
+      closeDropdown();
+      updateContentFocus();
+    }
+    return;
+  }
+
+  if (key === 'Escape' || key === 'Backspace' || key === 'Back') {
     if (window.xeLauncher) window.xeLauncher.goBack();
     else window.location.href = 'menu.html';
     return;
@@ -921,20 +1249,17 @@ function onKey(raw, deviceId) {
       rowFocusMap[activeTab] = Math.max(0, idx - 1);
       updateContentFocus();
       rows[rowFocusMap[activeTab]]?.scrollIntoView({ block: 'nearest' });
-    }
-    else if (key === 'ArrowDown') {
+    } else if (key === 'ArrowDown') {
       rowFocusMap[activeTab] = Math.min(rows.length - 1, idx + 1);
       updateContentFocus();
       rows[rowFocusMap[activeTab]]?.scrollIntoView({ block: 'nearest' });
-    }
-    else if (key === 'Enter') {
+    } else if (key === 'Enter') {
       const row = rows[idx];
       if (row) activateRow(row);
     }
   }
 }
 
-// Gamepad
 gpPoller.onKey = (raw) => {
   const gps = navigator.getGamepads ? navigator.getGamepads() : [];
   let deviceId = '__gamepad__';
@@ -942,18 +1267,10 @@ gpPoller.onKey = (raw) => {
   onKey(raw, deviceId);
 };
 
-// Error handling
 window.addEventListener('error', (e) => {
   console.error('Settings error:', e.error);
   toast.show('Erreur: ' + e.message, true);
 });
-
-// Auto-refresh Bluetooth every 5 seconds when tab is active
-setInterval(() => {
-  if (activeTab === 'bluetooth' && document.visibilityState === 'visible') {
-    loadBluetooth();
-  }
-}, 5000);
 </script>
 </body>
 </html>
