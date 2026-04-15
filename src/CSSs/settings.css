@@ -223,6 +223,14 @@
 }
 .iface-apply-btn.active { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
 
+.iface-mode-btn {
+  font-family: var(--font-mono); font-size: clamp(8px,0.9vw,10px);
+  letter-spacing: 2px; text-transform: uppercase;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-dim); padding: 4px 12px; cursor: pointer; transition: all 0.15s;
+}
+.iface-mode-btn.iface-mode-active { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+
 /* Bluetooth */
 .bt-icon,.device-icon { font-size: clamp(14px,1.6vw,18px); margin-right: 10px; flex-shrink: 0; }
 .bt-name,.device-name {
@@ -231,6 +239,86 @@
 }
 .bt-connected { font-size: clamp(8px,0.9vw,10px); color: #a5d6a7; letter-spacing: 1px; margin-right: 10px; }
 .bt-mac { font-size: clamp(8px,0.9vw,10px); font-family: var(--font-mono); color: var(--text-hint); letter-spacing: 1px; }
+.bt-hide-hint {
+  font-size: clamp(8px,0.85vw,10px); letter-spacing: 1px;
+  color: var(--text-hint); text-transform: uppercase; margin-left: 10px;
+  opacity: 0; transition: opacity 0.15s;
+}
+.bt-item.active .bt-hide-hint { opacity: 1; color: rgba(0,164,220,0.5); }
+
+/* BT hidden section */
+.bt-hidden-section { border-top: 1px solid var(--border); }
+.bt-hidden-section .wifi-hidden-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: clamp(9px,1.3vh,14px) clamp(14px,2vw,22px);
+  cursor: pointer; font-family: var(--font-mono);
+  font-size: clamp(9px,1vw,11px); letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text-dim); border-left: 2px solid transparent; transition: 0.15s;
+  opacity: 0.6;
+}
+.bt-hidden-section .wifi-hidden-header.active { opacity: 1; background: rgba(255,255,255,0.04); border-left-color: rgba(255,255,255,0.2); }
+
+/* BT action overlay */
+.bt-action-overlay {
+  position: fixed; inset: 0;
+  background: rgba(8,8,14,0.96);
+  z-index: 700;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px,1.8vh,20px);
+}
+.bt-action-overlay.visible { display: flex; }
+.bt-action-title {
+  font-family: var(--font-title);
+  font-size: clamp(14px,1.8vw,22px);
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: var(--gold);
+  text-align: center;
+}
+.bt-action-mac {
+  font-size: clamp(9px,1vw,11px);
+  letter-spacing: 2px;
+  color: var(--text-hint);
+  text-align: center;
+}
+.bt-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px,0.7vh,8px);
+  min-width: clamp(260px,38vw,480px);
+}
+.bt-action-btn {
+  padding: clamp(10px,1.5vh,16px) clamp(16px,2.5vw,28px);
+  font-family: var(--font-mono);
+  font-size: clamp(10px,1.2vw,14px);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.12s;
+  text-align: center;
+}
+.bt-action-btn.focused {
+  background: rgba(0,164,220,0.14);
+  border-color: var(--blue-dim);
+  border-left-color: var(--blue);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(0,164,220,0.15);
+}
+.bt-action-btn.danger { color: rgba(192,57,43,0.6); border-color: rgba(192,57,43,0.2); }
+.bt-action-btn.danger.focused {
+  background: rgba(192,57,43,0.12);
+  border-color: var(--red-dim);
+  border-left-color: var(--red);
+  color: #e85555;
+  box-shadow: inset 0 0 0 1px rgba(192,57,43,0.2);
+}
 
 /* Options */
 .option-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
@@ -242,7 +330,6 @@
   transition: 0.15s; outline: none;
 }
 .option-item.selected { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
-.option-item.active { background: rgba(0,164,220,0.18); border-color: var(--blue); color: #fff; outline: 2px solid var(--blue); outline-offset: -2px; }
 .option-item:hover { background: var(--blue-bg); color: var(--text); }
 
 /* Keyboard Overlay */
@@ -348,7 +435,215 @@
 /* hint inline */
 .hint { font-size: clamp(8px, 0.85vw, 10px); letter-spacing: 2px; color: var(--text-hint); text-transform: uppercase; }
 
-/* Jellyfin mapping */
+/* Interface config overlay */
+.iface-overlay {
+  position: fixed; inset: 0; background: rgba(8,8,14,0.97);
+  z-index: 700; display: none; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: clamp(6px,1vh,12px);
+}
+.iface-overlay.visible { display: flex; }
+
+.iface-overlay-title {
+  font-family: var(--font-title); font-size: clamp(14px,1.8vw,22px);
+  letter-spacing: 5px; text-transform: uppercase; color: var(--blue);
+  display: flex; align-items: center; margin-bottom: 8px;
+}
+.iface-overlay-hint {
+  font-family: var(--font-mono); font-size: clamp(8px,0.9vw,10px);
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text-hint); margin-bottom: 16px;
+}
+.iface-overlay-row {
+  width: clamp(320px,55vw,640px);
+  display: flex; justify-content: space-between; align-items: center;
+  padding: clamp(12px,1.8vh,20px) clamp(16px,2.5vw,28px);
+  font-family: var(--font-mono); border: 1px solid var(--border);
+  border-left: 2px solid transparent; background: rgba(13,13,24,0.7);
+  transition: all 0.15s; margin-bottom: 2px;
+}
+.iface-overlay-row.focused { background: var(--blue-bg); border-left-color: var(--blue); }
+
+.iface-overlay-label {
+  font-size: clamp(11px,1.25vw,15px); letter-spacing: 2px;
+  text-transform: uppercase; color: var(--text);
+}
+.iface-overlay-value {
+  font-size: clamp(12px,1.4vw,16px); color: rgba(0,164,220,0.7);
+  letter-spacing: 1px; display: flex; align-items: center; gap: 6px;
+}
+.iface-mode-chip {
+  font-family: var(--font-mono); font-size: clamp(10px,1.1vw,13px);
+  letter-spacing: 2px; text-transform: uppercase;
+  padding: 4px 12px; border: 1px solid var(--border); color: var(--text-dim);
+}
+.iface-mode-chip.active { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+
+/* Boutons Appliquer / Annuler côte à côte */
+.iface-overlay-split-row {
+  width: clamp(320px,55vw,640px);
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 6px; margin-bottom: 2px;
+}
+.iface-split-btn {
+  display: flex; align-items: center; justify-content: center;
+  padding: clamp(12px,1.8vh,20px); font-family: var(--font-mono);
+  font-size: clamp(11px,1.25vw,15px); letter-spacing: 2px; text-transform: uppercase;
+  border: 1px solid var(--border); background: rgba(13,13,24,0.7);
+  color: rgba(0,164,220,0.7); border-left: 2px solid transparent; transition: all 0.15s;
+}
+.iface-split-btn.focused { background: var(--blue-bg); border-left-color: var(--blue); color: #fff; }
+.iface-split-cancel { color: rgba(192,57,43,0.6); }
+.iface-split-cancel.focused { background: rgba(192,57,43,0.08); border-left-color: var(--red); border-color: var(--red-dim); color: #e85555; }
+
+/* Section réseaux masqués */
+.wifi-hidden-section {
+  margin-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 4px;
+  background: rgba(0,0,0,0.15);
+}
+
+.wifi-hidden-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: clamp(8px,1.2vh,12px) clamp(14px,2vw,22px);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: clamp(9px,1vw,11px);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-hint);
+  border-left: 2px solid transparent;
+  transition: all 0.15s;
+  opacity: 0.7;
+}
+.wifi-hidden-header.active { background: rgba(255,255,255,0.03); border-left-color: rgba(255,255,255,0.15); opacity: 1; }
+.wifi-hidden-header:hover { opacity: 1; }
+
+#hiddenNetList .wifi-network {
+  opacity: 0.55;
+  background: rgba(0,0,0,0.1);
+}
+#hiddenNetList .wifi-network.active {
+  opacity: 0.8;
+  background: rgba(0,164,220,0.06);
+  border-left-color: rgba(0,164,220,0.4);
+}
+
+/* Section réseaux connus */
+.wifi-known-section {
+  border-top: 1px solid rgba(0,164,220,0.12);
+  padding-top: 4px;
+  background: rgba(0,164,220,0.025);
+}
+
+.wifi-known-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: clamp(8px,1.2vh,12px) clamp(14px,2vw,22px);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: clamp(9px,1vw,11px);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: rgba(0,164,220,0.6);
+  border-left: 2px solid transparent;
+  transition: all 0.15s;
+}
+.wifi-known-header.active { background: rgba(0,164,220,0.06); border-left-color: rgba(0,164,220,0.5); color: var(--blue); }
+.wifi-known-header:hover { background: rgba(0,164,220,0.04); color: rgba(0,164,220,0.9); }
+
+/* Badge de priorité */
+.wifi-priority-badge {
+  font-family: var(--font-mono);
+  font-size: clamp(8px,0.85vw,10px);
+  letter-spacing: 1px;
+  color: rgba(0,164,220,0.5);
+  background: rgba(0,164,220,0.08);
+  border: 1px solid rgba(0,164,220,0.2);
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+
+/* Hint déconnecter */
+.wifi-disconnect-hint { color: transparent; }
+.wifi-network.active .wifi-disconnect-hint { color: rgba(232,57,43,0.7) !important; }
+.wifi-network.current .wifi-disconnect-hint { }
+
+/* Priority panel */
+.wifi-priority-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: clamp(8px,1.2vh,12px) clamp(14px,2vw,22px);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  background: rgba(0,164,220,0.02);
+}
+.wifi-priority-ssid {
+  flex: 1;
+  font-size: clamp(10px,1.15vw,13px);
+  letter-spacing: 1.5px;
+  color: var(--text);
+  text-transform: uppercase;
+}
+.wifi-priority-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.wifi-prio-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: clamp(9px,1vw,11px);
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 1px;
+  outline: none;
+}
+.wifi-prio-btn:hover:not(:disabled) { background: var(--blue-bg); border-color: var(--blue-dim); color: var(--blue); }
+.wifi-prio-btn:disabled { opacity: 0.25; cursor: default; }
+.wifi-prio-forget { color: rgba(192,57,43,0.6); border-color: rgba(192,57,43,0.3); }
+.wifi-prio-forget:hover { background: rgba(192,57,43,0.08) !important; border-color: var(--red-dim) !important; color: #e85555 !important; }
+
+.wifi-priority-footer {
+  display: flex;
+  gap: 8px;
+  padding: clamp(10px,1.5vh,16px) clamp(14px,2vw,22px);
+  border-top: 1px solid rgba(0,164,220,0.15);
+  background: rgba(0,0,0,0.1);
+}
+.wifi-prio-apply, .wifi-prio-cancel {
+  flex: 1;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: clamp(9px,1vw,11px);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  padding: clamp(8px,1.2vh,12px);
+  cursor: pointer;
+  transition: all 0.15s;
+  outline: none;
+  border: 1px solid var(--border);
+  color: rgba(0,164,220,0.7);
+}
+.wifi-prio-apply:hover { background: var(--blue-bg); border-color: var(--blue-dim); color: var(--blue); }
+.wifi-prio-cancel { color: rgba(192,57,43,0.5); border-color: rgba(192,57,43,0.2); }
+.wifi-prio-cancel:hover { background: rgba(192,57,43,0.08); border-color: var(--red-dim); color: #e85555; }
+
+/* Hint masquer/démasquer réseau WiFi */
+.wifi-hide-hint {
+  font-family: var(--font-mono); font-size: clamp(9px,1.1vw,13px);
+  letter-spacing: 2px; text-transform: uppercase;
+  color: transparent; transition: color 0.15s; flex-shrink: 0; white-space: nowrap;
+}
+.wifi-network.active .wifi-hide-hint { color: rgba(0,164,220,0.6); }
 .jf-mapping-grid {
   display: grid; grid-template-columns: 1fr 1fr;
   gap: clamp(6px,0.8vh,10px);
@@ -366,3 +661,272 @@
 .jf-key-btn.mapped { border-color: var(--blue-dim); color: var(--blue); }
 .jf-key-btn.waiting { border-color: var(--gold); color: rgba(232,213,176,0.9); background: rgba(232,213,176,0.06); animation: pulse-glow 0.8s ease-in-out infinite; }
 .jf-key-name { margin-left: auto; font-size: clamp(8px,0.9vw,10px); color: rgba(0,164,220,0.6); }
+
+/* Known networks overlay rows */
+.known-overlay-row {
+  width: clamp(360px,60vw,700px);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: clamp(10px,1.5vh,16px) clamp(16px,2.5vw,28px);
+  font-family: var(--font-mono);
+  border: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  background: rgba(13,13,24,0.7);
+  transition: all 0.15s;
+  margin-bottom: 2px;
+  cursor: pointer;
+}
+.known-overlay-row:hover { background: var(--blue-bg); }
+.known-overlay-row.focused { background: var(--blue-bg); border-left-color: var(--blue); }
+.known-overlay-row.current { border-left-color: #a5d6a7; }
+.known-overlay-row.current.focused { border-left-color: var(--blue); }
+
+.known-overlay-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.known-overlay-ssid {
+  font-size: clamp(11px,1.25vw,15px);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.known-overlay-connected {
+  font-size: clamp(9px,1vw,11px);
+  color: #a5d6a7;
+  letter-spacing: 1px;
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+.known-overlay-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: 16px;
+}
+.known-prio-arrow { padding: 4px 8px; }
+.known-prio-forget { padding: 4px 10px; }
+
+/* Reorder sub-mode */
+.known-reorder-hint {
+  font-family: var(--font-mono);
+  font-size: clamp(8px,0.9vw,10px);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: rgba(232,213,176,0.6);
+  margin-bottom: 12px;
+  text-align: center;
+}
+.known-overlay-row.reorder-focused {
+  border-color: rgba(232,213,176,0.5);
+  border-left-color: rgba(232,213,176,0.8) !important;
+  background: rgba(232,213,176,0.06);
+}
+
+/* Availability dot in known overlay */
+.known-avail-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-right: 4px;
+}
+.known-avail-dot.avail { background: #a5d6a7; box-shadow: 0 0 4px rgba(165,214,167,0.6); }
+.known-avail-dot.unavail { background: rgba(255,255,255,0.2); }
+
+/* Footer button focused state in known overlay */
+.wifi-prio-apply.known-btn-focused {
+  background: var(--blue-bg);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.wifi-prio-cancel.known-btn-focused {
+  background: rgba(192,57,43,0.12);
+  border-color: var(--red-dim);
+  color: #e85555;
+}
+
+/* Unavailable known network row */
+.known-overlay-row.unavailable .known-overlay-ssid { opacity: 0.5; }
+
+/* Known overlay action buttons */
+.known-prio-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: clamp(9px,1vw,11px);
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 1px;
+  outline: none;
+  white-space: nowrap;
+}
+.known-prio-btn:hover { background: var(--blue-bg); border-color: var(--blue-dim); color: var(--blue); }
+.known-prio-btn.disabled { opacity: 0.2; pointer-events: none; }
+.known-prio-btn.known-disconnect { color: rgba(192,57,43,0.6); border-color: rgba(192,57,43,0.3); }
+.known-prio-btn.known-disconnect:hover { background: rgba(192,57,43,0.08); border-color: var(--red-dim); color: #e85555; }
+.known-prio-btn.known-forget-btn { color: rgba(192,57,43,0.5); border-color: rgba(192,57,43,0.2); padding: 4px 8px; }
+.known-prio-btn.known-forget-btn:hover { background: rgba(192,57,43,0.08); border-color: var(--red-dim); color: #e85555; }
+.known-prio-btn.known-unavail { opacity: 0.3; pointer-events: none; }
+
+/* Focus clavier sur les boutons d'action de l'overlay réseaux connus */
+.known-prio-btn.focused {
+  background: var(--blue-bg);
+  border-color: var(--blue);
+  color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue-dim);
+}
+.known-prio-btn.known-disconnect.focused {
+  background: rgba(192,57,43,0.1);
+  border-color: var(--red);
+  color: #e85555;
+  box-shadow: 0 0 0 1px var(--red-dim);
+}
+.known-prio-btn.known-forget-btn.focused {
+  background: rgba(192,57,43,0.1);
+  border-color: var(--red);
+  color: #e85555;
+  box-shadow: 0 0 0 1px var(--red-dim);
+}
+.known-prio-btn.disabled.focused {
+  opacity: 0.2;
+  box-shadow: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FOCUS / ACTIVE — ÉTATS VISUELS RENFORCÉS
+   Remplace les états quasi-invisibles par un contraste net
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Ligne settings principale ── */
+.settings-row.active {
+  background: rgba(0,164,220,0.14);
+  border-left-color: var(--blue);
+  box-shadow: inset 0 0 0 1px rgba(0,164,220,0.18);
+}
+.settings-row.active .settings-row-label { color: #fff; }
+.settings-row.active .settings-row-value { color: var(--blue); }
+
+/* ── Réseaux WiFi / BT / interfaces / appareils ── */
+.wifi-network.active,
+.bt-item.active,
+.iface-item.active,
+.device-item.active {
+  background: rgba(0,164,220,0.14);
+  border-left-color: var(--blue);
+  box-shadow: inset 0 0 0 1px rgba(0,164,220,0.18);
+}
+.wifi-network.active .wifi-ssid,
+.bt-item.active .bt-name,
+.iface-item.active .iface-name,
+.device-item.active .device-name { color: #fff; }
+
+/* ── Réseau WiFi courant focalisé ── */
+.wifi-network.current.active { border-left-color: #a5d6a7; box-shadow: inset 0 0 0 1px rgba(165,214,167,0.2); }
+.wifi-network.current.active .wifi-ssid { color: #c8e6c9; }
+
+/* ── Ligne en-tête des réseaux masqués ── */
+.wifi-hidden-header.active {
+  background: rgba(255,255,255,0.06);
+  border-left-color: rgba(255,255,255,0.3);
+  color: var(--text);
+  opacity: 1;
+}
+
+/* ── Réseaux masqués dans la liste ── */
+#hiddenNetList .wifi-network.active {
+  opacity: 1;
+  background: rgba(0,164,220,0.12);
+  border-left-color: rgba(0,164,220,0.6);
+}
+#hiddenNetList .wifi-network.active .wifi-ssid { color: #fff; }
+
+/* ── Bouton JF mapping ── */
+.jf-key-btn.active {
+  background: rgba(0,164,220,0.16);
+  border-left-color: var(--blue);
+  border-color: var(--blue-dim);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(0,164,220,0.2);
+}
+
+/* ── Option item (dropdowns résolution, volume…) ── */
+.option-item.active,
+.option-item:focus {
+  background: rgba(0,164,220,0.18);
+  border-color: var(--blue);
+  color: var(--blue);
+  outline: none;
+}
+
+/* ── Overlay interface réseau — lignes ── */
+.iface-overlay-row.focused {
+  background: rgba(0,164,220,0.16);
+  border-left-color: var(--blue);
+  border-color: rgba(0,164,220,0.35);
+  box-shadow: inset 0 0 0 1px rgba(0,164,220,0.18);
+}
+.iface-overlay-row.focused .iface-overlay-label { color: #fff; }
+.iface-overlay-row.focused .iface-overlay-value { color: var(--blue); }
+
+/* ── Overlay interface — boutons Appliquer / Annuler ── */
+.iface-split-btn.focused {
+  background: rgba(0,164,220,0.18);
+  border-left-color: var(--blue);
+  border-color: var(--blue-dim);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(0,164,220,0.2);
+}
+.iface-split-cancel.focused {
+  background: rgba(192,57,43,0.16);
+  border-left-color: var(--red);
+  border-color: var(--red-dim);
+  color: #ff6b6b;
+  box-shadow: inset 0 0 0 1px rgba(192,57,43,0.25);
+}
+
+/* ── Overlay réseaux connus — lignes ── */
+.known-overlay-row.focused {
+  background: rgba(0,164,220,0.16);
+  border-left-color: var(--blue);
+  border-color: rgba(0,164,220,0.35);
+  box-shadow: inset 0 0 0 1px rgba(0,164,220,0.18);
+}
+.known-overlay-row.focused .known-overlay-ssid { color: #fff; }
+
+/* ── Boutons d'action réseaux connus ── */
+.known-prio-btn.focused {
+  background: rgba(0,164,220,0.2);
+  border-color: var(--blue);
+  color: #fff;
+  box-shadow: 0 0 0 1px var(--blue-dim), inset 0 0 8px rgba(0,164,220,0.15);
+}
+.known-prio-btn.known-disconnect.focused,
+.known-prio-btn.known-forget-btn.focused {
+  background: rgba(192,57,43,0.18);
+  border-color: var(--red);
+  color: #ff6b6b;
+  box-shadow: 0 0 0 1px var(--red-dim), inset 0 0 8px rgba(192,57,43,0.15);
+}
+.known-prio-btn.disabled.focused {
+  opacity: 0.2;
+  box-shadow: none;
+}
+
+/* ── Sidebar item focalisé (navigation clavier) ── */
+.sidebar-item.focused {
+  background: rgba(0,164,220,0.18);
+  border-color: var(--blue);
+  border-left-color: var(--blue);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(0,164,220,0.2);
+}
+
+/* ── Item device (manettes) ── */
+.device-item.active .device-name { color: #fff; }

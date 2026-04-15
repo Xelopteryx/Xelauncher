@@ -82,6 +82,119 @@ function logDebug(msg) {
 
 function ensureDirs() {
   [BASE_DIR, AVATARS_PATH].forEach(d => { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }) })
+  // Écrire xe_input.py au démarrage
+  const scriptsDir = path.join(BASE_DIR, 'scripts')
+  try {
+    fs.mkdirSync(scriptsDir, { recursive: true })
+    const xeInputPath = path.join(scriptsDir, 'xe_input.py')
+    const xeInputContent = `#!/usr/bin/env python3
+# xe_input.py — Lecteur evdev universel pour XeLauncher Prometheus
+import os, sys, json, glob, threading, time
+try:
+    from evdev import InputDevice, ecodes
+except ImportError:
+    sys.stderr.write("pip install evdev\\n"); sys.exit(1)
+
+# Sous-nœuds parasites à ignorer — on exclut uniquement les nodes qui
+# n'ont PAS de touches utiles (audio, capteurs, souris, IR, etc.)
+# Note : 'ir ' avec espace pour ne pas exclure les télécommandes IR principales
+EXCLUDE = {
+    'vc4','hdmi','jack','power','pwr','accel','ir ','gyro','motion plus','touchscreen',
+    'system control','consumer control','mouse','touchpad','motion sensor','motion sensors',
+}
+
+# Pas de déduplication par nom : on surveille TOUS les nodes non-exclus,
+# même si plusieurs partagent le même nom (ex: XING WEI a deux nodes utiles).
+# Le device envoyé au renderer est le chemin /dev/input/eventN (unique).
+
+KEY_MAP = {
+    103:'up', 108:'down', 105:'left', 106:'right',
+    28:'confirm', 1:'back', 14:'back',
+    0x130:'confirm', 0x131:'back',  0x132:'action', 0x133:'action',
+    0x134:'action',  0x135:'action',
+    0x136:'l1', 0x137:'r1', 0x138:'l2', 0x139:'r2',
+    0x13a:'select', 0x13b:'menu', 0x13c:'menu', 0x13d:'l3', 0x13e:'r3',
+    0x101:'confirm', 0x102:'back', 0x197:'menu', 0x19c:'select',
+    0x8b:'menu', 0x66:'confirm', 0x9e:'back', 0xa4:'confirm',
+    0x160:'confirm', 0x161:'select', 0x166:'menu', 0xe3:'back',
+    0x110:'confirm', 0x111:'back', 0x112:'menu',
+}
+ABS_MAP = {
+    0:('left','right'), 1:('up','down'), 2:('left','right'), 5:('up','down'),
+    16:('left','right'), 17:('up','down'), 18:('left','right'), 19:('up','down'),
+}
+REL_MAP = {0:('left','right'), 1:('up','down'), 8:('left','right'), 11:('up','down')}
+REL_THRESHOLD = 8
+
+def send(device, action, raw=None):
+    sys.stdout.write(json.dumps({'device':device,'action':action,'raw':raw or action})+'\\n')
+    sys.stdout.flush()
+
+def should_exclude(name):
+    nl = name.lower()
+    return any(x in nl for x in EXCLUDE)
+
+def watch(dev_path, stop_event):
+    try:
+        dev = InputDevice(dev_path)
+        dev_name = dev.name
+        if should_exclude(dev_name):
+            print(f'[xe_input] SKIP (excluded) {dev_name}', file=sys.stderr, flush=True); return
+        # Utiliser dev_path comme identifiant unique (évite les collisions de noms)
+        print(f'[xe_input] WATCH {dev_name} @ {dev_path}', file=sys.stderr, flush=True)
+        axis_state = {}; axis_range = {}; rel_acc = {}; axis_time = {}
+        caps = dev.capabilities()
+        if ecodes.EV_ABS in caps:
+            for code, info in caps[ecodes.EV_ABS]:
+                if hasattr(info,'min') and hasattr(info,'max'):
+                    axis_range[code] = (info.min, info.max)
+        COOL = 0.15
+        for event in dev.read_loop():
+            if stop_event.is_set(): break
+            if event.type == ecodes.EV_KEY and event.value == 1:
+                action = KEY_MAP.get(event.code)
+                if action: send(dev_path, action, f'KEY_{event.code}')
+            elif event.type == ecodes.EV_ABS and event.code in ABS_MAP:
+                rng = axis_range.get(event.code, (-32767,32767))
+                mn,mx = rng; mid=(mn+mx)/2; span=(mx-mn)/2 or 1
+                norm=(event.value-mid)/span; DEAD=0.25
+                neg_act,pos_act = ABS_MAP[event.code]
+                now=time.monotonic(); last_t=axis_time.get(event.code,0)
+                if abs(norm)<DEAD: axis_state[event.code]=None
+                elif norm<-DEAD and axis_state.get(event.code)!=neg_act and now-last_t>COOL:
+                    axis_state[event.code]=neg_act; axis_time[event.code]=now
+                    send(dev_path, neg_act, f'ABS_{event.code}_neg')
+                elif norm>DEAD and axis_state.get(event.code)!=pos_act and now-last_t>COOL:
+                    axis_state[event.code]=pos_act; axis_time[event.code]=now
+                    send(dev_path, pos_act, f'ABS_{event.code}_pos')
+            elif event.type == ecodes.EV_REL and event.code in REL_MAP:
+                rel_acc[event.code] = rel_acc.get(event.code,0)+event.value
+                neg_act,pos_act = REL_MAP[event.code]
+                if rel_acc[event.code]<=-REL_THRESHOLD:
+                    send(dev_path, neg_act, f'REL_{event.code}_neg'); rel_acc[event.code]=0
+                elif rel_acc[event.code]>=REL_THRESHOLD:
+                    send(dev_path, pos_act, f'REL_{event.code}_pos'); rel_acc[event.code]=0
+    except Exception as e:
+        print(f'[xe_input] Error {dev_path}: {e}', file=sys.stderr, flush=True)
+
+def main():
+    threads={}; stop_events={}
+    while True:
+        current=set(glob.glob('/dev/input/event*'))
+        for dev_path in current:
+            if dev_path not in threads or not threads[dev_path].is_alive():
+                stop_ev=threading.Event()
+                t=threading.Thread(target=watch,args=(dev_path,stop_ev),daemon=True)
+                t.start(); threads[dev_path]=t; stop_events[dev_path]=stop_ev
+        for dev_path in list(threads.keys()):
+            if dev_path not in current:
+                stop_events[dev_path].set(); del threads[dev_path]; del stop_events[dev_path]
+        time.sleep(3)
+
+if __name__=='__main__': main()
+`
+    fs.writeFileSync(xeInputPath, xeInputContent, { mode: 0o755 })
+  } catch(e) { logDebug('ensureDirs xe_input error: ' + e.message) }
 }
 
 function loadJSON(p, def) {
@@ -262,129 +375,15 @@ ipcMain.handle('launch-jellyfin-token', async (_, server, token, userId, serverI
   const SCRIPTS_DIR = path.join(BASE_DIR, 'scripts')
   const MAPS_FILE = path.join(BASE_DIR, 'inputmaps.json')
   const JMP_WRAPPER = path.join(SCRIPTS_DIR, 'jmp_wrapper.sh')
-  const EVDEV_SCRIPT = path.join(SCRIPTS_DIR, 'xe_evdev_capture.py')
+  const EVDEV_SCRIPT = path.join(SCRIPTS_DIR, 'xe_input.py')
 
-  // ── Script evdev (inchangé) ───────────────────────────────────────────────
-  const evdevContent = `#!/usr/bin/env python3
-# xe_evdev_capture.py - Capture directe des événements manettes via evdev
-import os, sys, json, time, subprocess, threading, glob
-from evdev import InputDevice, categorize, ecodes
-
-MAPS_FILE = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/xelauncher/inputmaps.json')
-RUNNING = True
-
-ACTION_MAP = {
-    'up': 'Up', 'down': 'Down', 'left': 'Left', 'right': 'Right',
-    'confirm': 'Return', 'back': 'Escape', 'menu': 'Return', 'action': 't'
-}
-
-EVDEV_TO_XE = {
-    0x130: 'Enter', 0x131: 'Escape', 0x132: 'Square', 0x133: 'Triangle',
-    0x136: 'L1', 0x137: 'R1', 0x138: 'L2', 0x139: 'R2',
-    0x13a: 'Select', 0x13b: 'Start', 0x13c: 'L3', 0x13d: 'R3',
-}
-
-AXES = {
-    'ABS_X': ('ArrowLeft', 'ArrowRight'),
-    'ABS_Y': ('ArrowUp', 'ArrowDown'),
-    'ABS_RX': ('ArrowLeft', 'ArrowRight'),
-    'ABS_RY': ('ArrowUp', 'ArrowDown'),
-}
-
-def load_maps():
-    try:
-        with open(MAPS_FILE) as f:
-            return json.load(f)
-    except:
-        return {}
-
-def resolve_key(device_name, raw, maps):
-    m = maps.get(device_name)
-    if not m:
-        return ACTION_MAP.get(raw)
-    for action, mapped in m.items():
-        if mapped == raw:
-            return ACTION_MAP.get(action)
-    return None
-
-def send_key(key):
-    if not key:
-        return
-    try:
-        subprocess.run(['xdotool', 'key', '--clearmodifiers', key],
-                       timeout=0.1, capture_output=True)
-    except:
-        pass
-
-def watch_device(dev_path, maps_ref):
-    try:
-        dev = InputDevice(dev_path)
-        print(f'[evdev] Monitoring: {dev.name}', flush=True)
-        axis_state = {}
-        
-        for event in dev.read_loop():
-            if not RUNNING:
-                break
-            
-            maps = maps_ref[0]
-            
-            if event.type == ecodes.EV_KEY:
-                if event.value == 1:
-                    raw = EVDEV_TO_XE.get(event.code)
-                    if raw:
-                        key = resolve_key(dev.name, raw, maps)
-                        if key:
-                            send_key(key)
-            elif event.type == ecodes.EV_ABS:
-                abs_event = categorize(event)
-                axis_name = ecodes.ABS[event.code]
-                if axis_name in AXES:
-                    deadzone = 20000
-                    if abs(event.value) < deadzone:
-                        axis_state[axis_name] = None
-                        continue
-                    
-                    direction = 0 if event.value < 0 else 1
-                    new_key = AXES[axis_name][direction]
-                    
-                    if axis_state.get(axis_name) != new_key:
-                        axis_state[axis_name] = new_key
-                        key = resolve_key(dev.name, new_key, maps)
-                        if key:
-                            send_key(key)
-    except Exception as e:
-        print(f'[evdev] Error {dev_path}: {e}', flush=True)
-
-def main():
-    maps_ref = [load_maps()]
-    threads = {}
-    
-    while RUNNING:
-        maps_ref[0] = load_maps()
-        for dev_path in glob.glob('/dev/input/event*'):
-            try:
-                dev = InputDevice(dev_path)
-                if any(x in dev.name.lower() for x in ['joystick', 'gamepad', 'controller', 'playstation', 'xbox']):
-                    if dev_path not in threads or not threads[dev_path].is_alive():
-                        t = threading.Thread(target=watch_device, args=(dev_path, maps_ref), daemon=True)
-                        t.start()
-                        threads[dev_path] = t
-            except:
-                pass
-        time.sleep(5)
-
-if __name__ == '__main__':
-    try:
-        main()
-    except KeyboardInterrupt:
-        RUNNING = False
-`
-
+  // ── Script evdev : défini et écrit par ensureDirs() au démarrage ──────────
+  // Plus de duplication ici. On s'assure juste que le fichier est présent.
   try {
     fs.mkdirSync(SCRIPTS_DIR, { recursive: true })
-    fs.writeFileSync(EVDEV_SCRIPT, evdevContent, { mode: 0o755 })
-    logDebug('Script evdev écrit')
-  } catch (e) { logDebug(`Erreur écriture evdev: ${e.message}`) }
+    if (!fs.existsSync(EVDEV_SCRIPT)) ensureDirs()
+    logDebug('Script evdev présent')
+  } catch (e) { logDebug(`Erreur vérif evdev: ${e.message}`) }
 
   const cleanServer = server.replace(/\/+$/, '')
 
@@ -485,13 +484,22 @@ print("[leveldb] OK - injecté pour userId=" + USER_ID, flush=True)
 
   const jmpUrl = `${cleanServer}/web/index.html#!/home.html?serverId=${serverId || ''}&userId=${userId || ''}&apiKey=${token}`
 
+  const JF_MAPPING_FILE = path.join(BASE_DIR, 'jfmapping.json')
+  const JMP_INPUT_SCRIPT = path.join(SCRIPTS_DIR, 'xe_jmp_input.py')
+
+  // Écrire xe_jmp_input.py
+  try {
+    fs.writeFileSync(JMP_INPUT_SCRIPT, buildJmpInputScript(), { mode: 0o755 })
+    logDebug('xe_jmp_input.py écrit')
+  } catch (e) { logDebug(`Erreur écriture xe_jmp_input: ${e.message}`) }
+
   const wrapperContent = `#!/bin/bash
-EVDEV_SCRIPT="${EVDEV_SCRIPT}"
-MAPS_FILE="${MAPS_FILE}"
+JMP_INPUT_SCRIPT="${JMP_INPUT_SCRIPT}"
+JF_MAPPING_FILE="${JF_MAPPING_FILE}"
 JMP_URL='${jmpUrl}'
 REMAP_PID=""
-if command -v python3 >/dev/null && [ -f "$EVDEV_SCRIPT" ]; then
-  python3 "$EVDEV_SCRIPT" "$MAPS_FILE" &
+if command -v python3 >/dev/null && [ -f "$JMP_INPUT_SCRIPT" ]; then
+  python3 "$JMP_INPUT_SCRIPT" "$JF_MAPPING_FILE" &
   REMAP_PID=$!
 fi
 # Lancer JMP en plein écran
@@ -522,128 +530,210 @@ fi
  */
 function buildJmpInputScript() {
   return `#!/usr/bin/env python3
-# xe_jmp_input.py -- Remapping joystick -> clavier pour JMP
-# Lit UNIQUEMENT /dev/input/js* — jamais les claviers ni l'alimentation.
-# Pas de grab exclusif : le clavier et la telecommande restent pleinement fonctionnels.
-import sys, os, json, struct, threading, subprocess, time, glob, fcntl, ctypes
+# xe_jmp_input.py -- Remapping evdev -> xdotool pour Jellyfin Media Player
+# Lit /dev/input/event* (evdev pur), traduit via jfmapping.json,
+# et envoie les touches clavier à JMP via xdotool.
+import sys, os, json, threading, time, glob, subprocess
+try:
+    from evdev import InputDevice, ecodes
+except ImportError:
+    sys.stderr.write("pip install evdev\\n"); sys.exit(1)
 
-MAPS_FILE = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/xelauncher/inputmaps.json')
+JF_MAPPING_FILE = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/xelauncher/jfmapping.json')
 
-ACTION_TO_KEY = {
-    'up':      'Up',
-    'down':    'Down',
-    'left':    'Left',
-    'right':   'Right',
-    'confirm': 'Return',
-    'back':    'Escape',
-    'menu':    'Return',
-    'action':  't',
+# Sous-devices à ignorer (même logique que xe_input.py)
+EXCLUDE = {
+    'vc4','hdmi','jack','power','pwr','accel','ir ','gyro',
+    'motion plus','touchscreen','system control','consumer control',
+    'mouse','touchpad','motion sensor','motion sensors',
 }
 
-# Boutons joystick interface js* (numero 0-based) -> nom XeInput
-JS_BUTTONS = {
-    0: 'Enter',    # Croix/A
-    1: 'Escape',   # Rond/B
-    2: 'Square',   # Carre/X
-    3: 'Triangle', # Triangle/Y
-    4: 'L1', 5: 'R1', 6: 'L2', 7: 'R2',
-    8: 'Select', 9: 'Start',
+# Devices non mappables (IR, capteurs) — ne pas écouter leurs touches
+UNMAPPABLE = ['ir','sensor','motion','accelero','gyro','touchpad','touch pad','nunchuk extension']
+
+# Actions XeInput -> touche xdotool pour JMP
+# La valeur par défaut est utilisée si aucun mapping n'est configuré.
+JF_DEFAULTS = {
+    'jf_up':    'Up',
+    'jf_down':  'Down',
+    'jf_left':  'Left',
+    'jf_right': 'Right',
+    'jf_ok':    'Return',
+    'jf_back':  'Escape',
+    'jf_menu':  'm',
+    'jf_prev':  'j',
+    'jf_next':  'l',
 }
 
-JS_FORMAT        = 'IhBB'
-JS_SIZE          = struct.calcsize(JS_FORMAT)
-JS_EVENT_BUTTON  = 0x01
-JS_EVENT_AXIS    = 0x02
-JS_EVENT_INIT    = 0x80
-DEAD_ZONE        = 0.5
+# Actions XeInput navigation -> action_id JF (pour résolution via inputmaps.json)
+NAV_TO_JF = {
+    'up':      'jf_up',
+    'down':    'jf_down',
+    'left':    'jf_left',
+    'right':   'jf_right',
+    'confirm': 'jf_ok',
+    'back':    'jf_back',
+    'menu':    'jf_menu',
+    'select':  'jf_menu',
+}
 
-def load_maps():
+# Keycodes evdev -> action XeInput (même table que xe_input.py)
+KEY_MAP = {
+    103:'up', 108:'down', 105:'left', 106:'right',
+    28:'confirm', 1:'back', 14:'back',
+    0x130:'confirm', 0x131:'back',  0x132:'action', 0x133:'action',
+    0x134:'action',  0x135:'action',
+    0x136:'l1', 0x137:'r1', 0x138:'l2', 0x139:'r2',
+    0x13a:'select', 0x13b:'menu', 0x13c:'menu', 0x13d:'l3', 0x13e:'r3',
+    0x101:'confirm', 0x102:'back', 0x197:'menu', 0x19c:'select',
+    0x8b:'menu', 0x66:'confirm', 0x9e:'back', 0xa4:'confirm',
+    0x160:'confirm', 0x161:'select', 0x166:'menu', 0xe3:'back',
+    0x110:'confirm', 0x111:'back', 0x112:'menu',
+}
+ABS_MAP = {
+    0:('left','right'), 1:('up','down'), 2:('left','right'), 5:('up','down'),
+    16:('left','right'), 17:('up','down'),
+}
+
+_mapping_cache = [None]
+_mapping_mtime = [0]
+
+def load_mapping():
     try:
-        with open(MAPS_FILE) as f:
-            return json.load(f)
+        mtime = os.path.getmtime(JF_MAPPING_FILE)
+        if _mapping_cache[0] is None or mtime != _mapping_mtime[0]:
+            with open(JF_MAPPING_FILE) as f:
+                _mapping_cache[0] = json.load(f)
+            _mapping_mtime[0] = mtime
+        return _mapping_cache[0]
     except Exception:
         return {}
 
-def get_js_name(fileno):
-    JSIOCGNAME = 0x81004a13
-    buf = ctypes.create_string_buffer(256)
-    try:
-        fcntl.ioctl(fileno, JSIOCGNAME, buf)
-        return buf.value.decode('utf-8', errors='replace').strip()
-    except Exception:
-        return ''
+def build_raw_to_jf(mapping):
+    """
+    Construit un dict inverse : raw (ex: 'KEY_304') -> touche xdotool JF.
+    Le mapping stocke { jf_ok: 'KEY_304', jf_back: 'KEY_305', ... }
+    On construit { 'KEY_304': 'Return', 'KEY_305': 'Escape', ... }
+    """
+    result = {}
+    for jf_id, raw in mapping.items():
+        if jf_id.startswith('__'): continue
+        xdo = JF_DEFAULTS.get(jf_id)
+        if xdo and raw:
+            result[raw] = xdo
+    return result
 
-def resolve_key(device_name, raw_key, maps):
-    m = maps.get(device_name)
-    if not m:
-        return ACTION_TO_KEY.get(raw_key)
-    for action, mapped in m.items():
-        if mapped == raw_key:
-            return ACTION_TO_KEY.get(action)
-    return None
+def resolve_action(xe_action, mapping):
+    """Fallback : convertit une action XeInput résolue en touche JMP via les défauts."""
+    jf_id = NAV_TO_JF.get(xe_action)
+    if not jf_id: return None
+    return JF_DEFAULTS.get(jf_id)
 
 def send_key(key):
     if not key:
         return
     try:
         subprocess.run(['xdotool', 'key', '--clearmodifiers', key],
-                       timeout=0.15, capture_output=True)
-    except Exception:
-        pass
-
-def monitor_js(dev_path, maps_ref):
-    try:
-        fd = open(dev_path, 'rb')
-        name = get_js_name(fd.fileno()) or dev_path
-        print('[xe_jmp_input] Joystick: ' + name + ' (' + dev_path + ')', flush=True)
-        axis_state = {}
-        while True:
-            data = fd.read(JS_SIZE)
-            if len(data) < JS_SIZE:
-                break
-            t_ms, value, ev_type, number = struct.unpack(JS_FORMAT, data)
-            ev_type = ev_type & ~JS_EVENT_INIT
-            maps = maps_ref[0]
-            if ev_type == JS_EVENT_BUTTON and value == 1:
-                raw = JS_BUTTONS.get(number)
-                if raw:
-                    send_key(resolve_key(name, raw, maps))
-            elif ev_type == JS_EVENT_AXIS:
-                norm = value / 32767.0
-                prev = axis_state.get(number, 0.0)
-                axis_state[number] = norm
-                if number in (0, 6):
-                    if norm < -DEAD_ZONE and prev >= -DEAD_ZONE:
-                        send_key(resolve_key(name, 'ArrowLeft', maps))
-                    elif norm > DEAD_ZONE and prev <= DEAD_ZONE:
-                        send_key(resolve_key(name, 'ArrowRight', maps))
-                elif number in (1, 7):
-                    if norm < -DEAD_ZONE and prev >= -DEAD_ZONE:
-                        send_key(resolve_key(name, 'ArrowUp', maps))
-                    elif norm > DEAD_ZONE and prev <= DEAD_ZONE:
-                        send_key(resolve_key(name, 'ArrowDown', maps))
+                       timeout=0.2, capture_output=True)
     except Exception as e:
-        print('[xe_jmp_input] Erreur ' + dev_path + ': ' + str(e), flush=True)
+        print('[xe_jmp_input] xdotool error: ' + str(e), flush=True)
+
+def should_exclude(name):
+    nl = name.lower()
+    return any(x in nl for x in EXCLUDE)
+
+def is_unmappable(name):
+    nl = name.lower()
+    return any(x in nl for x in UNMAPPABLE)
+
+_name_seen = {}
+_name_seen_lock = threading.Lock()
+
+def claim_device(name, dev_path):
+    key = name.strip().lower()
+    def event_num(p):
+        try: return int(p.replace('/dev/input/event',''))
+        except: return 999
+    with _name_seen_lock:
+        if key not in _name_seen:
+            _name_seen[key] = dev_path; return True
+        if event_num(dev_path) < event_num(_name_seen[key]):
+            _name_seen[key] = dev_path; return True
+        return False
+
+def release_device(name, dev_path):
+    key = name.strip().lower()
+    with _name_seen_lock:
+        if _name_seen.get(key) == dev_path:
+            del _name_seen[key]
+
+def watch(dev_path, stop_event):
+    dev_name = None
+    try:
+        dev = InputDevice(dev_path)
+        dev_name = dev.name
+        if should_exclude(dev_name) or is_unmappable(dev_name):
+            return
+        if not claim_device(dev_name, dev_path):
+            return
+        print(f'[xe_jmp_input] WATCH {dev_name} @ {dev_path}', flush=True)
+        axis_state = {}; axis_range = {}; axis_time = {}
+        caps = dev.capabilities()
+        if ecodes.EV_ABS in caps:
+            for code, info in caps[ecodes.EV_ABS]:
+                if hasattr(info,'min') and hasattr(info,'max'):
+                    axis_range[code] = (info.min, info.max)
+        COOL = 0.18
+        for event in dev.read_loop():
+            if stop_event.is_set(): break
+            mapping = load_mapping()
+            raw_map = build_raw_to_jf(mapping)
+            has_custom = bool(raw_map)
+            if event.type == ecodes.EV_KEY and event.value == 1:
+                raw = f'KEY_{event.code}'
+                if has_custom:
+                    key = raw_map.get(raw)
+                    if key: send_key(key)
+                else:
+                    xe_action = KEY_MAP.get(event.code)
+                    if xe_action: send_key(resolve_action(xe_action, mapping))
+            elif event.type == ecodes.EV_ABS and event.code in ABS_MAP:
+                rng = axis_range.get(event.code, (-32767,32767))
+                mn,mx = rng; mid=(mn+mx)/2; span=(mx-mn)/2 or 1
+                norm=(event.value-mid)/span; DEAD=0.25
+                neg_act,pos_act = ABS_MAP[event.code]
+                now=time.monotonic(); last_t=axis_time.get(event.code,0)
+                if abs(norm)<DEAD: axis_state[event.code]=None
+                elif norm<-DEAD and axis_state.get(event.code)!=neg_act and now-last_t>COOL:
+                    axis_state[event.code]=neg_act; axis_time[event.code]=now
+                    raw = f'ABS_{event.code}_neg'
+                    key = raw_map.get(raw) if has_custom else resolve_action(neg_act, mapping)
+                    if key: send_key(key)
+                elif norm>DEAD and axis_state.get(event.code)!=pos_act and now-last_t>COOL:
+                    axis_state[event.code]=pos_act; axis_time[event.code]=now
+                    raw = f'ABS_{event.code}_pos'
+                    key = raw_map.get(raw) if has_custom else resolve_action(pos_act, mapping)
+                    if key: send_key(key)
+    except Exception as e:
+        print(f'[xe_jmp_input] Error {dev_path}: {e}', flush=True)
     finally:
-        try:
-            fd.close()
-        except Exception:
-            pass
+        if dev_name: release_device(dev_name, dev_path)
 
 def main():
-    maps_ref = [load_maps()]
-    threads = {}
+    threads={}; stop_events={}
     while True:
-        maps_ref[0] = load_maps()
-        for dev in glob.glob('/dev/input/js*'):
-            if dev not in threads or not threads[dev].is_alive():
-                t = threading.Thread(target=monitor_js, args=(dev, maps_ref), daemon=True)
-                t.start()
-                threads[dev] = t
-        time.sleep(2)
+        current=set(glob.glob('/dev/input/event*'))
+        for dev_path in current:
+            if dev_path not in threads or not threads[dev_path].is_alive():
+                stop_ev=threading.Event()
+                t=threading.Thread(target=watch,args=(dev_path,stop_ev),daemon=True)
+                t.start(); threads[dev_path]=t; stop_events[dev_path]=stop_ev
+        for dev_path in list(threads.keys()):
+            if dev_path not in current:
+                stop_events[dev_path].set(); del threads[dev_path]; del stop_events[dev_path]
+        time.sleep(3)
 
-if __name__ == '__main__':
-    main()
+if __name__=='__main__': main()
 `
 }
 
@@ -826,7 +916,32 @@ ipcMain.handle('get-interfaces', async () => new Promise(resolve => {
         const up = /LOWER_UP/.test(lo || '') || (/[<,]UP[,>]/.test(lo || '') && !/NO-CARRIER/.test(lo || ''))
         exec(`ip -4 addr show ${iface}`, (e2, ao) => {
           const m = ao && ao.match(/inet (\d+\.\d+\.\d+\.\d+)\/(\d+)/)
-          res({ name: iface, ip: m ? m[1] : null, cidr: m ? m[2] : null, state: up ? 'up' : 'down' })
+          const ip = m ? m[1] : null
+          const cidr = m ? m[2] : null
+          if (!ip) {
+            res({ name: iface, ip: null, cidr: null, gateway: null, dns: null, state: up ? 'up' : 'down' })
+            return
+          }
+          // Gateway : table de routage kernel, puis fallback fichiers netplan
+          exec(`ip route show table all dev ${iface} 2>/dev/null | grep "^default via"`, (e3, rto) => {
+            const gwm = (rto || '').match(/default via (\d+\.\d+\.\d+\.\d+)/)
+            let gateway = gwm ? gwm[1] : null
+            const finalize = (gateway) => {
+              exec(`nmcli dev show ${iface} 2>/dev/null`, (e4, nmo) => {
+                const dnsMatches = nmo ? [...nmo.matchAll(/IP4\.DNS\[\d+\]:\s+(\S+)/g)].map(x => x[1]).filter(x => x !== '--') : []
+                const dns = dnsMatches.length ? dnsMatches : null
+                res({ name: iface, ip, cidr, gateway, dns, state: up ? 'up' : 'down' })
+              })
+            }
+            if (gateway) return finalize(gateway)
+            // Fallback : lire les fichiers netplan (gateway4 ou routes[].via)
+            exec(`sudo grep -r "via\\|gateway4" /etc/netplan/ 2>/dev/null`, (e5, npo) => {
+              const vim = (npo || '').match(/via:\s*["']?(\d+\.\d+\.\d+\.\d+)["']?/)
+              const gw4m = (npo || '').match(/gateway4:\s*["']?(\d+\.\d+\.\d+\.\d+)["']?/)
+              gateway = (vim || gw4m) ? (vim ? vim[1] : gw4m[1]) : null
+              finalize(gateway)
+            })
+          })
         })
       })
     }))).then(resolve)
@@ -867,10 +982,75 @@ ipcMain.handle('wifi-forget', async (_, ssid) => new Promise(resolve => {
 }))
 
 ipcMain.handle('wifi-current-ssid', async () => new Promise(resolve => {
-  exec('nmcli -t -f NAME,TYPE connection show --active 2>/dev/null', (err, out) => {
-    if (err || !out) return resolve('')
-    const line = out.trim().split('\n').find(l => l.includes('wifi') || l.includes('802-11'))
-    resolve(line ? line.split(':')[0] : '')
+  // Récupère le vrai SSID (pas le nom de connexion NM qui peut différer)
+  exec('nmcli -t -f ACTIVE,SSID dev wifi 2>/dev/null', (err, out) => {
+    if (!err && out) {
+      const line = out.trim().split('\n').find(l => l.startsWith('yes:'))
+      if (line) return resolve(line.slice(4)) // enlève "yes:"
+    }
+    // Fallback : iwgetid
+    exec('iwgetid -r 2>/dev/null', (e2, o2) => {
+      resolve((o2 || '').trim())
+    })
+  })
+}))
+
+ipcMain.handle('wifi-get-known', async () => new Promise(resolve => {
+  // Liste toutes les connexions WiFi connues de NetworkManager
+  // nmcli -t -f NAME,TYPE connection show  → une ligne par connexion
+  exec("nmcli -t -f NAME,TYPE connection show 2>/dev/null", (err, out) => {
+    if (err || !out.trim()) return resolve([])
+    const names = out.trim().split('\n')
+      .map(l => { const p = l.split(':'); return p[1] === '802-11-wireless' ? p[0] : null })
+      .filter(Boolean)
+    if (!names.length) return resolve([])
+    // Pour chaque connexion WiFi, récupérer le SSID et la sécurité
+    Promise.all(names.map(name => new Promise(res => {
+      exec(`nmcli -t -f 802-11-wireless.ssid,802-11-wireless-security.key-mgmt connection show '${name.replace(/'/g, "'\\''")}' 2>/dev/null`, (e, o) => {
+        if (e || !o) return res(null)
+        const ssidMatch = o.match(/802-11-wireless\.ssid:(.+)/)
+        const secMatch  = o.match(/802-11-wireless-security\.key-mgmt:(.+)/)
+        const ssid = ssidMatch ? ssidMatch[1].trim() : name
+        const sec  = secMatch  ? secMatch[1].trim()  : ''
+        // key-mgmt vide ou '--' = réseau ouvert
+        const security = (!sec || sec === '--') ? 'Open' : sec
+        res({ ssid, security })
+      })
+    }))).then(nets => resolve(nets.filter(Boolean)))
+  })
+}))
+
+ipcMain.handle('wifi-set-priority', async (_, ssids) => new Promise(resolve => {
+  // NetworkManager ne gère pas une priorité globale par SSID, mais on peut
+  // modifier le champ `connection.autoconnect-priority` de chaque profil.
+  // Plus le chiffre est élevé, plus NM préfère ce réseau.
+  // On attribue : premier SSID = priorité la plus haute (ssids.length), dernier = 1
+  if (!ssids || !ssids.length) return resolve(true)
+  const total = ssids.length
+  exec("nmcli -t -f NAME,TYPE connection show 2>/dev/null", (err, out) => {
+    if (err || !out.trim()) return resolve(false)
+    // Map SSID → nom de connexion NM
+    const wifiConns = out.trim().split('\n')
+      .map(l => { const p = l.split(':'); return p[1] === '802-11-wireless' ? p[0] : null })
+      .filter(Boolean)
+    Promise.all(ssids.map((ssid, i) => new Promise(res => {
+      const priority = total - i  // index 0 → priorité max
+      // Chercher la connexion NM correspondant à ce SSID
+      const candidates = wifiConns.filter(n => n === ssid || n.toLowerCase().includes(ssid.toLowerCase()))
+      const connName = candidates[0]
+      if (!connName) return res(false)
+      exec(`nmcli connection modify '${connName.replace(/'/g, "'\\''")}' connection.autoconnect-priority ${priority}`, e => res(!e))
+    }))).then(results => resolve(results.every(Boolean)))
+  })
+}))
+
+ipcMain.handle('wifi-disconnect', async () => new Promise(resolve => {
+  // Déconnecte l'interface WiFi active (wlan0 en général, sinon détection auto)
+  exec("nmcli -t -f DEVICE,TYPE device 2>/dev/null", (err, out) => {
+    const wlanDev = (!err && out)
+      ? (out.trim().split('\n').map(l => l.split(':')).find(p => p[1] === 'wifi') || [])[0]
+      : 'wlan0'
+    exec(`nmcli device disconnect '${(wlanDev || 'wlan0').replace(/'/g, "'\\''")}' 2>/dev/null`, e => resolve(!e))
   })
 }))
 
@@ -913,20 +1093,152 @@ ipcMain.handle('bt-list-paired', async () => new Promise(resolve => {
 }))
 
 ipcMain.handle('bt-scan', async () => new Promise(resolve => {
-  exec('bluetoothctl --timeout 8 scan on 2>/dev/null', () => {
-    exec('bluetoothctl devices 2>/dev/null', (err, out) => {
-      if (err || !out.trim()) return resolve([])
-      exec('bluetoothctl devices Paired 2>/dev/null', (e2, paired) => {
-        const pairedMacs = new Set((paired || '').trim().split('\n').map(l => { const m = l.match(/Device ([0-9A-Fa-f:]{17})/); return m ? m[1] : null }).filter(Boolean))
-        resolve(out.trim().split('\n').map(l => { const m = l.match(/Device ([0-9A-Fa-f:]{17}) (.+)/); return m ? { mac: m[1], name: m[2].trim(), paired: pairedMacs.has(m[1]) } : null }).filter(Boolean))
-      })
-    })
+  // Lance un scan de 12s via un process bluetoothctl interactif.
+  // On collecte tous les événements "Device" en temps réel (nécessaire pour
+  // les Wiimotes qui n'apparaissent que pendant la pression du bouton SYNC).
+  const discovered = new Map() // mac → name
+
+  const proc = spawn('bluetoothctl', [], { stdio: ['pipe', 'pipe', 'ignore'] })
+  proc.stdin.write('scan on\n')
+
+  proc.stdout.on('data', chunk => {
+    const text = chunk.toString()
+    for (const line of text.split('\n')) {
+      const m = line.match(/Device ([0-9A-Fa-f:]{17})\s+(.+)/)
+      if (m) {
+        const mac = m[1], name = m[2].trim()
+        if (!discovered.has(mac) || name !== mac) discovered.set(mac, name)
+      }
+    }
   })
+
+  setTimeout(() => {
+    try { proc.stdin.write('scan off\nquit\n'); proc.stdin.end() } catch (e) { }
+    proc.kill()
+
+    exec('bluetoothctl devices Paired 2>/dev/null', (e2, paired) => {
+      const pairedMacs = new Set(
+        (paired || '').trim().split('\n')
+          .map(l => { const m = l.match(/Device ([0-9A-Fa-f:]{17})/); return m ? m[1] : null })
+          .filter(Boolean)
+      )
+      const results = []
+      for (const [mac, name] of discovered) {
+        const isWiimote = /nintendo|rvl-cnt/i.test(name)
+        results.push({ mac, name, paired: pairedMacs.has(mac), wiimote: isWiimote })
+      }
+      resolve(results)
+    })
+  }, 12000)
 }))
 
 ipcMain.handle('bt-pair', async (_, mac) => new Promise(resolve => {
-  exec(`echo -e "pair ${mac}\ntrust ${mac}\nconnect ${mac}\nquit" | bluetoothctl 2>/dev/null`, (err, out) =>
-    resolve(!err && /Pairing successful|Connected: yes|trust succeeded/i.test(out || '')))
+  // Détecter si Wiimote depuis le cache scan ou via bluetoothctl info
+  exec(`bluetoothctl info ${mac} 2>/dev/null`, (err, info) => {
+    const name = (info || '').match(/Name: (.+)/)?.[1]?.trim() || ''
+    const isWiimote = /nintendo|rvl-cnt/i.test(name)
+
+    if (isWiimote) {
+      logDebug(`bt-pair Wiimote : ${mac} — flow NoInputNoOutput`)
+      // Le flow exact qui fonctionne :
+      // 1. Lancer bt-agent NoInputNoOutput en arrière-plan
+      // 2. scan on (process interactif)
+      // 3. Dès que la Wiimote apparaît → pair immédiatement
+      // 4. trust
+      // La Wiimote doit être en mode SYNC (clignotement) pendant toute l'opération.
+
+      // S'assurer que hid-wiimote est chargé
+      exec('modprobe hid-wiimote 2>/dev/null', () => {
+
+        // Tuer tout agent bluetoothd existant et lancer NoInputNoOutput
+        exec('pkill -f "bt-agent" 2>/dev/null', () => {
+          const agent = spawn('bt-agent', ['-c', 'NoInputNoOutput'], { stdio: 'ignore', detached: true })
+          agent.unref()
+
+          // Laisser l'agent s'enregistrer
+          setTimeout(() => {
+            // Process bluetoothctl interactif : scan on → attendre la Wiimote → pair → trust
+            const proc = spawn('bluetoothctl', [], { stdio: ['pipe', 'pipe', 'ignore'] })
+            let paired = false
+            let scanActive = true
+
+            proc.stdin.write('agent off\nagent NoInputNoOutput\ndefault-agent\nscan on\n')
+
+            proc.stdout.on('data', chunk => {
+              const text = chunk.toString()
+              logDebug(`bt-pair stdout: ${text.trim()}`)
+
+              // Dès que la Wiimote apparaît dans le scan → pair immédiatement
+              if (!paired && text.includes(mac)) {
+                paired = true
+                scanActive = false
+                logDebug(`bt-pair: Wiimote visible, lancement pair ${mac}`)
+                proc.stdin.write(`pair ${mac}\n`)
+              }
+
+              // Appairage réussi → trust puis terminer
+              if (/Pairing successful/i.test(text)) {
+                logDebug(`bt-pair: Pairing successful, trust en cours`)
+                proc.stdin.write(`trust ${mac}\nquit\n`)
+              }
+
+              if (/trust succeeded/i.test(text)) {
+                logDebug(`bt-pair: trust OK`)
+                try { proc.stdin.end() } catch (e) { }
+              }
+            })
+
+            proc.on('close', () => {
+              exec('pkill -f "bt-agent" 2>/dev/null', () => { })
+              // Vérifier le résultat
+              exec(`bluetoothctl info ${mac} 2>/dev/null`, (e, o) => {
+                const ok = /Paired: yes/i.test(o || '')
+                logDebug(`bt-pair résultat: paired=${ok}`)
+                resolve(ok)
+              })
+            })
+
+            // Timeout 20s : si la Wiimote n'apparaît pas, on abandonne
+            setTimeout(() => {
+              if (!paired) {
+                logDebug(`bt-pair timeout: Wiimote non détectée`)
+                try { proc.stdin.write('quit\n'); proc.stdin.end() } catch (e) { }
+                proc.kill()
+              }
+            }, 20000)
+
+          }, 500) // délai agent
+        })
+      })
+
+    } else {
+      // Flow standard pour les autres périphériques
+      const proc = spawn('bluetoothctl', [], { stdio: ['pipe', 'pipe', 'ignore'] })
+      let done = false
+
+      proc.stdout.on('data', chunk => {
+        const text = chunk.toString()
+        if (/Pairing successful|trust succeeded/i.test(text) && !done) {
+          done = true
+          try { proc.stdin.write('quit\n'); proc.stdin.end() } catch (e) { }
+        }
+        if (/Pairing successful/i.test(text)) {
+          proc.stdin.write(`trust ${mac}\n`)
+        }
+      })
+
+      proc.on('close', () => {
+        exec(`bluetoothctl info ${mac} 2>/dev/null`, (e, o) =>
+          resolve(/Paired: yes/i.test(o || '') || /Connected: yes/i.test(o || '')))
+      })
+
+      proc.stdin.write(`pair ${mac}\n`)
+
+      setTimeout(() => {
+        if (!done) { try { proc.stdin.write('quit\n'); proc.stdin.end() } catch (e) { } proc.kill() }
+      }, 15000)
+    }
+  })
 }))
 
 ipcMain.handle('bt-connect', async (_, mac) => new Promise(r => exec(`bluetoothctl connect ${mac}`, (e, o) => r(!e && /Connection successful/i.test(o || '')))))
@@ -943,3 +1255,86 @@ ipcMain.handle('bt-status', async () => new Promise(resolve => {
 }))
 
 ipcMain.handle('bt-power', async (_, on) => new Promise(r => exec(`bluetoothctl power ${on ? 'on' : 'off'}`, e => r(!e))))
+
+/* ── Daemon xe_input — lecteur evdev permanent ───────────────────────────────
+ * Lance xe_input.py dès le démarrage du launcher.
+ * Reçoit les events JSON sur stdout et les envoie au renderer via IPC.
+ * ─────────────────────────────────────────────────────────────────────────── */
+const XE_INPUT_SCRIPT = path.join(BASE_DIR, 'scripts', 'xe_input.py')
+let xeInputProc = null
+
+function startXeInput() {
+  if (xeInputProc) return
+  const scriptPath = path.join(BASE_DIR, 'scripts', 'xe_input.py')
+  if (!fs.existsSync(scriptPath)) {
+    logDebug('xe_input: script absent, ensureDirs() doit être appelé avant')
+    return
+  }
+  logDebug(`xe_input: démarrage ${scriptPath}`)
+  xeInputProc = spawn('python3', [scriptPath], { stdio: ['ignore', 'pipe', 'pipe'] })
+
+  let buf = ''
+  xeInputProc.stdout.on('data', chunk => {
+    buf += chunk.toString()
+    const lines = buf.split('\n')
+    buf = lines.pop()
+    for (const line of lines) {
+      if (!line.trim()) continue
+      try {
+        const ev = JSON.parse(line)
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send('xe-input-event', ev)
+      } catch(e) {}
+    }
+  })
+
+  xeInputProc.stderr.on('data', chunk => logDebug('xe_input: ' + chunk.toString().trim()))
+
+  xeInputProc.on('exit', (code) => {
+    logDebug(`xe_input: exit ${code}, redémarrage dans 3s`)
+    xeInputProc = null
+    setTimeout(startXeInput, 3000)
+  })
+}
+
+function stopXeInput() {
+  if (xeInputProc) {
+    try { xeInputProc.kill() } catch(e) {}
+    xeInputProc = null
+  }
+}
+
+// Démarrer après que la fenêtre soit prête
+app.whenReady().then(() => {
+  setTimeout(startXeInput, 2000)
+})
+
+app.on('before-quit', stopXeInput)
+
+// IPC pour exposer les events au renderer (preload les forward)
+ipcMain.handle('xe-input-status', async () => ({ running: !!xeInputProc }))
+
+/* ── Mapping Jellyfin — persisté sur disque pour xe_jmp_input.py ────────────
+ * Le renderer sauvegarde xelauncher_jfmapping (localStorage) ici sous forme
+ * de fichier JSON lisible par le script Python pendant la session JMP.
+ * ─────────────────────────────────────────────────────────────────────────── */
+const JF_MAPPING_FILE = path.join(BASE_DIR, 'jfmapping.json')
+
+ipcMain.handle('save-jf-mapping', async (_, mapping) => {
+  try {
+    fs.writeFileSync(JF_MAPPING_FILE, JSON.stringify(mapping, null, 2), 'utf8')
+    logDebug('jfmapping.json sauvegardé')
+    return true
+  } catch (e) {
+    logDebug('save-jf-mapping error: ' + e.message)
+    return false
+  }
+})
+
+ipcMain.handle('load-jf-mapping', async () => {
+  try {
+    if (fs.existsSync(JF_MAPPING_FILE))
+      return JSON.parse(fs.readFileSync(JF_MAPPING_FILE, 'utf8'))
+  } catch (e) { logDebug('load-jf-mapping error: ' + e.message) }
+  return {}
+})

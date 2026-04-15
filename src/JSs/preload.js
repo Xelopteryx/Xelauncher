@@ -51,7 +51,10 @@ contextBridge.exposeInMainWorld('xeLauncher', {
   wifiScan:                ()                       => ipcRenderer.invoke('wifi-scan'),
   wifiConnect:             (ssid, pwd)              => ipcRenderer.invoke('wifi-connect', ssid, pwd),
   wifiForget:              (ssid)                   => ipcRenderer.invoke('wifi-forget', ssid),
+  wifiDisconnect:          ()                       => ipcRenderer.invoke('wifi-disconnect'),
   wifiCurrentSSID:         ()                       => ipcRenderer.invoke('wifi-current-ssid'),
+  getKnownNetworks:        ()                       => ipcRenderer.invoke('wifi-get-known'),
+  setKnownNetworksPriority:(ssids)                  => ipcRenderer.invoke('wifi-set-priority', ssids),
   setStaticIp:             (opts)                   => ipcRenderer.invoke('set-static-ip', opts),
 
   /* Bluetooth */
@@ -65,5 +68,14 @@ contextBridge.exposeInMainWorld('xeLauncher', {
   btStatus:                ()                       => ipcRenderer.invoke('bt-status'),
   btPower:                 (on)                     => ipcRenderer.invoke('bt-power', on),
 
-  isAvailable:             ()                       => true
+  isAvailable:             ()                       => true,
+
+  /* xe_input daemon — evdev universel */
+  onXeInputEvent: (cb) => { ipcRenderer.removeAllListeners('xe-input-event'); ipcRenderer.on('xe-input-event', (_, data) => cb(data)); },
+  offXeInputEvent:         ()                       => ipcRenderer.removeAllListeners('xe-input-event'),
+  xeInputStatus:           ()                       => ipcRenderer.invoke('xe-input-status'),
+
+  /* Mapping Jellyfin — persisté sur disque pour xe_jmp_input.py */
+  saveJfMapping:           (mapping)                => ipcRenderer.invoke('save-jf-mapping', mapping),
+  loadJfMapping:           ()                       => ipcRenderer.invoke('load-jf-mapping'),
 })

@@ -1,0 +1,176 @@
+/* mapper.css */
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.mapper-screen {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 2vh, 22px);
+  position: relative;
+  animation: fadeIn 0.4s ease-in both;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.mapper-title {
+  font-family: var(--font-title);
+  color: var(--gold);
+  font-size: clamp(14px, 1.8vw, 22px);
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.mapper-title::after {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 1px;
+  background: rgba(232, 213, 176, 0.3);
+  margin: 8px auto 0;
+}
+
+.mapper-device {
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 1vw, 11px);
+  color: var(--text-hint);
+  letter-spacing: 3px;
+  text-align: center;
+  text-transform: uppercase;
+  max-width: 70vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Grace bar ──────────────────────────────────────────────────────────── */
+.grace-bar-wrap {
+  width: clamp(260px, 40vw, 500px);
+  height: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.grace-bar {
+  height: 100%;
+  background: var(--blue);
+  width: 100%;
+  box-shadow: 0 0 8px var(--blue);
+}
+
+/* ── Current action box ─────────────────────────────────────────────────── */
+.mapper-actions {
+  font-family: var(--font-mono);
+  font-size: clamp(11px, 1.4vw, 15px);
+  color: var(--blue);
+  letter-spacing: 3px;
+  text-align: center;
+  padding: clamp(12px, 2vh, 18px) clamp(20px, 3vw, 36px);
+  border: 1px solid var(--blue-dim);
+  background: var(--blue-bg);
+  width: clamp(260px, 40vw, 500px);
+  min-height: clamp(48px, 7vh, 72px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.mapper-actions strong {
+  color: #fff;
+  font-weight: normal; /* Share Tech Mono only has 400 */
+  font-style: normal;
+  letter-spacing: 4px;
+}
+
+/* ── Action grid ────────────────────────────────────────────────────────── */
+.mapper-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: clamp(6px, 1vw, 12px);
+  width: clamp(260px, 50vw, 600px);
+  position: relative;
+  z-index: 1;
+}
+
+.mapper-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: clamp(8px, 1.2vh, 12px) clamp(12px, 1.6vw, 18px);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 1vw, 11px);
+  letter-spacing: 2px;
+  color: var(--text-hint);
+  text-transform: uppercase;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Assigned — touche enregistrée */
+.mapper-btn.assigned {
+  border-color: rgba(0, 164, 220, 0.2);
+  color: rgba(0, 164, 220, 0.5);
+  background: rgba(0, 164, 220, 0.04);
+}
+
+/* Action en cours d'enregistrement */
+.mapper-btn.current-target {
+  border-color: var(--gold);
+  color: rgba(232, 213, 176, 0.9);
+  background: rgba(232, 213, 176, 0.06);
+  animation: pulse-glow-gold 1s ease-in-out infinite;
+}
+
+.mapper-key-name {
+  margin-left: auto;
+  font-size: clamp(8px, 0.9vw, 10px);
+  letter-spacing: 1px;
+  color: rgba(0, 164, 220, 0.6);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 8em;
+}
+
+/* ── Hint & skip ────────────────────────────────────────────────────────── */
+.mapper-hint {
+  font-family: var(--font-mono);
+  font-size: clamp(7px, 0.85vw, 9px);
+  letter-spacing: 2px;
+  color: var(--text-hint);
+  text-transform: uppercase;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+/* Skip button inherits .btn from common.css */
+
+/* ── Done state ─────────────────────────────────────────────────────────── */
+.mapper-actions.done {
+  border-color: rgba(165, 214, 167, 0.4);
+  color: #a5d6a7;
+  background: rgba(165, 214, 167, 0.06);
+  animation: none;
+}
+
+/* ── Gold pulse (current-target) ────────────────────────────────────────── */
+@keyframes pulse-glow-gold {
+  0%, 100% { box-shadow: 0 0 0 rgba(232, 213, 176, 0); }
+  50%       { box-shadow: 0 0 18px rgba(232, 213, 176, 0.18); }
+}

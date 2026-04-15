@@ -100,11 +100,14 @@
   <div class="loading-text" id="loadingText">Connexion…</div>
 </div>
 
+<!-- ── Input mapper ─────────────────────────────────────────────────── -->
+<div class="mapper-overlay" id="mapperOverlay"></div>
+
 <!-- ── Toast ────────────────────────────────────────────────────────── -->
 <div class="toast" id="toast"></div>
 
 <!-- ── Scripts ──────────────────────────────────────────────────────── -->
-<!-- input.js expose window.XeInput (VirtualKeyboard, GamepadPoller, Toast…) -->
+<!-- input.js expose window.XeInput (VirtualKeyboard, EvdevPoller, Toast…) -->
 <script src="../JSs/input.js"></script>
 
 <script>
@@ -130,6 +133,12 @@ var avatarFocusIdx = 0;
 var serverEditValue  = '';
 var serverPingTimer  = null;
 var inputReady       = false;
+var _mapper          = null; // initialisé dans DOMContentLoaded
+var _mapperActive    = false;
+var _mapperWaiting   = false;
+var _mapperDeviceId  = '';
+var _mapperIdx       = 0;
+var _mapperResult    = {};
 
 /* ── Toast (wrapper XeInput) ──────────────────────────────────────── */
 var _toast = null; // initialisé dans DOMContentLoaded
@@ -207,24 +216,46 @@ document.addEventListener('DOMContentLoaded', function() {
       profiles  = (data && data.profiles) ? data.profiles : [];
       if (!serverUrl) showServerSetup();
       else            showProfilesView();
+
+      // Retour depuis JMPmapper — relancer le profil en attente
+      var pendingRaw = null;
+      try { pendingRaw = sessionStorage.getItem('jmpmap_pendingProfile'); } catch(e) {}
+      if (pendingRaw) {
+        try { sessionStorage.removeItem('jmpmap_pendingProfile'); } catch(e) {}
+        var pendingProfile = null;
+        try { pendingProfile = JSON.parse(pendingRaw); } catch(e) {}
+        if (pendingProfile && serverUrl) {
+          setTimeout(function() { launchProfile(pendingProfile); }, 600);
+        }
+      }
     }).catch(function() { showServerSetup(); });
   } else {
     showServerSetup();
   }
 
-  /* Clavier physique */
-  document.addEventListener('keydown', function(e) {
+  /* EvdevPoller — xe_input.py daemon */
+  _mapper = new XeInput.InputMapper();
+  var _gpPoller = new XeInput.EvdevPoller(function(resolved) {
     if (!inputReady) return;
-    handleKey(e.key);
+    handleKey(resolved);
   });
+  _gpPoller._customMaps = _mapper._maps;
+  _gpPoller._lastGpId = '__keyboard__';
+  _gpPoller.onRawEvent = function(raw, device) {
+    _gpPoller._lastGpId = device || '__keyboard__';
+    // Mapper inline manette : capture brute
+    if (_mapperActive && _mapperWaiting) {
+      _mapperReceive(raw);
+      return;
+    }
+    // Pas de redirection automatique — les devices sans mapping utilisent
+    // le fallback ACTION_TO_KEY. L'utilisateur configure depuis Settings.
+  };
+  _gpPoller.start();
 
-  /* Gamepad */
-  var gp = new XeInput.GamepadPoller(function(key) {
-    if (inputReady) handleKey(key);
-  });
-  gp.start();
-
-  setTimeout(function() { inputReady = true; }, 700);
+  setTimeout(function() {
+    inputReady = true;
+  }, 1000);
 });
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -367,6 +398,19 @@ function goBack() {
 
 function launchProfile(profile) {
   if (!window.xeLauncher) { showToast('xeLauncher non disponible', true); return; }
+
+  // Vérifier si un mapping Jellyfin Media Player existe
+  var jfMappingRaw = null;
+  try { jfMappingRaw = localStorage.getItem('xelauncher_jfmapping'); } catch(e) {}
+  var jfMapping = null;
+  try { jfMapping = jfMappingRaw ? JSON.parse(jfMappingRaw) : null; } catch(e) {}
+  if (!jfMapping || Object.keys(jfMapping).length === 0) {
+    // Mémoriser le profil à lancer au retour
+    try { sessionStorage.setItem('jmpmap_pendingProfile', JSON.stringify(profile)); } catch(e) {}
+    sessionStorage.setItem('jmpmap_returnTo', 'profiles.html');
+    window.location.href = 'JMPmapper.html';
+    return;
+  }
   document.getElementById('loadingText').textContent = 'Connexion en cours…';
   document.getElementById('loadingOverlay').classList.add('visible');
 
@@ -588,6 +632,112 @@ function handleKey(key) {
     else if (key === 'Escape')   goBack();
     return;
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   MAPPER MANETTE
+══════════════════════════════════════════════════════════════════════ */
+function _openMapper(deviceId) {
+  _mapperDeviceId = deviceId;
+  _mapperIdx = 0;
+  _mapperResult = {};
+  _mapperActive = true;
+  _mapperWaiting = false;
+
+  var el = document.getElementById('mapperOverlay');
+  el.innerHTML = '';
+  el.className = 'mapper-overlay visible';
+
+  var title = document.createElement('div');
+  title.className = 'mapper-title';
+  title.textContent = 'Configuration de la manette';
+  el.appendChild(title);
+
+  var dev = document.createElement('div');
+  dev.className = 'mapper-device';
+  dev.textContent = deviceId.substring(0, 60);
+  el.appendChild(dev);
+
+  var act = document.createElement('div');
+  act.className = 'mapper-actions';
+  act.id = 'mapperAct';
+  el.appendChild(act);
+
+  var grid = document.createElement('div');
+  grid.className = 'mapper-grid';
+  grid.id = 'mapperGrid';
+  el.appendChild(grid);
+
+  var hint = document.createElement('div');
+  hint.className = 'mapper-hint';
+  hint.textContent = 'Appuyez sur le bouton correspondant à chaque action';
+  el.appendChild(hint);
+
+  var skipBtn = document.createElement('button');
+  skipBtn.className = 'btn';
+  skipBtn.textContent = 'Utiliser les valeurs par défaut';
+  skipBtn.style.marginTop = '8px';
+  skipBtn.addEventListener('click', function() {
+    _mapper.save(_mapperDeviceId, _mapper.getDefault());
+    _closeMapper();
+    showToast('Manette configurée !', false);
+  });
+  el.appendChild(skipBtn);
+
+  _renderMapper();
+  _mapperNextStep();
+}
+
+function _mapperNextStep() {
+  if (_mapperIdx >= XeInput.ACTION_KEYS.length) {
+    _mapper.save(_mapperDeviceId, _mapperResult);
+    _closeMapper();
+    showToast('Manette configurée !', false);
+    return;
+  }
+  _mapperWaiting = true;
+  var act = document.getElementById('mapperAct');
+  if (act) act.textContent = 'Appuyez pour : ' + XeInput.ACTION_KEYS[_mapperIdx].label;
+  _renderMapper();
+}
+
+function _mapperReceive(rawKey) {
+  if (!_mapperWaiting) return;
+  _mapperResult[XeInput.ACTION_KEYS[_mapperIdx].id] = rawKey;
+  _mapperIdx++;
+  _mapperWaiting = false;
+  setTimeout(_mapperNextStep, 200);
+  _renderMapper();
+}
+
+function _renderMapper() {
+  var grid = document.getElementById('mapperGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  XeInput.ACTION_KEYS.forEach(function(action, i) {
+    var btn = document.createElement('div');
+    btn.className = 'mapper-btn' +
+      (i < _mapperIdx ? ' assigned' : '') +
+      (i === _mapperIdx && _mapperWaiting ? ' current-target' : '');
+    var label = document.createElement('span');
+    label.textContent = action.label;
+    btn.appendChild(label);
+    if (i < _mapperIdx) {
+      var key = document.createElement('span');
+      key.className = 'mapper-key-name';
+      key.textContent = _mapperResult[action.id] || '—';
+      btn.appendChild(key);
+    }
+    grid.appendChild(btn);
+  });
+}
+
+function _closeMapper() {
+  _mapperActive = false;
+  _mapperWaiting = false;
+  var el = document.getElementById('mapperOverlay');
+  el.classList.remove('visible');
+  el.innerHTML = '';
 }
 </script>
 

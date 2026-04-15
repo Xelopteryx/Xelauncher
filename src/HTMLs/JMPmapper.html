@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XeLauncher — Touches Jellyfin</title>
+<link rel="stylesheet" href="../CSSs/common.css">
+<link rel="stylesheet" href="../CSSs/mapper.css">
+<style>
+/* ── Overrides spécifiques JMPmapper ────────────────────────────────── */
+.mapper-title { color: var(--blue); }
+.mapper-title::after { background: rgba(0,164,220,0.3); }
+
+.jmp-subtitle {
+  font-family: var(--font-mono);
+  font-size: clamp(8px, 0.9vw, 10px);
+  color: var(--text-hint);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+/* Étape de choix du nombre de boutons */
+.jmp-choose-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(14px, 2.5vh, 26px);
+  position: relative;
+  z-index: 1;
+}
+
+.jmp-choose-label {
+  font-family: var(--font-mono);
+  font-size: clamp(11px, 1.3vw, 14px);
+  color: var(--text);
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.jmp-count-row {
+  display: flex;
+  gap: clamp(8px, 1.2vw, 16px);
+}
+
+.jmp-count-btn {
+  width: clamp(40px, 5vw, 60px);
+  height: clamp(40px, 5vw, 60px);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: clamp(14px, 1.8vw, 20px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.jmp-count-btn.active,
+.jmp-count-btn.jmp-focused {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: var(--blue-bg);
+}
+
+.jmp-count-btn.jmp-selected {
+  border-color: var(--blue);
+  color: #fff;
+  background: rgba(0,164,220,0.22);
+}
+
+/* Info bulle */
+.jmp-action-info {
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 0.95vw, 11px);
+  color: var(--text-hint);
+  letter-spacing: 2px;
+  text-align: center;
+  max-width: clamp(260px, 50vw, 580px);
+  line-height: 1.5;
+}
+
+/* La grille en mode mapping utilise les classes de mapper.css */
+/* Surcharge: les actions directionnelles (toujours incluses) sont grisées */
+.mapper-btn.always-on {
+  border-color: var(--border);
+  color: var(--text-dim);
+  background: rgba(255,255,255,0.03);
+}
+
+.mapper-btn.always-on.assigned {
+  border-color: rgba(0,164,220,0.25);
+  color: rgba(0,164,220,0.45);
+  background: rgba(0,164,220,0.04);
+}
+
+/* Grille 4 colonnes si beaucoup d'actions */
+.mapper-grid.jmp-grid {
+  grid-template-columns: repeat(2, 1fr);
+  width: clamp(280px, 58vw, 680px);
+}
+
+/* Barre d'étapes */
+.jmp-steps {
+  display: flex;
+  gap: clamp(6px, 1vw, 12px);
+  position: relative;
+  z-index: 1;
+}
+
+.jmp-step {
+  width: clamp(22px, 2.5vw, 30px);
+  height: 3px;
+  background: rgba(255,255,255,0.08);
+  transition: background 0.2s;
+}
+
+.jmp-step.done { background: rgba(0,164,220,0.5); }
+.jmp-step.current { background: var(--blue); }
+
+/* ── Phase device : détection + confirmation ─────────────────────── */
+.jmp-hold-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(14px, 2.5vh, 22px);
+  position: relative;
+  z-index: 1;
+}
+.jmp-hold-label {
+  font-family: var(--font-mono);
+  font-size: clamp(11px, 1.3vw, 14px);
+  color: var(--text);
+  letter-spacing: 2px;
+  text-align: center;
+  line-height: 1.6;
+}
+.jmp-hold-device {
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 0.95vw, 11px);
+  color: var(--blue);
+  letter-spacing: 2px;
+  text-align: center;
+  min-height: 1.4em;
+}
+.jmp-hold-bar-wrap {
+  width: clamp(200px, 36vw, 420px);
+  height: 4px;
+  background: rgba(255,255,255,0.07);
+  overflow: hidden;
+}
+.jmp-hold-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--blue);
+}
+.jmp-hold-confirm {
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 0.95vw, 11px);
+  color: var(--text-hint);
+  letter-spacing: 2px;
+  text-align: center;
+  min-height: 1.2em;
+}
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="vignette"></div>
+<div class="toast" id="toast"></div>
+
+<div class="mapper-screen" id="mapperScreen">
+  <div class="mapper-title" id="mapperTitle">Touches Jellyfin</div>
+  <div class="jmp-subtitle">Configurez les boutons de votre télécommande pour Jellyfin</div>
+
+  <!-- Barre de progression par étapes -->
+  <div class="jmp-steps" id="jmpSteps"></div>
+
+  <!-- Grace bar (mapping uniquement) -->
+  <div class="grace-bar-wrap" id="graceWrap" style="display:none">
+    <div class="grace-bar" id="graceBar"></div>
+  </div>
+
+  <!-- Zone d'action courante -->
+  <div class="mapper-actions" id="mapperActions" style="display:none">Prêt…</div>
+
+  <!-- Phase device -->
+  <div class="jmp-hold-panel" id="holdPanel">
+    <div class="jmp-hold-label" id="holdLabel">Appuyez sur un bouton du périphérique<br>que vous souhaitez configurer</div>
+    <div class="jmp-hold-bar-wrap"><div class="jmp-hold-bar" id="holdBar"></div></div>
+    <div class="jmp-hold-device" id="holdDevice"></div>
+    <div class="jmp-hold-confirm" id="holdConfirm"></div>
+  </div>
+
+  <!-- Panneau choix du nombre de boutons -->
+  <div class="jmp-choose-panel" id="choosePanel" style="display:none">
+    <div class="jmp-choose-label">Combien de boutons supplémentaires<br>possède votre télécommande&nbsp;?</div>
+    <div class="jmp-count-row" id="countRow"></div>
+    <div class="jmp-action-info" id="countInfo"></div>
+    <button class="btn" id="chooseConfirm">Confirmer</button>
+  </div>
+
+  <!-- Grille des actions (mapping) -->
+  <div class="mapper-grid jmp-grid" id="mapperGrid" style="display:none"></div>
+
+  <div class="mapper-hint" id="mapperHint">↑↓←→ naviguer · Entrée confirmer</div>
+  <button class="btn" id="skipBtn" style="display:none">Utiliser les valeurs par défaut</button>
+</div>
+
+<script src="../JSs/input.js"></script>
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════════
+   CONSTANTES
+═══════════════════════════════════════════════════════════════════ */
+const STORAGE_KEY = 'xelauncher_jfmapping';
+const GRACE_MS    = 700;
+const COOLDOWN_MS = 300;
+
+// Actions directionnelles — TOUJOURS présentes, mappées aux defaults
+const DIR_ACTIONS = [
+  { id:'jf_up',    label:'↑ Haut',    default:'ArrowUp'   },
+  { id:'jf_down',  label:'↓ Bas',     default:'ArrowDown' },
+  { id:'jf_left',  label:'← Gauche',  default:'ArrowLeft' },
+  { id:'jf_right', label:'→ Droite',  default:'ArrowRight'},
+];
+
+// Actions boutons — l'utilisateur choisit combien inclure (2 à 5)
+const BTN_ACTIONS = [
+  { id:'jf_ok',   label:'✓ OK',               default:'Enter'  },
+  { id:'jf_back', label:'↩ Retour',            default:'Escape' },
+  { id:'jf_menu', label:'☰ Menu',              default:'m'      },
+  { id:'jf_prev', label:'⏮ Retour arrière',    default:'j'      },
+  { id:'jf_next', label:'⏭ Avancer',           default:'l'      },
+];
+
+const BTN_INFO = [
+  '', '',
+  'OK + Retour',
+  'OK + Retour + Menu',
+  'OK + Retour + Menu + Retour arrière',
+  'OK + Retour + Menu + Retour arrière + Avancer',
+];
+
+/* ═══════════════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════════════ */
+const toast  = new XeInput.Toast(document.getElementById('toast'));
+const mapper = new XeInput.InputMapper();
+
+// returnTo : d'où on vient (sessionStorage)
+const returnTo = sessionStorage.getItem('jmpmap_returnTo') || 'settings.html';
+
+// Phase globale : 'device' | 'choose' | 'mapping' | 'done'
+let phase = 'device';
+
+// ── Phase device ──────────────────────────────────────────────────
+let selectedDeviceId = null;   // device confirmé
+let _pendingDeviceId   = null;   // device détecté, en attente de confirmation
+let _pendingDeviceTime = 0;      // timestamp du premier appui
+let _confirmTimer    = null;   // countdown visuel après détection
+
+// ── Phase choose ─────────────────────────────────────────────────
+let btnCount    = 3;
+let chooseFocus = 1;
+const COUNTS = [2,3,4,5];
+
+// ── Phase mapping ────────────────────────────────────────────────
+let activeActions = [];
+let currentIdx = 0;
+let result     = {};
+let waiting    = false;
+let cooldown   = false;
+
+/* ═══════════════════════════════════════════════════════════════════
+   POLLER — capture BRUTE (avant résolution)
+═══════════════════════════════════════════════════════════════════ */
+const poller = new XeInput.EvdevPoller(() => { /* résolution ignorée */ });
+// onRawEvent non utilisé : on passe par onXeInputEvent directement (sans filtre ACCEPTED_ACTIONS)
+
+/* ═══════════════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  renderSteps();
+
+  document.getElementById('chooseConfirm').addEventListener('click', confirmCount);
+  document.getElementById('skipBtn').addEventListener('click', skipToDefaults);
+
+  // Écoute IPC brute sans filtre ACCEPTED_ACTIONS (capture tous les boutons, tous les devices)
+  // Note : poller.start() n'est pas appelé car il écraserait ce listener via offXeInputEvent()
+  if (window.xeLauncher && window.xeLauncher.onXeInputEvent) {
+    window.xeLauncher.offXeInputEvent && window.xeLauncher.offXeInputEvent();
+    window.xeLauncher.onXeInputEvent((data) => {
+      if (!data || !data.device) return;
+      console.log('[JMPmapper] onXeInputEvent', JSON.stringify(data));
+
+      if (phase === 'device') {
+        receiveDeviceEvent(data.device);
+        return;
+      }
+
+      if (phase === 'choose') {
+        if (selectedDeviceId && selectedDeviceId !== '__keyboard__' && data.device !== selectedDeviceId) return;
+        const key = data.action || data.raw || data.key;
+        if (key) handleChooseKey(key);
+        return;
+      }
+
+      if (phase === 'mapping' && waiting) {
+        if (selectedDeviceId && selectedDeviceId !== '__keyboard__' && data.device !== selectedDeviceId) return;
+        // Stocker le raw (identifiant unique du bouton physique), pas l'action résolue
+        const raw = data.raw || data.action || data.key;
+        if (raw) receiveInput(raw);
+      }
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (phase === 'device') return;
+    if (phase === 'choose') handleChooseKey(e.key);
+    else if (phase === 'mapping' && waiting) receiveInput(e.key);
+  }, true);
+
+  startDevicePhase();
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   PHASE DEVICE — appui pour détecter, second appui pour confirmer
+═══════════════════════════════════════════════════════════════════ */
+const CONFIRM_MS = 3000;
+const UNMAPPABLE_KEYWORDS = ['ir','sensor','motion','accelero','gyro','touchpad','touch pad','nunchuk extension'];
+
+function isUnmappableDevice(name) {
+  if (!name) return false;
+  const nl = name.toLowerCase();
+  return UNMAPPABLE_KEYWORDS.some(k => nl.includes(k));
+}
+
+function startDevicePhase() {
+  phase = 'device';
+  selectedDeviceId = null;
+  _pendingDeviceId = null;
+  if (_confirmTimer) { clearInterval(_confirmTimer); _confirmTimer = null; }
+
+  // Device pré-sélectionné via sessionStorage
+  const preselected = sessionStorage.getItem('jmpmap_deviceId');
+  if (preselected) {
+    sessionStorage.removeItem('jmpmap_deviceId');
+    selectedDeviceId = preselected;
+    proceedToChoose();
+    return;
+  }
+
+  document.getElementById('holdPanel').style.display    = 'flex';
+  document.getElementById('choosePanel').style.display  = 'none';
+  document.getElementById('mapperActions').style.display = 'none';
+  _resetHoldUI();
+  document.getElementById('mapperHint').textContent = 'Appuyez sur un bouton pour sélectionner le périphérique';
+  renderSteps();
+}
+
+function _resetHoldUI() {
+  document.getElementById('holdLabel').innerHTML    = 'Appuyez sur un bouton du périphérique<br>que vous souhaitez configurer';
+  document.getElementById('holdDevice').textContent = '';
+  document.getElementById('holdConfirm').textContent = '';
+  document.getElementById('holdBar').style.transition = 'none';
+  document.getElementById('holdBar').style.width = '0%';
+}
+
+function receiveDeviceEvent(gpId) {
+  if (!gpId || gpId === '__keyboard__') return;
+  if (isUnmappableDevice(gpId)) return;
+
+  const now = Date.now();
+
+  if (_pendingDeviceId === null) {
+    // Premier appui : détecter le device, démarrer le countdown
+    _pendingDeviceId   = gpId;
+    _pendingDeviceTime = now;
+    const label = gpId.length > 60 ? gpId.slice(0, 60) + '…' : gpId;
+    document.getElementById('holdDevice').textContent  = label;
+    document.getElementById('holdConfirm').textContent = 'Appuyez à nouveau pour confirmer, ou appuyez sur un autre bouton pour changer';
+    _startConfirmCountdown();
+  } else if (gpId === _pendingDeviceId) {
+    // Second appui sur le même device — ignorer si trop rapide (double-event parasite)
+    if (now - _pendingDeviceTime < 800) return;
+    _confirmDevice();
+  } else {
+    // Appui sur un device différent : reset et sélectionner le nouveau
+    if (_confirmTimer) { clearInterval(_confirmTimer); _confirmTimer = null; }
+    _pendingDeviceId   = gpId;
+    _pendingDeviceTime = now;
+    const label = gpId.length > 60 ? gpId.slice(0, 60) + '…' : gpId;
+    document.getElementById('holdDevice').textContent  = label;
+    document.getElementById('holdConfirm').textContent = 'Appuyez à nouveau pour confirmer, ou appuyez sur un autre bouton pour changer';
+    document.getElementById('holdBar').style.transition = 'none';
+    document.getElementById('holdBar').style.width = '0%';
+    _startConfirmCountdown();
+  }
+}
+
+function _startConfirmCountdown() {
+  if (_confirmTimer) clearInterval(_confirmTimer);
+  const start = Date.now();
+  // Lancer l'animation CSS
+  requestAnimationFrame(() => {
+    document.getElementById('holdBar').style.transition = 'width ' + CONFIRM_MS + 'ms linear';
+    document.getElementById('holdBar').style.width = '100%';
+  });
+  _confirmTimer = setInterval(() => {
+    if (Date.now() - start >= CONFIRM_MS) {
+      clearInterval(_confirmTimer); _confirmTimer = null;
+      _confirmDevice();
+    }
+  }, 100);
+}
+
+function _confirmDevice() {
+  if (_confirmTimer) { clearInterval(_confirmTimer); _confirmTimer = null; }
+  selectedDeviceId = _pendingDeviceId;
+  _pendingDeviceId = null;
+  proceedToChoose();
+}
+
+function proceedToChoose() {
+  phase = 'choose';
+  document.getElementById('mapperActions').style.display = 'none';
+  document.getElementById('holdPanel').style.display = 'none';
+  const panel = document.getElementById('choosePanel');
+  panel.style.display = 'flex';
+  panel.innerHTML = `
+    <div class="jmp-choose-label">Combien de boutons supplémentaires<br>possède votre télécommande&nbsp;?</div>
+    <div class="jmp-count-row" id="countRow"></div>
+    <div class="jmp-action-info" id="countInfo"></div>
+    <button class="btn" id="chooseConfirmInner">Confirmer</button>
+  `;
+  document.getElementById('chooseConfirmInner').addEventListener('click', confirmCount);
+  renderCountBtns();
+  updateCountInfo();
+  renderSteps();
+  document.getElementById('mapperHint').textContent = '↑↓←→ naviguer · Entrée confirmer';
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PHASE CHOOSE
+═══════════════════════════════════════════════════════════════════ */
+function renderCountBtns() {
+  const row = document.getElementById('countRow');
+  row.innerHTML = '';
+  COUNTS.forEach((c, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'jmp-count-btn'
+      + (i === chooseFocus ? ' jmp-focused' : '')
+      + (c === btnCount    ? ' jmp-selected' : '');
+    btn.textContent = c;
+    btn.addEventListener('click', () => {
+      btnCount = c;
+      chooseFocus = i;
+      renderCountBtns();
+      updateCountInfo();
+    });
+    row.appendChild(btn);
+  });
+}
+
+function updateCountInfo() {
+  const el = document.getElementById('countInfo');
+  el.textContent = 'Boutons supplémentaires : ' + BTN_INFO[btnCount];
+}
+
+function handleChooseKey(key) {
+  // Normaliser les codes bruts evdev ('up','down'…) vers les équivalents Arrow
+  const norm = { up:'ArrowUp', down:'ArrowDown', left:'ArrowLeft', right:'ArrowRight',
+                  confirm:'Enter', back:'Escape' };
+  const k = norm[key] || key;
+
+  if (k === 'ArrowLeft' || k === 'ArrowUp') {
+    chooseFocus = Math.max(0, chooseFocus - 1);
+    btnCount = COUNTS[chooseFocus];
+    renderCountBtns(); updateCountInfo();
+  } else if (k === 'ArrowRight' || k === 'ArrowDown') {
+    chooseFocus = Math.min(COUNTS.length - 1, chooseFocus + 1);
+    btnCount = COUNTS[chooseFocus];
+    renderCountBtns(); updateCountInfo();
+  } else if (k === 'Enter') {
+    confirmCount();
+  } else if (k === 'Escape') {
+    goBack();
+  }
+}
+
+function confirmCount() {
+  phase = 'mapping';
+  activeActions = [...DIR_ACTIONS, ...BTN_ACTIONS.slice(0, btnCount)];
+  currentIdx = 0;
+  result = {};
+
+  // Ne PAS pré-remplir les directionnelles : la Wiimote (et tout device non-standard)
+  // utilise des codes bruts différents de 'ArrowUp' etc. — on les mappe comme le reste.
+
+  // Stocker le device sélectionné dans le résultat
+  result['__deviceId__'] = selectedDeviceId || '__keyboard__';
+
+  document.getElementById('choosePanel').style.display = 'none';
+  document.getElementById('mapperGrid').style.display  = '';
+  document.getElementById('mapperActions').style.display = '';
+  document.getElementById('graceWrap').style.display   = '';
+  document.getElementById('skipBtn').style.display     = '';
+  document.getElementById('mapperHint').textContent    = 'Appuyez sur le bouton correspondant';
+
+  renderSteps();
+  renderGrid();
+  startGrace();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PHASE MAPPING
+═══════════════════════════════════════════════════════════════════ */
+function startGrace() {
+  waiting = false;
+  const graceBar = document.getElementById('graceBar');
+  graceBar.style.transition = 'none';
+  graceBar.style.width = '100%';
+  document.getElementById('mapperActions').textContent = 'Prêt dans…';
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    graceBar.style.transition = `width ${GRACE_MS}ms linear`;
+    graceBar.style.width = '0%';
+  }));
+
+  setTimeout(nextStep, GRACE_MS);
+}
+
+function nextStep() {
+  if (currentIdx >= activeActions.length) {
+    finishMapping();
+    return;
+  }
+  const action = activeActions[currentIdx];
+  document.getElementById('mapperActions').innerHTML =
+    '🔘 Appuyez sur : <strong>' + action.label + '</strong>';
+  document.getElementById('graceBar').style.transition = 'none';
+  document.getElementById('graceBar').style.width = '0%';
+  waiting = true;
+  renderGrid();
+}
+
+function receiveInput(raw) {
+  if (phase !== 'mapping') return;
+  if (!waiting || cooldown) return;
+
+  cooldown = true;
+  waiting  = false;
+  setTimeout(() => { cooldown = false; }, COOLDOWN_MS);
+
+  result[activeActions[currentIdx].id] = raw;
+  currentIdx++;
+  renderGrid();
+  renderSteps();
+
+  if (currentIdx >= activeActions.length) {
+    finishMapping();
+  } else {
+    document.getElementById('mapperActions').textContent = '✓';
+    setTimeout(nextStep, 180);
+  }
+}
+
+function finishMapping() {
+  phase = 'done';
+  saveMapping();
+  document.getElementById('mapperActions').textContent = '✓ Configuration terminée !';
+  document.getElementById('mapperActions').classList.add('done');
+  toast.show('Touches Jellyfin configurées !', false, 1500);
+  setTimeout(goBack, 1600);
+}
+
+function skipToDefaults() {
+  phase = 'done';
+  const defaults = {};
+  [...DIR_ACTIONS, ...BTN_ACTIONS].forEach(a => { defaults[a.id] = a.default; });
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults)); } catch(e) {}
+  if (window.xeLauncher && window.xeLauncher.saveJfMapping)
+    window.xeLauncher.saveJfMapping(defaults);
+  toast.show('Valeurs par défaut appliquées', false, 1500);
+  setTimeout(goBack, 1600);
+}
+
+function saveMapping() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(result)); } catch(e) {}
+  // Persister sur disque pour xe_jmp_input.py (sans __deviceId__ interne)
+  const toSave = Object.fromEntries(
+    Object.entries(result).filter(([k]) => k !== '__deviceId__')
+  );
+  if (window.xeLauncher && window.xeLauncher.saveJfMapping)
+    window.xeLauncher.saveJfMapping(toSave);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RENDU
+═══════════════════════════════════════════════════════════════════ */
+function renderGrid() {
+  const gridEl = document.getElementById('mapperGrid');
+  if (!gridEl) return;
+  gridEl.innerHTML = '';
+
+  activeActions.forEach((a, i) => {
+    const item = document.createElement('div');
+    const isDir      = i < DIR_ACTIONS.length;
+    const isAssigned = !!result[a.id];
+    const isCurrent  = i === currentIdx && waiting;
+
+    item.className = 'mapper-btn'
+      + (isDir      ? ' always-on'       : '')
+      + (isAssigned ? ' assigned'        : '')
+      + (isCurrent  ? ' current-target'  : '');
+
+    const lbl = document.createElement('span');
+    lbl.textContent = a.label;
+    item.appendChild(lbl);
+
+    if (isAssigned) {
+      const kn = document.createElement('span');
+      kn.className = 'mapper-key-name';
+      kn.textContent = XeInput.prettyRaw(result[a.id]) || result[a.id];
+      item.appendChild(kn);
+    }
+
+    gridEl.appendChild(item);
+  });
+}
+
+function renderSteps() {
+  const stepsEl = document.getElementById('jmpSteps');
+  if (!stepsEl) return;
+  stepsEl.innerHTML = '';
+
+  // Étape 0 = choix du device, étape 1 = choix du nb boutons, étapes 2..N = mapping (dir + boutons)
+  const totalSteps = 2 + (phase === 'mapping' || phase === 'done' ? DIR_ACTIONS.length + btnCount : 0);
+
+  for (let i = 0; i < totalSteps; i++) {
+    const s = document.createElement('div');
+    let cls = 'jmp-step';
+    if (phase === 'device') {
+      cls += i === 0 ? ' current' : '';
+    } else if (phase === 'choose') {
+      cls += i === 0 ? ' done' : i === 1 ? ' current' : '';
+    } else {
+      const mappingStep = currentIdx; // currentIdx parcourt toutes les actions (dir + btn)
+      if (i < 2) {
+        cls += ' done';
+      } else {
+        const btnStep = i - 2;
+        if (phase === 'done' || btnStep < mappingStep) cls += ' done';
+        else if (btnStep === mappingStep) cls += ' current';
+      }
+    }
+    s.className = cls;
+    stepsEl.appendChild(s);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   NAVIGATION
+═══════════════════════════════════════════════════════════════════ */
+function goBack() {
+  sessionStorage.removeItem('jmpmap_returnTo');
+  if (window.xeLauncher && window.xeLauncher.goBack) {
+    window.xeLauncher.goBack();
+  } else {
+    window.location.href = returnTo;
+  }
+}
+</script>
+</body>
+</html>

@@ -459,61 +459,122 @@
   };
 
   /* ================================================================
-   * Gamepad poller
+   * EvdevPoller — reçoit les events de xe_input.py via IPC
+   * Format reçu : { device: string, action: string }
+   * action = 'up'|'down'|'left'|'right'|'confirm'|'back'|'menu'|'select'|
+   *          'action'|'l1'|'r1'|'l2'|'r2'|'l3'|'r3'
    * ================================================================ */
-  var GAMEPAD_MAP = {
-    0:'Enter', 1:'Escape', 2:'Square', 3:'Triangle',
-    4:'L1', 5:'R1', 6:'L2', 7:'R2',
-    8:'Select', 9:'Start',
-    12:'ArrowUp', 13:'ArrowDown', 14:'ArrowLeft', 15:'ArrowRight',
+
+  // Map action -> clé logique XeLauncher
+  var ACTION_TO_KEY = {
+    'up':      'ArrowUp',
+    'down':    'ArrowDown',
+    'left':    'ArrowLeft',
+    'right':   'ArrowRight',
+    'confirm': 'Enter',
+    'back':    'Escape',
+    'menu':    'Start',
+    'select':  'Select',
+    'action':  'Triangle',
+    'l1':      'L1',
+    'r1':      'R1',
+    'l2':      'L2',
+    'r2':      'R2',
+    'l3':      'L3',
+    'r3':      'R3',
   };
 
-  function GamepadPoller(onKey) {
-    this.onKey = onKey; this.state = {};
-    this._running = false; this._frame = null;
-    this._vibrationCooldown = new Map();
+  // Formate un raw key (action) pour affichage
+  function prettyRaw(raw) {
+    if (!raw) return '';
+    var labels = {
+      'up':'↑','down':'↓','left':'←','right':'→',
+      'confirm':'Confirmer','back':'Retour','menu':'Menu','select':'Select',
+      'action':'Action','l1':'L1','r1':'R1','l2':'L2','r2':'R2','l3':'L3','r3':'R3',
+    };
+    return labels[raw] || raw;
   }
-  GamepadPoller.prototype.start = function() { if (this._running) return; this._running = true; this._poll(); };
-  GamepadPoller.prototype.stop  = function() { this._running = false; if (this._frame) cancelAnimationFrame(this._frame); };
-  GamepadPoller.prototype._vibrate = function(gp, intensity, duration) {
-    if (!gp.vibrationActuator) return;
-    var now = Date.now(), last = this._vibrationCooldown.get(gp.index) || 0;
-    if (now - last < 100) return;
-    this._vibrationCooldown.set(gp.index, now);
-    gp.vibrationActuator.playEffect('dual-rumble', { duration: duration||50, strongMagnitude: intensity||0.5, weakMagnitude: (intensity||0.5)*0.7 }).catch(function(){});
-  };
-  GamepadPoller.prototype._poll = function() {
-    if (!this._running) return;
-    var self = this, gps = navigator.getGamepads ? navigator.getGamepads() : [];
-    for (var i = 0; i < gps.length; i++) {
-      var gp = gps[i]; if (!gp) continue;
-      if (!this.state[i]) this.state[i] = { buttons:[], acH:false, acV:false, lastAxH:0, lastAxV:0 };
-      var st = this.state[i];
-      gp.buttons.forEach(function(btn, idx) {
-        var p = btn.pressed, w = st.buttons[idx];
-        if (p && !w && GAMEPAD_MAP[idx]) {
-          self.onKey(GAMEPAD_MAP[idx]);
-          if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(GAMEPAD_MAP[idx])) self._vibrate(gp, 0.3, 40);
-        }
-        st.buttons[idx] = p;
-      });
-      var DEAD = 0.35, COOL = 150, now = Date.now(), axH = 0, axV = 0;
-      if (Math.abs(gp.axes[0]) > DEAD) axH = gp.axes[0];
-      else if (gp.axes[2] !== undefined && Math.abs(gp.axes[2]) > DEAD) axH = gp.axes[2];
-      if (Math.abs(gp.axes[1]) > DEAD) axV = gp.axes[1];
-      else if (gp.axes[3] !== undefined && Math.abs(gp.axes[3]) > DEAD) axV = gp.axes[3];
-      if (!st.acH) {
-        if      (axH < -DEAD) { self.onKey('ArrowLeft');  st.acH=true; st.lastAxH=now; setTimeout(function(){if(st.lastAxH===now)st.acH=false;},COOL); }
-        else if (axH >  DEAD) { self.onKey('ArrowRight'); st.acH=true; st.lastAxH=now; setTimeout(function(){if(st.lastAxH===now)st.acH=false;},COOL); }
-      }
-      if (Math.abs(axH) <= DEAD && st.acH && now - st.lastAxH > COOL) st.acH = false;
-      if (!st.acV) {
-        if      (axV < -DEAD) { self.onKey('ArrowUp');   st.acV=true; st.lastAxV=now; setTimeout(function(){if(st.lastAxV===now)st.acV=false;},COOL); }
-        else if (axV >  DEAD) { self.onKey('ArrowDown'); st.acV=true; st.lastAxV=now; setTimeout(function(){if(st.lastAxV===now)st.acV=false;},COOL); }
-      }
-      if (Math.abs(axV) <= DEAD && st.acV && now - st.lastAxV > COOL) st.acV = false;
+
+  function EvdevPoller(onKey) {
+    this.onKey       = onKey;
+    this._customMaps = null;   // ref vers InputMapper._maps
+    this.onRawEvent  = null;   // (action, deviceName) avant résolution — pour le mapper
+    this.debugMode   = false;
+    this.onDebug     = null;   // ({raw, device}) en mode debug
+    this._bound      = null;
+    this._running    = false;
+  }
+
+  EvdevPoller.prototype.start = function() {
+    if (this._running) return;
+    if (!window.xeLauncher || !window.xeLauncher.onXeInputEvent) {
+      console.warn('EvdevPoller: onXeInputEvent non disponible');
+      return;
     }
-    this._frame = requestAnimationFrame(function(){ self._poll(); });
+    // Retirer tout listener IPC précédent AVANT d'en ajouter un nouveau.
+    // ipcRenderer.on() accumule les listeners — sans ce nettoyage, chaque
+    // navigation back/forward dans Electron empile un listener supplémentaire
+    // et chaque event physique est déclenché N fois.
+    if (window.xeLauncher.offXeInputEvent) window.xeLauncher.offXeInputEvent();
+    this._running = true;
+    var self = this;
+    this._bound = function(data) { self._onEvent(data); };
+    window.xeLauncher.onXeInputEvent(this._bound);
+  };
+
+  EvdevPoller.prototype.stop = function() {
+    if (!this._running) return;
+    this._running = false;
+    if (window.xeLauncher && window.xeLauncher.offXeInputEvent)
+      window.xeLauncher.offXeInputEvent();
+  };
+
+  EvdevPoller.prototype._resolve = function(action, deviceName) {
+    // Chercher dans le mapping custom
+    var cm = this._customMaps && this._customMaps[deviceName];
+    if (cm) {
+      // Le mapping stocke { action_id: raw_key_captured }
+      // ex: { confirm: 'Enter', up: 'ArrowUp', ... } (clavier)
+      // ou  { confirm: 'confirm', up: 'up', ... }     (manette via xe_input)
+      // On cherche quel action_id a pour valeur cette action.
+      for (var aid in cm) {
+        if (cm[aid] === action) {
+          var a = ACTION_KEYS.find(function(k){ return k.id === aid; });
+          return a ? a.default : null;
+        }
+      }
+      // Action non trouvée dans le mapping custom → fallback défaut
+      // (le device est mappé mais cette action spécifique ne l'est pas)
+      return ACTION_TO_KEY[action] || null;
+    }
+    // Pas de mapping custom → défaut
+    return ACTION_TO_KEY[action] || null;
+  };
+
+  // Actions physiques acceptées — exclut gyroscope, touchpad, capteurs IR, axes analogiques, etc.
+  var ACCEPTED_ACTIONS = {
+    'up':true,'down':true,'left':true,'right':true,
+    'confirm':true,'back':true,'menu':true,'select':true,
+    'action':true,'l1':true,'r1':true,'l2':true,'r2':true,'l3':true,'r3':true,
+  };
+
+  EvdevPoller.prototype._onEvent = function(data) {
+    if (!data || !data.action || !data.device) return;
+    var action = data.action;
+    var device = data.device;
+
+    // Ignorer tout ce qui n'est pas un bouton reconnu (gyroscope, touchpad, IR, axes…)
+    if (!ACCEPTED_ACTIONS[action]) return;
+
+    // Debug
+    if (this.debugMode && this.onDebug) this.onDebug({ raw: action, device: device });
+
+    // Notifier le mapper brut (avant résolution)
+    if (this.onRawEvent) this.onRawEvent(action, device);
+
+    // Navigation normale : résoudre et envoyer la touche logique
+    var key = this._resolve(action, device);
+    if (key) this.onKey(key);
   };
 
   /* ================================================================
@@ -559,7 +620,9 @@
         return a ? a.default : rawKey;
       }
     }
-    return null;
+    // Mapping existe mais cette action n'y est pas → fallback défaut
+    var defaultAction = ACTION_KEYS.find(function(k) { return k.id === rawKey; });
+    return defaultAction ? defaultAction.default : rawKey;
   };
 
   /* ================================================================
@@ -699,12 +762,28 @@
   };
 
   /* ================================================================
+   * GP_DEFAULT — mapping par défaut pour manette générique
+   * Correspond aux valeurs default de ACTION_KEYS
+   * ================================================================ */
+  var GP_DEFAULT = {
+    up:      'ArrowUp',
+    down:    'ArrowDown',
+    left:    'ArrowLeft',
+    right:   'ArrowRight',
+    confirm: 'Enter',
+    back:    'Escape',
+    menu:    'Start',
+    action:  'Triangle',
+  };
+
+  /* ================================================================
    * Expose
    * ================================================================ */
   root.XeInput = {
     VirtualKeyboard,
-    GamepadPoller,
+
     InputMapper,
+    EvdevPoller,
     RemoteCapture,
     ACTION_KEYS,
     requestWakeLock,
@@ -712,6 +791,8 @@
     ACCENTS,
     getLayoutPref,
     setLayoutPref,
+    GP_DEFAULT,
+    prettyRaw,
   };
 
 })(typeof window !== 'undefined' ? window : this);

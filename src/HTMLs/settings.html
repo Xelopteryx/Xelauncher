@@ -23,6 +23,7 @@
     <div class="sidebar-item" data-tab="network"><span class="icon">🌐</span>Réseau</div>
     <div class="sidebar-item" data-tab="bluetooth"><span class="icon">📡</span>Bluetooth</div>
     <div class="sidebar-item" data-tab="controllers"><span class="icon">🎮</span>Manettes</div>
+    <div class="sidebar-item" data-tab="jellyfin"><span class="icon">🎬</span>Jellyfin</div>
   </nav>
 
   <!-- Content -->
@@ -123,11 +124,19 @@
           <span class="settings-row-value" id="wifiScanStatus">↻</span>
         </div>
         <div class="wifi-list" id="wifiList"></div>
-        <div class="settings-row" data-action="wifi-hide" style="border-top:1px solid var(--border);margin-top:4px">
-          <span class="settings-row-label">Réseaux masqués</span>
-          <span class="settings-row-value" id="hiddenNetCount">0</span>
+        <div class="wifi-hidden-section">
+          <div class="wifi-hidden-header" data-action="wifi-hide" id="wifiHideHeader">
+            <span>⊘ Réseaux masqués</span>
+            <span id="hiddenNetCount" style="opacity:0.6">0</span>
+          </div>
+          <div id="hiddenNetList" style="display:none"></div>
         </div>
-        <div id="hiddenNetList" style="display:none"></div>
+      </div>
+      <div class="settings-group" style="margin-top:16px">
+        <div class="settings-row" id="row-wifi-known" data-action="wifi-known">
+          <span class="settings-row-label">★ Réseaux connus</span>
+          <span class="settings-row-value" id="knownNetCount">—</span>
+        </div>
       </div>
       <div class="settings-group" style="margin-top:24px">
         <div class="section-title" style="font-size:clamp(10px,1.2vw,14px);margin:12px 16px 8px">Interfaces réseau</div>
@@ -148,8 +157,14 @@
           <span class="settings-row-value" id="btScanStatus">↻</span>
         </div>
         <div class="bt-list" id="btPairedList"></div>
-        <div id="btFoundHeader" style="padding:12px 16px 4px;font-family:var(--font-mono);font-size:clamp(8px,0.9vw,10px);letter-spacing:3px;color:rgba(0,164,220,0.5);text-transform:uppercase;">Appareils trouvés</div>
         <div class="bt-list" id="btScanList"></div>
+        <div class="bt-hidden-section">
+          <div class="wifi-hidden-header" data-action="bt-hide" id="btHideHeader">
+            <span>⊘ Appareils masqués</span>
+            <span id="hiddenBtCount" style="opacity:0.6">0</span>
+          </div>
+          <div id="hiddenBtList" style="display:none"></div>
+        </div>
       </div>
     </div>
 
@@ -165,31 +180,53 @@
           <span class="settings-row-label">🔴 Configurer un nouvel appareil</span>
           <span class="settings-row-value">→</span>
         </div>
+        <div class="settings-row" data-action="gamepad-debug" style="margin-top:4px">
+          <span class="settings-row-label">🔍 Tester une manette</span>
+          <span class="settings-row-value">→</span>
+        </div>
         <div class="settings-row" data-action="clear-maps" style="margin-top:4px">
           <span class="settings-row-label">Réinitialiser tous les mappages</span>
           <span class="settings-row-value">✕</span>
         </div>
-        <div class="settings-row export-import" style="justify-content:center;gap:20px;margin-top:4px">
-          <button class="option-item" id="exportMapsBtn" style="padding:8px 16px">📤 Exporter</button>
-          <button class="option-item" id="importMapsBtn" style="padding:8px 16px">📥 Importer</button>
-        </div>
       </div>
+    </div>
 
-      <!-- Jellyfin mapping section -->
-      <div class="section-title" style="margin-top:32px">Jellyfin — Touches</div>
+    <!-- Jellyfin tab -->
+    <div id="tab-jellyfin" class="tab-content" style="display:none">
+      <div class="section-title">Jellyfin</div>
       <div class="settings-group">
         <div class="hint" style="padding:10px 16px 4px">
-          Configurez quelles touches contrôlent Jellyfin Media Player. Choisissez entre 2 et 5 boutons (+ la croix directionnelle).
+          Configurez quelles touches contrôlent Jellyfin Media Player (croix directionnelle + 2 à 5 boutons).
         </div>
         <div class="settings-row" data-action="jf-configure">
-          <span class="settings-row-label">Configurer les touches Jellyfin</span>
+          <span class="settings-row-label">🎬 Configurer les touches Jellyfin</span>
           <span class="settings-row-value" id="jfConfigStatus">→</span>
         </div>
         <div id="jfMappingGrid" class="jf-mapping-grid" style="display:none"></div>
+        <div id="jfSavedSummary" style="display:none;padding:8px 16px 4px;font-family:var(--font-mono);font-size:clamp(8px,0.85vw,10px);letter-spacing:1.5px;color:var(--text-hint)"></div>
+      </div>
+      <div class="section-title" style="margin-top:28px;font-size:clamp(10px,1.2vw,14px)">Appareils configurés</div>
+      <div class="settings-group">
+        <div id="jfDeviceList"></div>
       </div>
     </div>
 
   </main>
+</div>
+
+<!-- Interface config overlay -->
+<div class="iface-overlay" id="ifaceOverlay"></div>
+
+<!-- Known networks overlay -->
+<div class="iface-overlay" id="knownOverlay"></div>
+
+<!-- Numeric keyboard (IP/mask/gateway/DNS) -->
+<div class="kb-overlay" id="kbNumOverlay">
+  <div class="kb-label" id="kbNumLabel">Valeur</div>
+  <div class="kb-display" id="kbNumDisplay">|</div>
+  <div class="kb-panel">
+    <div id="kbNumRows"></div>
+  </div>
 </div>
 
 <!-- WiFi password keyboard -->
@@ -203,6 +240,23 @@
     </div>
     <div id="kbRows"></div>
   </div>
+</div>
+
+<!-- Gamepad debug overlay -->
+<div class="bt-action-overlay" id="gpDebugOverlay">
+  <div class="bt-action-title">Test manette</div>
+  <div class="bt-action-mac" id="gpDebugDeviceName">Aucune manette détectée</div>
+  <div id="gpDebugGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:5px;min-width:clamp(280px,46vw,560px);max-height:52vh;overflow-y:auto;margin:8px 0"></div>
+  <div id="gpDebugLog" style="font-family:var(--font-mono);font-size:clamp(11px,1.3vw,15px);letter-spacing:2px;color:var(--blue);min-height:22px;text-align:center"></div>
+  <div class="hint" style="margin-top:10px">Appuyez sur n'importe quelle touche — Retour pour fermer</div>
+</div>
+
+<!-- BT device action overlay -->
+<div class="bt-action-overlay" id="btActionOverlay">
+  <div class="bt-action-title" id="btActionTitle"></div>
+  <div class="bt-action-mac" id="btActionMac"></div>
+  <div class="bt-action-list" id="btActionList"></div>
+  <div class="hint" style="margin-top:12px">↑↓ Naviguer • Entrée Confirmer • Retour Fermer</div>
 </div>
 
 <!-- Loading -->
@@ -225,7 +279,18 @@
 
 const toast = new XeInput.Toast(document.getElementById('toast'));
 const mapper = new XeInput.InputMapper();
-const gpPoller = new XeInput.GamepadPoller((raw) => onKey(raw, '__gamepad__'));
+const gpPoller = new XeInput.EvdevPoller((resolved) => {
+  // Le deviceId réel est stocké par onRawEvent juste avant ce callback
+  onKey(resolved, gpPoller._lastGpId || '__keyboard__');
+});
+gpPoller._customMaps = mapper._maps;
+gpPoller._lastGpId = '__keyboard__';
+gpPoller.onRawEvent = (raw, gpId) => {
+  gpPoller._lastGpId = gpId || '__keyboard__';
+  // Mapper inline ou jf-mapping : ils ont besoin du raw + du vrai deviceId
+  if (mapperActive && mapperWaiting) { onKey(raw, gpId); }
+  if (screen === 'jf-mapping' && jfMappingActive) { onKey(raw, gpId); }
+};
 
 const REMOTE_DEVICE_ID = '__remote__';
 const remoteCapture = new XeInput.RemoteCapture(
@@ -235,12 +300,12 @@ const remoteCapture = new XeInput.RemoteCapture(
 
 let inputReady = false;
 let activeTab = 'system';
-const TABS = ['system','display','audio','network','bluetooth','controllers'];
+const TABS = ['system','display','audio','network','bluetooth','controllers','jellyfin'];
 
 let rowFocusMap = {};
 TABS.forEach(t => { rowFocusMap[t] = 0; });
 
-let sidebarFocused = true;
+let sidebarFocused = false;
 let sidebarFocusIdx = 0;
 let screen = 'main';
 
@@ -273,8 +338,25 @@ let kbContextData = null;
 let hiddenNetworks = [];
 let hiddenListExpanded = false;
 
+/* ── Known networks state ── */
+// knownNetworks : [{ ssid, security }] — ordre = priorité wpa_supplicant
+let knownNetworks = [];
+let knownOverlayActive = false;
+let knownOverlayFocusIdx = 0;
+let knownOverlayColIdx = 0; // 0=ligne, 1=action(connect/disc), 2=oublier(✕), 3=↑, 4=↓
+// Sous-mode réorganisation : on déplace un réseau avec ↑/↓
+let knownReorderMode = false;
+let knownReorderIdx = -1;
+
 /* ── Bluetooth state ── */
 let btPowered = false, btPaired = [], btScanResults = [], btPairedFocusIdx = 0, btScanFocusIdx = 0;
+let hiddenBtDevices = [];
+let btHiddenListExpanded = false;
+// BT action overlay state
+let btActionOverlayActive = false;
+let btActionDev = null;       // { mac, name, connected, paired }
+let btActionItems = [];       // [{ label, action, danger }]
+let btActionFocusIdx = 0;
 
 /* ── Controller map state ── */
 let deviceMapFocusIdx = 0;
@@ -305,11 +387,13 @@ document.addEventListener('DOMContentLoaded', () => {
   XeInput.requestWakeLock();
   gpPoller.start();
   loadHiddenNetworks();
+  loadKnownNetworks();
+  loadHiddenBtDevices();
 
   document.querySelectorAll('.sidebar-item').forEach((el, i) => {
     el.addEventListener('click', () => {
       sidebarFocusIdx = i;
-      sidebarFocused = true;
+      sidebarFocused = false;
       selectTab(TABS[i]);
     });
   });
@@ -317,16 +401,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('kbModeLetters').addEventListener('click', () => kb.setMode('letters'));
   document.getElementById('kbModeNums').addEventListener('click', () => kb.setMode('nums'));
 
-  const exportBtn = document.getElementById('exportMapsBtn');
-  const importBtn = document.getElementById('importMapsBtn');
-  if (exportBtn) exportBtn.addEventListener('click', exportMappings);
-  if (importBtn) importBtn.addEventListener('click', importMappings);
-
   loadVersion();
   loadDisplayModes();
   loadInterfaces();
   loadSavedSettings();
   loadJfMapping();
+  updateJfConfigStatus();
 
   selectTab('system');
   updateSidebarFocus();
@@ -334,17 +414,28 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.addEventListener('gamepadconnected', (e) => {
-  if (!mapper.has(e.gamepad.id)) openMapperUI(e.gamepad.id);
+  if (screen === 'mapper' && !mapper.has(e.gamepad.id)) {
+    openMapperUI(e.gamepad.id);
+  }
 });
-
-/* ── Virtual keyboard ── */
+/* ── Virtual keyboard (WiFi / texte général) ── */
 const kb = new XeInput.VirtualKeyboard(
   document.getElementById('kbRows'),
   document.getElementById('kbDisplay'),
   document.getElementById('kbOverlay')
 );
 
+/* ── Clavier numérique (config réseau) ── */
+const kbNum = new XeInput.VirtualKeyboard(
+  document.getElementById('kbNumRows'),
+  document.getElementById('kbNumDisplay'),
+  null  // pas de barre de modes — on reste en 'nums'
+);
+
+let kbPrevScreen = 'main'; // screen à restaurer à la fermeture du clavier
+
 function openKb(label, initial, callback, contextData) {
+  kbPrevScreen = screen;
   document.getElementById('kbLabel').textContent = label;
   kb.open(initial || '');
   kbCallback = callback;
@@ -357,7 +448,27 @@ function openKb(label, initial, callback, contextData) {
 
 function closeKb() {
   document.getElementById('kbOverlay').classList.remove('visible');
-  screen = 'main';
+  screen = kbPrevScreen;
+  if (screen === 'iface') renderIfaceOverlay();
+}
+
+function openKbNum(label, initial, callback, contextData) {
+  kbPrevScreen = screen;
+  document.getElementById('kbNumLabel').textContent = label;
+  kbNum.open(initial || '');
+  kbNum.setMode('nums');
+  kbCallback = callback;
+  kbContextData = contextData || null;
+  kbNum.onConfirm = (val) => { closeKbNum(); if (kbCallback) kbCallback(val, kbContextData); };
+  kbNum.onCancel = closeKbNum;
+  document.getElementById('kbNumOverlay').classList.add('visible');
+  screen = 'kbNum';
+}
+
+function closeKbNum() {
+  document.getElementById('kbNumOverlay').classList.remove('visible');
+  screen = kbPrevScreen;
+  if (screen === 'iface') renderIfaceOverlay();
 }
 
 /* ── Tab management ── */
@@ -369,9 +480,11 @@ function selectTab(tabId) {
   document.querySelectorAll('.sidebar-item').forEach((el, i) => {
     el.classList.toggle('active', TABS[i] === tabId);
   });
-  if (tabId === 'network') { loadInterfaces(); }
+  if (tabId === 'network') { loadInterfaces(); loadCurrentSsid(); startIfacePolling(); }
+  else stopIfacePolling();
   if (tabId === 'bluetooth') { loadBluetooth(); }
-  if (tabId === 'controllers') { renderDeviceMaps(); renderJfMapping(); }
+  if (tabId === 'controllers') { renderDeviceMaps(); }
+  if (tabId === 'jellyfin') { updateJfConfigStatus(); renderJfDeviceList(); }
   rowFocusMap[tabId] = 0;
   updateContentFocus();
 }
@@ -386,9 +499,30 @@ function updateSidebarFocus() {
 
 /* ── Content rows focus ── */
 function getContentRows() {
+  if (screen === 'btAction') return [];
   const t = document.getElementById('tab-' + activeTab);
   if (!t) return [];
-  return Array.from(t.querySelectorAll('.settings-row, .wifi-network, .iface-item, .iface-field-value, .iface-apply-btn, .bt-item, .device-item, .option-item, .toggle, .jf-key-btn'));
+  return Array.from(t.querySelectorAll('.settings-row, .wifi-network, .wifi-hidden-header, .iface-item, .iface-field-value, .iface-apply-btn, .bt-item, .device-item, .option-item, .toggle, .jf-key-btn'))
+    .filter(el => {
+      // Exclure les option-item dont le conteneur parent est masqué
+      if (el.classList.contains('option-item')) {
+        const parent = el.closest('[id$="-options"], [id$="OptionList"]')?.parentElement;
+        return parent ? parent.style.display !== 'none' : true;
+      }
+      // Exclure les éléments enfants d'un iface-config-panel masqué
+      if (el.classList.contains('iface-field-value') || el.classList.contains('iface-apply-btn')) {
+        const panel = el.closest('.iface-config-panel');
+        return panel ? panel.style.display !== 'none' : true;
+      }
+      // Exclure les wifi-network dans #hiddenNetList quand il est fermé
+      if (el.classList.contains('wifi-network')) {
+        const hiddenNetList = el.closest('#hiddenNetList');
+        if (hiddenNetList) return hiddenNetList.style.display !== 'none';
+        const hiddenBtList = el.closest('#hiddenBtList');
+        if (hiddenBtList) return hiddenBtList.style.display !== 'none';
+      }
+      return true;
+    });
 }
 
 function updateContentFocus() {
@@ -465,33 +599,412 @@ function updateHiddenNetCount() {
   if (el) el.textContent = hiddenNetworks.length;
 }
 
+function loadCurrentSsid() {
+  if (!window.xeLauncher) return;
+  window.xeLauncher.wifiCurrentSSID().then(ssid => { wifiCurrentSSID = ssid || ''; });
+}
+
+/* ── Known networks ── */
+function loadKnownNetworks() {
+  if (!window.xeLauncher) return;
+  // xeLauncher.getKnownNetworks() → [{ ssid, security }] dans l'ordre wpa_supplicant
+  window.xeLauncher.getKnownNetworks().then(nets => {
+    knownNetworks = nets || [];
+    updateKnownNetCount();
+  });
+}
+
+function updateKnownNetCount() {
+  const el = document.getElementById('knownNetCount');
+  if (el) el.textContent = knownNetworks.length ? knownNetworks.length + '' : '—';
+}
+
+function saveKnownNetworksPriority() {
+  if (!window.xeLauncher) return;
+  // Transmet l'ordre (index 0 = priorité max) à wpa_supplicant
+  window.xeLauncher.setKnownNetworksPriority(knownNetworks.map(n => n.ssid))
+    .then(ok => { if (!ok) toast.show('Erreur sauvegarde priorités', true); });
+}
+
+/* ── Known networks overlay ── */
+function openKnownOverlay() {
+  knownOverlayActive = true;
+  knownOverlayFocusIdx = 0;
+  knownOverlayColIdx = 0;
+  knownReorderMode = false;
+  knownReorderIdx = -1;
+  screen = 'knownOverlay';
+  // Afficher immédiatement avec les données en cache
+  document.getElementById('knownOverlay').classList.add('visible');
+  renderKnownOverlay();
+  // Rafraîchir les données en arrière-plan : réseau courant + liste connue + scan WiFi
+  if (window.xeLauncher) {
+    Promise.all([
+      window.xeLauncher.getKnownNetworks(),
+      window.xeLauncher.wifiCurrentSSID(),
+      window.xeLauncher.wifiScan()
+    ]).then(([nets, ssid, scanned]) => {
+      knownNetworks = nets || [];
+      wifiCurrentSSID = ssid || '';
+      if (scanned) wifiNetworks = scanned;
+      updateKnownNetCount();
+      renderKnownOverlay();
+    });
+  }
+}
+
+function closeKnownOverlay() {
+  knownOverlayActive = false;
+  knownReorderMode = false;
+  screen = 'main';
+  document.getElementById('knownOverlay').classList.remove('visible');
+  updateContentFocus();
+}
+
+function renderKnownOverlay() {
+  const overlay = document.getElementById('knownOverlay');
+  overlay.innerHTML = '';
+
+  // Titre
+  const title = document.createElement('div');
+  title.className = 'iface-overlay-title';
+  title.textContent = 'Réseaux connus';
+  overlay.appendChild(title);
+
+  // Hint contextuel
+  const hint = document.createElement('div');
+  hint.className = 'iface-overlay-hint';
+  if (knownReorderMode) {
+    hint.textContent = '↑ ↓  Déplacer  •  Entrée  Valider  •  Retour  Annuler';
+  } else {
+    hint.textContent = '↑ ↓  Naviguer  •  → ←  Actions  •  Entrée  Confirmer  •  Retour  Fermer';
+  }
+  overlay.appendChild(hint);
+
+  if (!knownNetworks.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'color:var(--text-dim);font-family:var(--font-mono);font-size:clamp(10px,1.15vw,13px);letter-spacing:2px;text-transform:uppercase;padding:20px 0';
+    empty.textContent = 'Aucun réseau enregistré';
+    overlay.appendChild(empty);
+    // Bouton fermer
+    const closeBtn = document.createElement('div');
+    closeBtn.className = 'known-overlay-row' + (knownOverlayFocusIdx === 0 ? ' focused' : '');
+    closeBtn.style.cssText = 'justify-content:center;margin-top:16px';
+    closeBtn.textContent = '← Fermer';
+    overlay.appendChild(closeBtn);
+    return;
+  }
+
+  const lockSVG = `<svg width="11" height="13" viewBox="0 0 12 14" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;margin-right:4px">
+    <rect x="1" y="6" width="10" height="8" rx="1" fill="none" stroke="rgba(0,164,220,0.6)" stroke-width="1.2"/>
+    <path d="M3 6V4a3 3 0 0 1 6 0v2" fill="none" stroke="rgba(0,164,220,0.6)" stroke-width="1.2"/>
+  </svg>`;
+  const lockOpenSVG = `<svg width="11" height="13" viewBox="0 0 12 14" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;margin-right:4px;opacity:0.35">
+    <rect x="1" y="6" width="10" height="8" rx="1" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+    <path d="M3 6V4a3 3 0 0 1 6 0" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+  </svg>`;
+
+  // Chercher les SSIDs disponibles dans le scan courant
+  const availableSSIDs = new Set(wifiNetworks.map(n => n.ssid));
+
+  knownNetworks.forEach((net, i) => {
+    const isCurrent = net.ssid === wifiCurrentSSID;
+    const isAvail = availableSSIDs.has(net.ssid);
+    const isSecure = net.security && net.security.trim() && net.security !== 'Open';
+    const isFocused = !knownReorderMode && knownOverlayFocusIdx === i;
+    const isReordering = knownReorderMode && knownReorderIdx === i;
+
+    const row = document.createElement('div');
+    row.className = 'known-overlay-row'
+      + (isCurrent ? ' current' : '')
+      + (isFocused ? ' focused' : '')
+      + (isReordering ? ' reorder-focused' : '')
+      + (!isAvail ? ' unavailable' : '');
+    row.dataset.idx = i;
+
+    // Gauche : dot disponibilité + cadenas + SSID + "connecté"
+    const left = document.createElement('div');
+    left.className = 'known-overlay-left';
+
+    const dot = document.createElement('span');
+    dot.className = 'known-avail-dot ' + (isAvail ? 'avail' : 'unavail');
+    left.appendChild(dot);
+
+    left.insertAdjacentHTML('beforeend', isSecure ? lockSVG : lockOpenSVG);
+
+    const ssidSpan = document.createElement('span');
+    ssidSpan.className = 'known-overlay-ssid';
+    ssidSpan.textContent = net.ssid;
+    left.appendChild(ssidSpan);
+
+    if (isCurrent) {
+      const connSpan = document.createElement('span');
+      connSpan.className = 'known-overlay-connected';
+      connSpan.textContent = '● connecté';
+      left.appendChild(connSpan);
+    }
+    row.appendChild(left);
+
+    // Droite : actions + flèches priorité
+    const actions = document.createElement('div');
+    actions.className = 'known-overlay-actions';
+
+    if (!knownReorderMode) {
+      const colFocus = isFocused ? knownOverlayColIdx : -1;
+
+      // Bouton connect/disconnect (col 1)
+      const actionBtn = document.createElement('div');
+      actionBtn.className = 'known-prio-btn known-action-btn option-item'
+        + (isCurrent ? ' known-disconnect' : '')
+        + (colFocus === 1 ? ' focused' : '');
+      actionBtn.textContent = isCurrent ? 'Déconnecter' : 'Connecter';
+      actionBtn.addEventListener('click', () => {
+        if (isCurrent) doKnownDisconnect();
+        else doKnownConnect(net);
+      });
+      actions.appendChild(actionBtn);
+
+      // Bouton "Oublier" (col 2)
+      const forgetBtn = document.createElement('div');
+      forgetBtn.className = 'known-prio-btn option-item known-forget-btn'
+        + (colFocus === 2 ? ' focused' : '');
+      forgetBtn.textContent = '✕';
+      forgetBtn.addEventListener('click', () => doKnownForget(i));
+      actions.appendChild(forgetBtn);
+
+      // Boutons priorité ↑ ↓ (col 3, 4)
+      const upBtn = document.createElement('div');
+      upBtn.className = 'known-prio-btn option-item'
+        + (i === 0 ? ' disabled' : '')
+        + (colFocus === 3 ? ' focused' : '');
+      upBtn.textContent = '↑';
+      if (i > 0) upBtn.addEventListener('click', () => { moveKnownNet(i, -1); });
+      actions.appendChild(upBtn);
+
+      const downBtn = document.createElement('div');
+      downBtn.className = 'known-prio-btn option-item'
+        + (i === knownNetworks.length - 1 ? ' disabled' : '')
+        + (colFocus === 4 ? ' focused' : '');
+      downBtn.textContent = '↓';
+      if (i < knownNetworks.length - 1) downBtn.addEventListener('click', () => { moveKnownNet(i, 1); });
+      actions.appendChild(downBtn);
+    } else if (isReordering) {
+      const upBtn = document.createElement('div');
+      upBtn.className = 'known-prio-btn option-item' + (i === 0 ? ' disabled' : '');
+      upBtn.textContent = '↑';
+      actions.appendChild(upBtn);
+      const downBtn = document.createElement('div');
+      downBtn.className = 'known-prio-btn option-item' + (i === knownNetworks.length - 1 ? ' disabled' : '');
+      downBtn.textContent = '↓';
+      actions.appendChild(downBtn);
+    }
+
+    row.appendChild(actions);
+
+    // Numéro de priorité
+    const prioLabel = document.createElement('div');
+    prioLabel.style.cssText = 'font-family:var(--font-mono);font-size:clamp(8px,0.85vw,10px);letter-spacing:1px;color:rgba(0,164,220,0.35);min-width:22px;text-align:right';
+    prioLabel.textContent = '#' + (i + 1);
+    row.appendChild(prioLabel);
+
+    overlay.appendChild(row);
+  });
+
+  // Bouton fermer en bas
+  const closeRow = document.createElement('div');
+  const isCloseFocused = !knownReorderMode && knownOverlayFocusIdx === knownNetworks.length;
+  closeRow.className = 'known-overlay-row' + (isCloseFocused ? ' focused' : '');
+  closeRow.style.cssText = 'justify-content:center;margin-top:8px;opacity:0.7';
+  closeRow.textContent = '← Fermer';
+  closeRow.addEventListener('click', closeKnownOverlay);
+  overlay.appendChild(closeRow);
+}
+
+function knownOverlayKey(key) {
+  const total = knownNetworks.length; // rows 0..total-1, puis "Fermer" = total
+
+  if (knownReorderMode) {
+    // Mode réorganisation : ↑/↓ déplace, Entrée/Escape valide/annule
+    if (key === 'ArrowUp' && knownReorderIdx > 0) {
+      moveKnownNet(knownReorderIdx, -1);
+      knownReorderIdx--;
+      knownOverlayFocusIdx = knownReorderIdx;
+      renderKnownOverlay();
+    } else if (key === 'ArrowDown' && knownReorderIdx < knownNetworks.length - 1) {
+      moveKnownNet(knownReorderIdx, 1);
+      knownReorderIdx++;
+      knownOverlayFocusIdx = knownReorderIdx;
+      renderKnownOverlay();
+    } else if (key === 'Enter' || key === 'Escape' || key === 'Backspace' || key === 'Back') {
+      // Valider / annuler — la liste a déjà été modifiée en live, on sauvegarde si Entrée
+      if (key === 'Enter') saveKnownNetworksPriority();
+      knownReorderMode = false;
+      knownReorderIdx = -1;
+      renderKnownOverlay();
+    }
+    return;
+  }
+
+  const onNetRow = knownOverlayFocusIdx < total;
+
+  if (key === 'ArrowUp') {
+    knownOverlayFocusIdx = Math.max(0, knownOverlayFocusIdx - 1);
+    knownOverlayColIdx = 0;
+    renderKnownOverlay();
+  } else if (key === 'ArrowDown') {
+    knownOverlayFocusIdx = Math.min(total, knownOverlayFocusIdx + 1);
+    knownOverlayColIdx = 0;
+    renderKnownOverlay();
+  } else if (key === 'ArrowRight' && onNetRow) {
+    // Navigation horizontale vers les boutons d'action (cols 1..4)
+    const net = knownNetworks[knownOverlayFocusIdx];
+    const isCurrent = net && net.ssid === wifiCurrentSSID;
+    const isAvail = net && new Set(wifiNetworks.map(n => n.ssid)).has(net.ssid);
+    const maxCol = (isCurrent || isAvail) ? 4 : 4; // 1=action, 2=oublier, 3=↑, 4=↓
+    knownOverlayColIdx = Math.min(maxCol, knownOverlayColIdx + 1);
+    renderKnownOverlay();
+  } else if (key === 'ArrowLeft') {
+    if (knownOverlayColIdx > 0) {
+      // Revenir vers la gauche dans les boutons d'action
+      knownOverlayColIdx--;
+      renderKnownOverlay();
+    }
+    // Si colIdx === 0, on ignore ArrowLeft (ne pas fermer le menu par erreur)
+  } else if (key === 'Enter') {
+    if (knownOverlayFocusIdx === total) {
+      closeKnownOverlay();
+    } else if (knownOverlayColIdx === 0) {
+      // Entrée sur la ligne → ouvrir les boutons d'action (aller sur col 1)
+      knownOverlayColIdx = 1;
+      renderKnownOverlay();
+    } else {
+      // Entrée sur un bouton d'action spécifique
+      const net = knownNetworks[knownOverlayFocusIdx];
+      if (!net) return;
+      const i = knownOverlayFocusIdx;
+      const isCurrent = net.ssid === wifiCurrentSSID;
+      const isAvail = new Set(wifiNetworks.map(n => n.ssid)).has(net.ssid);
+      if (knownOverlayColIdx === 1) {
+        // Connecter / Déconnecter
+        if (isCurrent) doKnownDisconnect();
+        else doKnownConnect(net);
+      } else if (knownOverlayColIdx === 2) {
+        // Oublier (✕)
+        doKnownForget(i);
+      } else if (knownOverlayColIdx === 3 && i > 0) {
+        // Priorité ↑
+        moveKnownNet(i, -1);
+        knownOverlayFocusIdx--;
+        saveKnownNetworksPriority();
+        renderKnownOverlay();
+      } else if (knownOverlayColIdx === 4 && i < knownNetworks.length - 1) {
+        // Priorité ↓
+        moveKnownNet(i, 1);
+        knownOverlayFocusIdx++;
+        saveKnownNetworksPriority();
+        renderKnownOverlay();
+      }
+    }
+  } else if (key === 'Escape' || key === 'Backspace' || key === 'Back') {
+    if (knownOverlayColIdx > 0) {
+      knownOverlayColIdx = 0;
+      renderKnownOverlay();
+    } else {
+      closeKnownOverlay();
+    }
+  }
+}
+
+function moveKnownNet(idx, dir) {
+  const target = idx + dir;
+  if (target < 0 || target >= knownNetworks.length) return;
+  const tmp = knownNetworks[idx];
+  knownNetworks[idx] = knownNetworks[target];
+  knownNetworks[target] = tmp;
+}
+
+function doKnownConnect(net) {
+  if (!window.xeLauncher) return;
+  // Ferme l'overlay, lance la connexion
+  closeKnownOverlay();
+  if (net.security && net.security.trim() && net.security !== 'Open') {
+    // Réseau sécurisé connu → wpa_supplicant a déjà le mot de passe
+    doWifiConnect(net.ssid, null);
+  } else {
+    doWifiConnect(net.ssid, '');
+  }
+}
+
+function doKnownDisconnect() {
+  if (!window.xeLauncher) return;
+  window.xeLauncher.wifiDisconnect().then(ok => {
+    if (ok) {
+      wifiCurrentSSID = '';
+      toast.show('Déconnecté', false);
+      renderWifiList();
+    } else {
+      toast.show('Erreur déconnexion', true);
+    }
+    renderKnownOverlay();
+  });
+}
+
+function doKnownForget(idx) {
+  const net = knownNetworks[idx];
+  if (!net || !window.xeLauncher) return;
+  window.xeLauncher.wifiForget(net.ssid).then(ok => {
+    if (ok) {
+      knownNetworks.splice(idx, 1);
+      if (knownOverlayFocusIdx >= knownNetworks.length) knownOverlayFocusIdx = Math.max(0, knownNetworks.length - 1);
+      updateKnownNetCount();
+      toast.show('Réseau oublié', false);
+    } else {
+      toast.show('Erreur', true);
+    }
+    renderKnownOverlay();
+  });
+}
+
 function renderWifiList() {
   const c = document.getElementById('wifiList');
   c.innerHTML = '';
-  const visible = wifiNetworks.filter(n => !hiddenNetworks.includes(n.ssid));
+  const knownSSIDs = new Set(knownNetworks.map(n => n.ssid));
+  const visible = wifiNetworks.filter(n => !hiddenNetworks.includes(n.ssid) && !knownSSIDs.has(n.ssid));
+
   if (!visible.length) {
     c.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:clamp(9px,1vw,11px);letter-spacing:2px;text-transform:uppercase;padding:12px 16px">Aucun réseau — lancez un scan</div>';
     updateContentFocus();
     return;
   }
+
+  const lockSVG = `<svg width="12" height="14" viewBox="0 0 12 14" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
+    <rect x="1" y="6" width="10" height="8" rx="1" fill="none" stroke="rgba(0,164,220,0.6)" stroke-width="1.2"/>
+    <path d="M3 6V4a3 3 0 0 1 6 0v2" fill="none" stroke="rgba(0,164,220,0.6)" stroke-width="1.2"/>
+  </svg>`;
+
+  const lockOpenSVG = `<svg width="12" height="14" viewBox="0 0 12 14" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;opacity:0.35">
+    <rect x="1" y="6" width="10" height="8" rx="1" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+    <path d="M3 6V4a3 3 0 0 1 6 0" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+  </svg>`;
+
   visible.forEach((n) => {
     const el = document.createElement('div');
     el.className = 'wifi-network' + (n.ssid === wifiCurrentSSID ? ' current' : '');
+    el.dataset.ssid = n.ssid;
     const sig = parseInt(n.signal || 0);
     const lit = sig > 75 ? 4 : sig > 50 ? 3 : sig > 25 ? 2 : 1;
     const bars = [1,2,3,4].map(b => `<span class="bar${b<=lit?' lit':''}"></span>`).join('');
+    const isSecure = n.security && n.security.trim() && n.security !== 'Open';
+
     el.innerHTML =
       '<span class="wifi-ssid">' + n.ssid + '</span>' +
       '<span class="wifi-meta">' +
         '<span class="wifi-signal">' + bars + '</span>' +
-        (n.ssid === wifiCurrentSSID ? '<span style="color:#a5d6a7;font-size:11px">✓</span>' : '') +
-        '<span class="wifi-security">' + (n.security || '') + '</span>' +
+        (n.ssid === wifiCurrentSSID ? '<span style="color:#a5d6a7;font-size:11px;margin-right:4px">✓</span>' : '') +
+        (isSecure ? lockSVG : lockOpenSVG) +
+        '<span class="wifi-hide-hint">▶ Masquer</span>' +
       '</span>';
-    // Long press / right click → masquer
-    let pressTimer;
-    el.addEventListener('mousedown', () => { pressTimer = setTimeout(() => promptHideNetwork(n.ssid), 700); });
-    el.addEventListener('mouseup', () => clearTimeout(pressTimer));
-    el.addEventListener('contextmenu', (e) => { e.preventDefault(); promptHideNetwork(n.ssid); });
+
     el.addEventListener('click', () => connectWifi(n));
     c.appendChild(el);
   });
@@ -513,15 +1026,37 @@ function renderHiddenList() {
     c.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:clamp(9px,1vw,11px);letter-spacing:2px;text-transform:uppercase;padding:10px 16px">Aucun réseau masqué</div>';
     return;
   }
+
+  const lockSVG = `<svg width="12" height="14" viewBox="0 0 12 14" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;opacity:0.5">
+    <rect x="1" y="6" width="10" height="8" rx="1" fill="none" stroke="rgba(0,164,220,0.6)" stroke-width="1.2"/>
+    <path d="M3 6V4a3 3 0 0 1 6 0v2" fill="none" stroke="rgba(0,164,220,0.6)" stroke-width="1.2"/>
+  </svg>`;
+  const lockOpenSVG = `<svg width="12" height="14" viewBox="0 0 12 14" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;opacity:0.25">
+    <rect x="1" y="6" width="10" height="8" rx="1" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+    <path d="M3 6V4a3 3 0 0 1 6 0" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+  </svg>`;
+
   hiddenNetworks.forEach((ssid, i) => {
+    const netData = wifiNetworks.find(n => n.ssid === ssid);
     const el = document.createElement('div');
     el.className = 'wifi-network';
+    el.dataset.ssid = ssid;
     el.style.opacity = '0.6';
+
+    let metaHTML = '';
+    if (netData) {
+      const sig = parseInt(netData.signal || 0);
+      const lit = sig > 75 ? 4 : sig > 50 ? 3 : sig > 25 ? 2 : 1;
+      const bars = [1,2,3,4].map(b => `<span class="bar${b<=lit?' lit':''}"></span>`).join('');
+      const isSecure = netData.security && netData.security.trim() && netData.security !== 'Open';
+      metaHTML = '<span class="wifi-signal" style="opacity:0.6">' + bars + '</span>' + (isSecure ? lockSVG : lockOpenSVG);
+    }
+
     el.innerHTML =
       '<span class="wifi-ssid" style="color:var(--text-dim)">' + ssid + '</span>' +
-      '<button class="remove-btn" style="font-family:var(--font-mono);font-size:11px;letter-spacing:1px;color:rgba(192,57,43,0.7);background:none;border:1px solid transparent;cursor:pointer;padding:3px 8px">Afficher</button>';
-    el.querySelector('.remove-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
+      '<span class="wifi-meta">' + metaHTML + '<span class="wifi-hide-hint">▶ Démasquer</span></span>';
+
+    el.addEventListener('click', () => {
       hiddenNetworks.splice(i, 1);
       saveHiddenNetworks();
       renderHiddenList();
@@ -536,11 +1071,18 @@ function doWifiScan() {
     toast.show('API non disponible', true);
     return;
   }
-  document.getElementById('wifiScanStatus').textContent = '…';
-  window.xeLauncher.wifiCurrentSSID().then(ssid => { wifiCurrentSSID = ssid || ''; });
-  window.xeLauncher.wifiScan().then(nets => {
+  const scanEl = document.getElementById('wifiScanStatus');
+  if (scanEl) scanEl.textContent = '…';
+  // Récupérer le SSID courant ET les réseaux en parallèle, puis rendre
+  Promise.all([
+    window.xeLauncher.wifiCurrentSSID(),
+    window.xeLauncher.wifiScan()
+  ]).then(([ssid, nets]) => {
+    wifiCurrentSSID = ssid || '';
     wifiNetworks = nets || [];
-    document.getElementById('wifiScanStatus').textContent = wifiNetworks.length + ' réseau(x)';
+    const visible = wifiNetworks.filter(n => !hiddenNetworks.includes(n.ssid));
+    const total = visible.length;
+    if (scanEl) scanEl.textContent = total === 0 ? '0 réseau' : total === 1 ? '1 réseau' : total + ' réseaux';
     renderWifiList();
   });
 }
@@ -566,6 +1108,8 @@ function doWifiConnect(ssid, pwd) {
   });
 }
 
+let ifacePollingTimer = null;
+
 function loadInterfaces() {
   if (!window.xeLauncher) return;
   window.xeLauncher.getInterfaces().then(ifaces => {
@@ -574,93 +1118,316 @@ function loadInterfaces() {
   });
 }
 
+function startIfacePolling() {
+  stopIfacePolling();
+  ifacePollingTimer = setInterval(() => {
+    if (activeTab !== 'network' || screen !== 'main') return;
+    if (!window.xeLauncher) return;
+    window.xeLauncher.getInterfaces().then(ifaces => {
+      if (!ifaces) return;
+      // Mettre à jour seulement les champs live (ip, state) sans écraser les éditions en cours
+      ifaces.forEach(fresh => {
+        const existing = ifaceList.find(i => i.name === fresh.name);
+        if (existing) {
+          existing.ip    = fresh.ip;
+          existing.state = fresh.state;
+          existing.mask  = fresh.mask;
+          existing.gateway = fresh.gateway;
+          existing.dns   = fresh.dns;
+        }
+      });
+      ifaceList = ifaces.map(fresh => {
+        return fresh;
+      });
+      renderIfaceList();
+    });
+    window.xeLauncher.wifiCurrentSSID().then(ssid => {
+      if (ssid !== undefined) wifiCurrentSSID = ssid || '';
+    });
+  }, 5000);
+}
+
+function stopIfacePolling() {
+  if (ifacePollingTimer) { clearInterval(ifacePollingTimer); ifacePollingTimer = null; }
+}
+
 function renderIfaceList() {
   const c = document.getElementById('ifaceList');
   if (!c) return;
   c.innerHTML = '';
   ifaceList.forEach((iface, idx) => {
-    const wrapper = document.createElement('div');
-
     const el = document.createElement('div');
     el.className = 'iface-item';
     el.innerHTML =
       '<div class="iface-dot ' + (iface.state || 'down') + '"></div>' +
       '<span class="iface-name">' + iface.name + '</span>' +
       '<span class="iface-ip">' + (iface.ip || '—') + '</span>';
-    el.addEventListener('click', () => toggleIfacePanel(idx));
-    wrapper.appendChild(el);
-
-    // Expandable config panel
-    const panel = document.createElement('div');
-    panel.className = 'iface-config-panel';
-    panel.id = 'iface-panel-' + idx;
-    panel.style.display = ifaceExpandedIdx === idx ? 'grid' : 'none';
-
-    const cfg = ifaceConfigState[iface.name] || { ip: iface.ip || '', mask: iface.mask || '255.255.255.0', gw: iface.gateway || '', dns: iface.dns || '' };
-
-    const fields = [
-      { key:'ip',   label:'Adresse IP',  val: cfg.ip   },
-      { key:'mask', label:'Masque',      val: cfg.mask },
-      { key:'gw',   label:'Passerelle',  val: cfg.gw   },
-      { key:'dns',  label:'DNS',         val: cfg.dns  },
-    ];
-    fields.forEach(f => {
-      const fd = document.createElement('div');
-      fd.className = 'iface-field';
-      fd.innerHTML = '<span class="iface-field-label">' + f.label + '</span>' +
-        '<div class="iface-field-value" data-iface="' + iface.name + '" data-field="' + f.key + '">' + (f.val || '—') + '</div>';
-      fd.querySelector('.iface-field-value').addEventListener('click', () => {
-        openKb(f.label + ' — ' + iface.name, f.val || '', (val, ctx) => {
-          if (!ifaceConfigState[ctx.iface]) ifaceConfigState[ctx.iface] = {};
-          ifaceConfigState[ctx.iface][ctx.field] = val;
-          renderIfaceList();
-        }, { iface: iface.name, field: f.key });
-      });
-      panel.appendChild(fd);
-    });
-
-    const applyBtn = document.createElement('button');
-    applyBtn.className = 'iface-apply-btn';
-    applyBtn.textContent = 'Appliquer';
-    applyBtn.addEventListener('click', () => applyIfaceConfig(iface.name));
-    panel.appendChild(applyBtn);
-
-    wrapper.appendChild(panel);
-    c.appendChild(wrapper);
+    el.addEventListener('click', () => openIfaceOverlay(idx));
+    c.appendChild(el);
   });
   updateContentFocus();
 }
 
-function toggleIfacePanel(idx) {
-  ifaceExpandedIdx = ifaceExpandedIdx === idx ? -1 : idx;
-  renderIfaceList();
+/* ── Interface config overlay ── */
+let ifaceOverlayActive = false;
+let ifaceOverlayIdx = -1;      // index dans ifaceList
+let ifaceOverlayRowIdx = 0;    // index de la ligne focusée dans l'overlay
+const IFACE_FIELDS = [
+  { key: 'mode',   label: 'Mode',        type: 'toggle' },
+  { key: 'ip',     label: 'Adresse IP',  type: 'text'   },
+  { key: 'mask',   label: 'Masque',      type: 'text'   },
+  { key: 'gw',     label: 'Passerelle',  type: 'text'   },
+  { key: 'dns',    label: 'DNS',         type: 'text'   },
+  { key: 'apply',  label: 'Appliquer',   type: 'action' },
+  { key: 'cancel', label: 'Annuler',     type: 'action' },
+];
+
+function openIfaceOverlay(idx) {
+  const iface = ifaceList[idx];
+  if (!iface) return;
+  stopIfacePolling();
+  ifaceOverlayActive = true;
+  ifaceOverlayIdx = idx;
+  ifaceOverlayRowIdx = 0;
+  // Toujours reconstruire depuis les données fraîches, sauf si une édition est en cours
+  if (!ifaceConfigState[iface.name]) {
+    const dnsVal = Array.isArray(iface.dns) ? iface.dns[0] || '' : (iface.dns || '');
+    ifaceConfigState[iface.name] = { ip: iface.ip || '', mask: iface.mask || '255.255.255.0', gw: iface.gateway || '', dns: dnsVal, dhcp: false };
+  } else {
+    // Mettre à jour gw et dns depuis les données fraîches si elles sont vides dans l'état existant
+    const existing = ifaceConfigState[iface.name];
+    if (!existing.gw && iface.gateway) existing.gw = iface.gateway;
+    if (!existing.dns && iface.dns) existing.dns = Array.isArray(iface.dns) ? iface.dns[0] || '' : (iface.dns || '');
+  }
+  screen = 'iface';
+  renderIfaceOverlay();
+  document.getElementById('ifaceOverlay').classList.add('visible');
+}
+
+function closeIfaceOverlay() {
+  ifaceOverlayActive = false;
+  ifaceOverlayIdx = -1;
+  screen = 'main';
+  document.getElementById('ifaceOverlay').classList.remove('visible');
+  loadInterfaces();
+  if (activeTab === 'network') startIfacePolling();
+  updateContentFocus();
+}
+
+function getIfaceOverlayRows() {
+  const iface = ifaceList[ifaceOverlayIdx];
+  if (!iface) return IFACE_FIELDS;
+  const cfg = ifaceConfigState[iface.name];
+  // En mode DHCP, masquer seulement ip et mask (pas gw et dns — on les affiche en lecture seule)
+  return IFACE_FIELDS.filter(f => {
+    if (cfg.dhcp && ['ip','mask'].includes(f.key)) return false;
+    return true;
+  });
+}
+
+function renderIfaceOverlay() {
+  const iface = ifaceList[ifaceOverlayIdx];
+  if (!iface) return;
+  const cfg = ifaceConfigState[iface.name];
+  const rows = getIfaceOverlayRows();
+
+  const overlay = document.getElementById('ifaceOverlay');
+  overlay.innerHTML = '';
+
+  // Titre
+  const title = document.createElement('div');
+  title.className = 'iface-overlay-title';
+  title.innerHTML =
+    '<div class="iface-dot ' + (iface.state || 'down') + '" style="margin-right:10px"></div>' +
+    iface.name +
+    '<span style="color:rgba(0,164,220,0.5);font-size:clamp(9px,1vw,11px);margin-left:16px">' + (iface.ip || '—') + '</span>';
+  overlay.appendChild(title);
+
+  const hint = document.createElement('div');
+  hint.className = 'iface-overlay-hint';
+  hint.textContent = cfg.dhcp ? '◀ ▶  Basculer Statique / DHCP' : '◀ ▶  Basculer  •  Entrée  Éditer  •  Retour  Fermer';
+  overlay.appendChild(hint);
+
+  rows.forEach((field, i) => {
+    const row = document.createElement('div');
+    row.className = 'iface-overlay-row' + (i === ifaceOverlayRowIdx ? ' focused' : '');
+    row.dataset.field = field.key;
+
+    const label = document.createElement('span');
+    label.className = 'iface-overlay-label';
+    label.textContent = field.label;
+    row.appendChild(label);
+
+    const val = document.createElement('span');
+    val.className = 'iface-overlay-value';
+
+    if (field.type === 'toggle') {
+      val.innerHTML =
+        '<span class="iface-mode-chip' + (!cfg.dhcp ? ' active' : '') + '">Statique</span>' +
+        '<span style="color:var(--text-hint);margin:0 6px">◀▶</span>' +
+        '<span class="iface-mode-chip' + (cfg.dhcp ? ' active' : '') + '">DHCP</span>';
+    } else if (field.type === 'action' && field.key === 'apply') {
+      row.classList.add('iface-action-apply');
+      val.textContent = '✓ Appliquer';
+      val.style.color = 'rgba(0,164,220,0.7)';
+      // Ne pas afficher ce row — il sera fusionné avec cancel dans le rendu
+      row.style.display = 'none';
+    } else if (field.type === 'action' && field.key === 'cancel') {
+      // Remplacer les deux derniers rows par un row splitté Appliquer | Annuler
+      row.style.display = 'none';
+      const splitRow = document.createElement('div');
+      splitRow.className = 'iface-overlay-split-row';
+      const applyIdx = rows.findIndex(f => f.key === 'apply');
+      const cancelIdx = rows.findIndex(f => f.key === 'cancel');
+      const applyFocused = ifaceOverlayRowIdx === applyIdx;
+      const cancelFocused = ifaceOverlayRowIdx === cancelIdx;
+      splitRow.innerHTML =
+        '<div class="iface-split-btn' + (applyFocused ? ' focused' : '') + '" data-action="apply">✓ Appliquer</div>' +
+        '<div class="iface-split-btn iface-split-cancel' + (cancelFocused ? ' focused' : '') + '" data-action="cancel">✕ Annuler</div>';
+      overlay.appendChild(splitRow);
+      return; // on a déjà appendé, skip le row standard
+    } else {
+      // En mode DHCP, gw et dns sont en lecture seule (valeurs assignées par le réseau)
+      const isDhcpReadonly = cfg.dhcp && ['gw','dns'].includes(field.key);
+      if (isDhcpReadonly) {
+        // Récupérer depuis les données fraîches de l'interface
+        const rawIface = ifaceList[ifaceOverlayIdx];
+        let displayVal = cfg[field.key];
+        if (!displayVal && rawIface) {
+          if (field.key === 'gw') displayVal = rawIface.gateway || '';
+          if (field.key === 'dns') displayVal = Array.isArray(rawIface.dns) ? rawIface.dns[0] || '' : (rawIface.dns || '');
+        }
+        val.textContent = displayVal || '—';
+        val.style.opacity = '0.45';
+        row.style.cursor = 'default';
+        row.style.pointerEvents = 'none';
+      } else {
+        val.textContent = cfg[field.key] || '—';
+      }
+    }
+
+    row.appendChild(val);
+    overlay.appendChild(row);
+  });
+}
+
+function ifaceOverlayKey(key) {
+  const iface = ifaceList[ifaceOverlayIdx];
+  if (!iface) return;
+  const cfg = ifaceConfigState[iface.name];
+  const rows = getIfaceOverlayRows();
+  const currentField = rows[ifaceOverlayRowIdx];
+
+  const applyIdx = rows.findIndex(f => f.key === 'apply');
+  const cancelIdx = rows.findIndex(f => f.key === 'cancel');
+  const modeIdx = rows.findIndex(f => f.key === 'mode');
+  const dnsIdx = rows.findIndex(f => f.key === 'dns');
+
+  if (key === 'ArrowUp') {
+    if (ifaceOverlayRowIdx === modeIdx) {
+      // Haut sur Mode → aller sur Appliquer (wrap)
+      ifaceOverlayRowIdx = applyIdx;
+      renderIfaceOverlay();
+      return;
+    }
+    if (ifaceOverlayRowIdx === cancelIdx) {
+      // Haut sur Annuler → aller sur DNS
+      const target = dnsIdx !== -1 ? dnsIdx : (applyIdx - 1 >= 0 ? applyIdx - 1 : 0);
+      ifaceOverlayRowIdx = target;
+      renderIfaceOverlay();
+      return;
+    }
+    // Sauter apply (rendu dans split row avec cancel)
+    let next = ifaceOverlayRowIdx - 1;
+    if (next === applyIdx) next--;
+    ifaceOverlayRowIdx = Math.max(0, next);
+    renderIfaceOverlay();
+  } else if (key === 'ArrowDown') {
+    if (ifaceOverlayRowIdx === applyIdx) {
+      // Bas sur Appliquer → aller sur Mode (wrap)
+      ifaceOverlayRowIdx = modeIdx !== -1 ? modeIdx : 0;
+      renderIfaceOverlay();
+      return;
+    }
+    if (ifaceOverlayRowIdx === cancelIdx) {
+      // Bas sur Annuler → aller sur Mode (wrap)
+      ifaceOverlayRowIdx = modeIdx !== -1 ? modeIdx : 0;
+      renderIfaceOverlay();
+      return;
+    }
+    // Sauter apply (rendu dans split row avec cancel)
+    let next = ifaceOverlayRowIdx + 1;
+    if (next === applyIdx) next++;
+    if (next >= rows.length) return;
+    ifaceOverlayRowIdx = next;
+    renderIfaceOverlay();
+  } else if (key === 'ArrowRight' && currentField?.key === 'apply') {
+    // Passer de Appliquer → Annuler
+    const cancelIdx = rows.findIndex(f => f.key === 'cancel');
+    if (cancelIdx !== -1) { ifaceOverlayRowIdx = cancelIdx; renderIfaceOverlay(); }
+  } else if (key === 'ArrowLeft' && currentField?.key === 'cancel') {
+    // Revenir de Annuler → Appliquer
+    const applyIdx = rows.findIndex(f => f.key === 'apply');
+    if (applyIdx !== -1) { ifaceOverlayRowIdx = applyIdx; renderIfaceOverlay(); }
+  } else if ((key === 'ArrowLeft' || key === 'ArrowRight') && currentField?.type === 'toggle') {
+    cfg.dhcp = !cfg.dhcp;
+    ifaceOverlayRowIdx = 0;
+    renderIfaceOverlay();
+  } else if (key === 'Enter') {
+    if (currentField?.key === 'apply') {
+      applyIfaceConfig(iface.name);
+    } else if (currentField?.key === 'cancel') {
+      // Réinitialiser la config en cours et fermer
+      delete ifaceConfigState[iface.name];
+      closeIfaceOverlay();
+    } else if (currentField?.type === 'text') {
+      const labels = { ip: 'Adresse IP', mask: 'Masque', gw: 'Passerelle', dns: 'DNS' };
+      openKbNum(labels[currentField.key] + ' — ' + iface.name, cfg[currentField.key] || '', (val, ctx) => {
+        if (!ifaceConfigState[ctx.iface]) ifaceConfigState[ctx.iface] = {};
+        ifaceConfigState[ctx.iface][ctx.field] = val;
+        // Ne pas re-render ici, closeKbNum le fera déjà
+      }, { iface: iface.name, field: currentField.key });
+    }
+  } else if (key === 'Escape' || key === 'Backspace' || key === 'Back') {
+    closeIfaceOverlay();
+  }
 }
 
 function applyIfaceConfig(ifaceName) {
   const cfg = ifaceConfigState[ifaceName];
-  if (!cfg || !cfg.ip) { toast.show('IP manquante', true); return; }
+  if (!cfg) return;
+  if (!cfg.dhcp && !cfg.ip) { toast.show('IP manquante', true); return; }
   if (!window.xeLauncher) { toast.show('API non disponible', true); return; }
+
+  // Fermer l'overlay d'abord pour que le loading soit visible derrière
+  closeIfaceOverlay();
+
   document.getElementById('loadingText').textContent = 'Configuration ' + ifaceName + '…';
   document.getElementById('loadingOverlay').classList.add('visible');
-  window.xeLauncher.setStaticIp({ iface: ifaceName, ip: cfg.ip, mask: cfg.mask || '255.255.255.0', gateway: cfg.gw || '', dns: cfg.dns || '' })
+
+  window.xeLauncher.setStaticIp({ iface: ifaceName, dhcp: cfg.dhcp || false, ip: cfg.ip, mask: cfg.mask || '255.255.255.0', gateway: cfg.gw || '', dns: cfg.dns || '' })
     .then(ok => {
       document.getElementById('loadingOverlay').classList.remove('visible');
-      toast.show(ok ? 'Config réseau appliquée' : 'Erreur config réseau', !ok);
+      toast.show(ok ? '✓ Configuration appliquée — ' + ifaceName : '✗ Erreur lors de la configuration', !ok, ok ? 3500 : 5000);
       if (ok) loadInterfaces();
     });
 }
 
 /* ── Dropdown helpers ── */
 function openDropdown(opts, currentIdx, selectFn, closeFn) {
-  activeDropdown = { opts, selIdx: 0, select: selectFn, close: closeFn };
+  activeDropdown = { opts, selIdx: 0, select: selectFn, close: closeFn, originRowIdx: rowFocusMap[activeTab] };
   // updateDropdownFocus appelé après le rendu des options dans le DOM
   requestAnimationFrame(() => updateDropdownFocus());
 }
 
 function closeDropdown() {
   if (!activeDropdown) return;
+  const originIdx = activeDropdown.originRowIdx;
   activeDropdown.close();
   activeDropdown = null;
+  // Recaler le focus sur la row qui avait ouvert le dropdown
+  if (originIdx !== undefined) rowFocusMap[activeTab] = originIdx;
+  updateContentFocus();
 }
 
 function updateDropdownFocus() {
@@ -737,6 +1504,20 @@ function renderVolumeOptions() {
   });
 }
 
+/* ── Bluetooth hidden devices ── */
+function loadHiddenBtDevices() {
+  try { hiddenBtDevices = JSON.parse(localStorage.getItem('xelauncher_hidden_bt') || '[]'); } catch(e) { hiddenBtDevices = []; }
+  updateHiddenBtCount();
+}
+function saveHiddenBtDevices() {
+  localStorage.setItem('xelauncher_hidden_bt', JSON.stringify(hiddenBtDevices));
+  updateHiddenBtCount();
+}
+function updateHiddenBtCount() {
+  const el = document.getElementById('hiddenBtCount');
+  if (el) el.textContent = hiddenBtDevices.length;
+}
+
 /* ── Bluetooth tab ── */
 function loadBluetooth() {
   if (!window.xeLauncher) return;
@@ -754,31 +1535,90 @@ function loadBluetooth() {
 function renderBtPaired() {
   const c = document.getElementById('btPairedList');
   c.innerHTML = '';
-  if (!btPaired.length) {
+  const visible = btPaired.filter(d => !hiddenBtDevices.includes(d.mac));
+  if (!visible.length) {
     c.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:clamp(9px,1vw,11px);letter-spacing:2px;text-transform:uppercase;padding:10px 16px">Aucun appareil appairé</div>';
     updateContentFocus(); return;
   }
-  btPaired.forEach(dev => {
+  visible.forEach(dev => {
     const el = document.createElement('div');
     el.className = 'bt-item';
+    el.dataset.mac = dev.mac;
+    el.dataset.bttype = 'paired';
     const icon = dev.type === 'audio' ? '🎧' : dev.type === 'keyboard' ? '⌨️' : '🎮';
     el.innerHTML =
       '<span class="bt-icon">' + icon + '</span>' +
       '<span class="bt-name">' + (dev.name || dev.mac) + '</span>' +
       (dev.connected ? '<span class="bt-connected">● connecté</span>' : '') +
-      '<span class="bt-mac">' + dev.mac + '</span>';
+      '<span class="bt-mac">' + dev.mac + '</span>' +
+      '<span class="bt-hide-hint">→ masquer</span>';
+    el.addEventListener('click', () => openBtActionOverlay(dev, true));
+    c.appendChild(el);
+  });
+  renderBtHiddenSection();
+  updateContentFocus();
+}
+
+function renderBtScan() {
+  const c = document.getElementById('btScanList');
+  c.innerHTML = '';
+  const visible = btScanResults.filter(d => !hiddenBtDevices.includes(d.mac));
+  if (!btScanResults.length) {
+    updateContentFocus(); return;
+  }
+  if (!visible.length) {
+    c.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:clamp(9px,1vw,11px);letter-spacing:2px;text-transform:uppercase;padding:10px 16px">Aucun appareil trouvé</div>';
+    updateContentFocus(); return;
+  }
+  // Label "Appareils trouvés" inline, uniquement si des résultats visibles
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'padding:12px 16px 4px;font-family:var(--font-mono);font-size:clamp(8px,0.9vw,10px);letter-spacing:3px;color:rgba(0,164,220,0.5);text-transform:uppercase;';
+  hdr.textContent = 'Appareils trouvés';
+  c.appendChild(hdr);
+  visible.forEach(dev => {
+    const el = document.createElement('div');
+    el.className = 'bt-item';
+    el.dataset.mac = dev.mac;
+    el.dataset.bttype = 'scan';
+    el.innerHTML =
+      '<span class="bt-icon">📡</span>' +
+      '<span class="bt-name">' + (dev.name || dev.mac) + '</span>' +
+      '<span class="bt-mac">' + dev.mac + '</span>' +
+      '<span class="bt-hide-hint">→ masquer</span>';
+    el.addEventListener('click', () => openBtActionOverlay(dev, false));
+    c.appendChild(el);
+  });
+  updateContentFocus();
+}
+
+function renderBtHiddenSection() {
+  const cnt = document.getElementById('hiddenBtCount');
+  if (cnt) cnt.textContent = hiddenBtDevices.length;
+  if (btHiddenListExpanded) renderHiddenBtList();
+}
+
+function renderHiddenBtList() {
+  const c = document.getElementById('hiddenBtList');
+  if (!c) return;
+  c.innerHTML = '';
+  const allKnown = [...btPaired, ...btScanResults];
+  hiddenBtDevices.forEach(mac => {
+    const dev = allKnown.find(d => d.mac === mac);
+    const name = dev ? (dev.name || dev.mac) : mac;
+    const el = document.createElement('div');
+    el.className = 'wifi-network';
+    el.dataset.mac = mac;
+    el.dataset.btHidden = '1';
+    el.innerHTML =
+      '<span class="wifi-ssid" style="opacity:0.5">' + name + '</span>' +
+      '<span class="wifi-hidden-label">masqué  → démasquer</span>';
     el.addEventListener('click', () => {
-      if (dev.connected) {
-        window.xeLauncher && window.xeLauncher.btDisconnect(dev.mac).then(() => loadBluetooth());
-      } else {
-        window.xeLauncher && window.xeLauncher.btConnect(dev.mac).then(() => loadBluetooth());
-      }
-    });
-    el.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      if (confirm('Retirer "' + (dev.name || dev.mac) + '" des appareils appairés ?')) {
-        window.xeLauncher && window.xeLauncher.btRemove(dev.mac).then(() => loadBluetooth());
-      }
+      hiddenBtDevices.splice(hiddenBtDevices.indexOf(mac), 1);
+      saveHiddenBtDevices();
+      renderBtPaired();
+      renderBtScan();
+      if (btHiddenListExpanded) renderHiddenBtList();
+      updateContentFocus();
     });
     c.appendChild(el);
   });
@@ -789,9 +1629,20 @@ function doBtScan() {
   if (!window.xeLauncher) { toast.show('API non disponible', true); return; }
   if (!btPowered) { toast.show('Activez le Bluetooth d\'abord', true); return; }
   document.getElementById('btScanStatus').textContent = '…';
-  document.getElementById('loadingText').textContent = 'Scan Bluetooth…';
+  document.getElementById('loadingText').textContent = 'Scan Bluetooth — Appuyez sur SYNC sur la Wiimote…';
   document.getElementById('loadingOverlay').classList.add('visible');
+
+  // Countdown 12s (durée du scan côté main.js)
+  let remaining = 12;
+  const countdown = setInterval(() => {
+    remaining--;
+    const el = document.getElementById('loadingText');
+    if (el) el.textContent = 'Scan Bluetooth (' + remaining + 's) — Appuyez sur SYNC…';
+    if (remaining <= 0) clearInterval(countdown);
+  }, 1000);
+
   window.xeLauncher.btScan().then(devs => {
+    clearInterval(countdown);
     document.getElementById('loadingOverlay').classList.remove('visible');
     btScanResults = (devs || []).filter(d => !btPaired.find(p => p.mac === d.mac));
     document.getElementById('btScanStatus').textContent = btScanResults.length + ' trouvé(s)';
@@ -799,37 +1650,113 @@ function doBtScan() {
   });
 }
 
-function renderBtScan() {
-  const c = document.getElementById('btScanList');
-  c.innerHTML = '';
-  if (!btScanResults.length) {
-    c.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:clamp(9px,1vw,11px);letter-spacing:2px;text-transform:uppercase;padding:10px 16px">Aucun appareil trouvé</div>';
-    updateContentFocus(); return;
+/* ── BT action overlay ── */
+function openBtActionOverlay(dev, isPaired) {
+  btActionDev = { ...dev, paired: isPaired };
+  btActionItems = [];
+  if (isPaired) {
+    if (dev.connected) {
+      btActionItems.push({ label: '⏏  Déconnecter', action: 'disconnect' });
+    } else {
+      btActionItems.push({ label: '⚡  Connecter', action: 'connect' });
+    }
+    btActionItems.push({ label: '✏  Renommer', action: 'rename' });
+    btActionItems.push({ label: '✕  Retirer l\'appairage', action: 'remove', danger: true });
+  } else {
+    btActionItems.push({ label: '⚡  Appairer', action: 'pair' });
   }
-  btScanResults.forEach(dev => {
-    const el = document.createElement('div');
-    el.className = 'bt-item';
-    el.innerHTML =
-      '<span class="bt-icon">📡</span>' +
-      '<span class="bt-name">' + (dev.name || dev.mac) + '</span>' +
-      '<span class="bt-mac">' + dev.mac + '</span>';
-    el.addEventListener('click', () => {
-      if (window.xeLauncher) {
-        document.getElementById('loadingText').textContent = 'Appairage de ' + (dev.name || dev.mac) + '…';
-        document.getElementById('loadingOverlay').classList.add('visible');
-        window.xeLauncher.btPair(dev.mac).then(ok => {
-          document.getElementById('loadingOverlay').classList.remove('visible');
-          toast.show(ok ? 'Appairé : ' + (dev.name || dev.mac) : 'Échec appairage', !ok);
-          if (ok) {
-            loadBluetooth();
-            if (!mapper.has(dev.mac)) openMapperUI(dev.mac);
-          }
-        });
-      }
-    });
-    c.appendChild(el);
-  });
+  btActionItems.push({ label: '⊘  Masquer', action: 'hide' });
+  btActionFocusIdx = 0;
+  btActionOverlayActive = true;
+  screen = 'btAction';
+  renderBtActionOverlay();
+  document.getElementById('btActionOverlay').classList.add('visible');
+}
+
+function closeBtActionOverlay() {
+  btActionOverlayActive = false;
+  btActionDev = null;
+  screen = 'main';
+  document.getElementById('btActionOverlay').classList.remove('visible');
   updateContentFocus();
+}
+
+function renderBtActionOverlay() {
+  const dev = btActionDev;
+  document.getElementById('btActionTitle').textContent = dev.name || dev.mac;
+  document.getElementById('btActionMac').textContent = dev.mac;
+  const list = document.getElementById('btActionList');
+  list.innerHTML = '';
+  btActionItems.forEach((item, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'bt-action-btn' + (item.danger ? ' danger' : '') + (i === btActionFocusIdx ? ' focused' : '');
+    btn.textContent = item.label;
+    btn.addEventListener('click', () => { btActionFocusIdx = i; executeBtAction(item.action); });
+    list.appendChild(btn);
+  });
+}
+
+function executeBtAction(action) {
+  const dev = btActionDev;
+  if (!dev) return;
+
+  if (action === 'hide') {
+    if (!hiddenBtDevices.includes(dev.mac)) hiddenBtDevices.push(dev.mac);
+    saveHiddenBtDevices();
+    closeBtActionOverlay();
+    renderBtPaired();
+    renderBtScan();
+    return;
+  }
+
+  closeBtActionOverlay();
+
+  if (action === 'connect') {
+    if (!window.xeLauncher) return;
+    document.getElementById('loadingText').textContent = 'Connexion à ' + (dev.name || dev.mac) + '…';
+    document.getElementById('loadingOverlay').classList.add('visible');
+    window.xeLauncher.btConnect(dev.mac).then(ok => {
+      document.getElementById('loadingOverlay').classList.remove('visible');
+      toast.show(ok ? '● Connecté : ' + (dev.name || dev.mac) : 'Échec connexion', !ok);
+      loadBluetooth();
+    });
+  } else if (action === 'disconnect') {
+    if (!window.xeLauncher) return;
+    window.xeLauncher.btDisconnect(dev.mac).then(() => {
+      toast.show('Déconnecté : ' + (dev.name || dev.mac), false);
+      loadBluetooth();
+    });
+  } else if (action === 'remove') {
+    if (!window.xeLauncher) return;
+    document.getElementById('loadingText').textContent = 'Suppression de ' + (dev.name || dev.mac) + '…';
+    document.getElementById('loadingOverlay').classList.add('visible');
+    window.xeLauncher.btRemove(dev.mac).then(ok => {
+      document.getElementById('loadingOverlay').classList.remove('visible');
+      toast.show(ok ? 'Appairage supprimé' : 'Erreur', !ok);
+      loadBluetooth();
+    });
+  } else if (action === 'pair') {
+    if (!window.xeLauncher) return;
+    const isWiimote = /nintendo|rvl|wiimote/i.test(dev.name || '');
+    const pairMsg = isWiimote
+      ? 'Connexion Wiimote — Appuyez sur SYNC…'
+      : 'Appairage de ' + (dev.name || dev.mac) + '…';
+    document.getElementById('loadingText').textContent = pairMsg;
+    document.getElementById('loadingOverlay').classList.add('visible');
+    window.xeLauncher.btPair(dev.mac).then(ok => {
+      document.getElementById('loadingOverlay').classList.remove('visible');
+      toast.show(ok ? 'Appairé : ' + (dev.name || dev.mac) : 'Échec appairage', !ok);
+      if (ok) { loadBluetooth(); if (!mapper.has(dev.mac)) openMapperUI(dev.mac); }
+    });
+  } else if (action === 'rename') {
+    openKb('Nouveau nom — ' + (dev.name || dev.mac), dev.name || '', (val) => {
+      if (!val || !window.xeLauncher) return;
+      window.xeLauncher.btRename(dev.mac, val).then(ok => {
+        toast.show(ok ? 'Renommé : ' + val : 'Erreur renommage', !ok);
+        if (ok) loadBluetooth();
+      });
+    });
+  }
 }
 
 /* ── Controllers tab ── */
@@ -851,7 +1778,7 @@ function renderDeviceMaps() {
     const map = maps[deviceId];
     const mappedKeys = XeInput.ACTION_KEYS.map(a => {
       const raw = map[a.id];
-      return raw ? (a.label + ': ' + raw) : null;
+      return raw ? (a.label + ': ' + (XeInput.prettyRaw(raw) || raw)) : null;
     }).filter(Boolean).join(' · ');
     el.innerHTML =
       '<span class="device-icon">🎮</span>' +
@@ -908,7 +1835,11 @@ function loadJfMapping() {
 function saveJfMapping() {
   localStorage.setItem('xelauncher_jf_mapping', JSON.stringify(jfMappingState));
   localStorage.setItem('xelauncher_jf_btncount', String(jfButtonCount));
+  // Persister sur disque pour xe_jmp_input.py
+  if (window.xeLauncher && window.xeLauncher.saveJfMapping)
+    window.xeLauncher.saveJfMapping(jfMappingState);
   updateJfConfigStatus();
+  renderJfSavedSummary();
 }
 
 function updateJfConfigStatus() {
@@ -918,6 +1849,71 @@ function updateJfConfigStatus() {
   const total = 4 + jfButtonCount;
   const mapped = JF_ACTIONS.slice(0, total).filter(a => jfMappingState[a.id]).length;
   el.textContent = mapped + '/' + total + ' mappées';
+}
+
+function renderJfSavedSummary() {
+  const el = document.getElementById('jfSavedSummary');
+  if (!el) return;
+  const total = 4 + jfButtonCount;
+  const actions = JF_ACTIONS.slice(0, total);
+  const mapped = actions.filter(a => jfMappingState[a.id]);
+  if (!mapped.length) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.innerHTML = mapped.map(a =>
+    '<span style="display:inline-flex;gap:6px;align-items:center;margin:2px 6px 2px 0">' +
+    '<span style="color:var(--text-dim)">' + a.label + '</span>' +
+    '<span style="color:var(--blue)">→</span>' +
+    '<span style="color:var(--text)">' + (XeInput.prettyRaw(jfMappingState[a.id]) || jfMappingState[a.id]) + '</span>' +
+    '</span>'
+  ).join('');
+}
+
+function renderJfDeviceList() {
+  const c = document.getElementById('jfDeviceList');
+  if (!c) return;
+  c.innerHTML = '';
+
+  // Lire le mapping JMP depuis localStorage (clé écrite par JMPmapper.html)
+  let jfMap = {};
+  try { jfMap = JSON.parse(localStorage.getItem('xelauncher_jf_mapping') || '{}'); } catch(e) {}
+
+  // Un mapping JMP contient __deviceId__ parmi ses clés
+  // On regroupe les entrées par deviceId stocké dans chaque mapping
+  // Le format de stockage de JMPmapper est un objet plat { jf_up, jf_down, ... , __deviceId__ }
+  // mais saveJfMapping dans settings peut aussi écrire sans __deviceId__ (via le inline mapper)
+  // On cherche donc les deux clés possibles.
+
+  const deviceId = jfMap['__deviceId__'] || null;
+  const actionKeys = Object.keys(jfMap).filter(k => k !== '__deviceId__' && k.startsWith('jf_'));
+
+  if (!actionKeys.length) {
+    c.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:clamp(9px,1vw,11px);letter-spacing:2px;text-transform:uppercase;padding:10px 16px">Aucun appareil configuré</div>';
+    updateContentFocus();
+    return;
+  }
+
+  const el = document.createElement('div');
+  el.className = 'device-item';
+
+  const label = deviceId
+    ? (deviceId === '__keyboard__' ? '⌨ Clavier' : deviceId.length > 44 ? deviceId.slice(0, 44) + '…' : deviceId)
+    : '📺 Appareil configuré';
+
+  const summary = JF_ACTIONS.filter(a => jfMap[a.id]).map(a =>
+    a.label + ': ' + (XeInput.prettyRaw(jfMap[a.id]) || jfMap[a.id])
+  ).join(' · ');
+
+  el.innerHTML =
+    '<span class="device-icon">🎬</span>' +
+    '<div style="flex:1">' +
+      '<div class="device-name">' + label + '</div>' +
+      (summary ? '<div style="font-size:clamp(8px,0.85vw,10px);color:var(--text-hint);letter-spacing:1px;margin-top:3px">' + summary + '</div>' : '') +
+    '</div>' +
+    '<span style="font-size:clamp(9px,1vw,11px);color:rgba(0,164,220,0.6);letter-spacing:1px">configuré</span>';
+
+  el.addEventListener('click', () => { window.location.href = 'JMPmapper.html'; });
+  c.appendChild(el);
+  updateContentFocus();
 }
 
 function renderJfMapping() {
@@ -1024,7 +2020,7 @@ function openMapperUI(deviceId) {
 
   const hint = document.createElement('div');
   hint.className = 'mapper-hint';
-  hint.textContent = 'Appuyez le bouton correspondant à chaque action. ✕ = passer';
+  hint.textContent = 'Appuyez le bouton ou la direction correspondant à chaque action. ✕ = passer';
   el.appendChild(hint);
 
   const skip = document.createElement('button');
@@ -1051,7 +2047,7 @@ function renderMapperUI2() {
     item.appendChild(lbl);
     if (mapperResult[a.id]) {
       const kn = document.createElement('span');
-      kn.className = 'mapper-key-name'; kn.textContent = mapperResult[a.id];
+      kn.className = 'mapper-key-name'; kn.textContent = XeInput.prettyRaw(mapperResult[a.id]) || mapperResult[a.id];
       item.appendChild(kn);
     }
     grid.appendChild(item);
@@ -1106,27 +2102,68 @@ function saveSettingsAuto() {
 /* ── Row action handler ── */
 function activateRow(el) {
   const action = el.dataset.action;
+
+  // WiFi network
+  if (el.classList.contains('wifi-network')) {
+    const ssid = el.querySelector('.wifi-ssid')?.textContent;
+    if (!ssid) return;
+    const net = wifiNetworks.find(n => n.ssid === ssid);
+    if (net) connectWifi(net);
+    return;
+  }
+
+  // Interface réseau — ouvrir/fermer le panel de config
+  if (el.classList.contains('iface-item')) {
+    const allItems = Array.from(document.querySelectorAll('.iface-item'));
+    const idx = allItems.indexOf(el);
+    if (idx >= 0) openIfaceOverlay(idx);
+    return;
+  }
+
+  // BT item — ouvrir l'overlay d'actions
+  if (el.classList.contains('bt-item')) {
+    const mac = el.dataset.mac;
+    const isPaired = el.dataset.bttype === 'paired';
+    const dev = isPaired
+      ? btPaired.find(d => d.mac === mac)
+      : btScanResults.find(d => d.mac === mac);
+    if (dev) openBtActionOverlay(dev, isPaired);
+    return;
+  }
+
+  // Champ de config d'interface — plus géré ici, c'est l'overlay qui s'en charge
+  // Bouton Appliquer — idem
+
   if (action === 'back') { if (window.xeLauncher) window.xeLauncher.goBack(); else window.location.href = 'menu.html'; }
   else if (action === 'update') doUpdate();
   else if (action === 'reboot') { if (window.xeLauncher) window.xeLauncher.systemReboot(); }
   else if (action === 'shutdown') { if (window.xeLauncher) window.xeLauncher.systemShutdown(); }
   else if (action === 'wifi-scan') doWifiScan();
+  else if (action === 'wifi-known') openKnownOverlay();
   else if (action === 'wifi-hide') {
     hiddenListExpanded = !hiddenListExpanded;
     const hl = document.getElementById('hiddenNetList');
     if (hl) { hl.style.display = hiddenListExpanded ? 'block' : 'none'; if (hiddenListExpanded) renderHiddenList(); }
   }
   else if (action === 'bt-scan') doBtScan();
-  else if (action === 'map-remote') { openMapperUI(REMOTE_DEVICE_ID); }
+  else if (action === 'bt-hide') {
+    btHiddenListExpanded = !btHiddenListExpanded;
+    const hl = document.getElementById('hiddenBtList');
+    if (hl) { hl.style.display = btHiddenListExpanded ? 'block' : 'none'; if (btHiddenListExpanded) renderHiddenBtList(); }
+  }
+  else if (action === 'map-remote') {
+    sessionStorage.setItem('mapper_deviceId', REMOTE_DEVICE_ID);
+    sessionStorage.setItem('mapper_type', 'remote');
+    window.location.href = 'mapper.html';
+  }
+  else if (action === 'gamepad-debug') { openGpDebug(); }
   else if (action === 'clear-maps') {
     localStorage.removeItem('xelauncher_inputmaps');
     toast.show('Mappages supprimés', false);
     renderDeviceMaps();
   }
   else if (action === 'jf-configure') {
-    jfConfigExpanded = !jfConfigExpanded;
-    const grid = document.getElementById('jfMappingGrid');
-    if (grid) { grid.style.display = jfConfigExpanded ? 'grid' : 'none'; if (jfConfigExpanded) renderJfMapping(); }
+    window.location.href = 'JMPmapper.html';
   }
   else if (action === 'apply-display') {
     if (!window.xeLauncher) return;
@@ -1171,14 +2208,87 @@ function activateRow(el) {
         () => { volExpanded=false; document.getElementById('volume-options').style.display='none'; }); } }
 }
 
-/* ── Input routing ── */
-document.addEventListener('keydown', (e) => {
-  if (!inputReady) return;
-  if (remoteCapture && remoteCapture.active) return;
-  XeInput.requestWakeLock();
-  onKey(e.key, '__keyboard__');
-});
+/* ── Gamepad debug overlay ── */
+let gpDebugActive = false;
 
+function openGpDebug() {
+  gpDebugActive = true;
+  screen = 'gpDebug';
+  document.getElementById('gpDebugLog').textContent = "Appuyez sur n'importe quelle touche…";
+  document.getElementById('gpDebugOverlay').classList.add('visible');
+  gpPoller.debugMode = true;
+  gpPoller.onDebug = (entry) => {
+    const nameEl = document.getElementById('gpDebugDeviceName');
+    if (nameEl && entry.gpId) nameEl.textContent = entry.gpId.length > 58 ? entry.gpId.slice(0,58)+'…' : entry.gpId;
+    const mapped = XeInput.ACTION_TO_KEY[entry.raw] || '(non mappé)';
+    const log = document.getElementById('gpDebugLog');
+    if (log) log.textContent = (entry.raw[0]==='b' ? '● ' : '◈ ') + XeInput.prettyRaw(entry.raw) + ' → ' + mapped;
+    renderGpDebugGrid(entry.raw);
+  };
+  renderGpDebugGrid(null);
+}
+
+function renderGpDebugGrid(activeRaw) {
+  const grid = document.getElementById('gpDebugGrid');
+  if (!grid) return;
+  const gps = navigator.getGamepads ? navigator.getGamepads() : [];
+  let gp = null;
+  for (let i = 0; i < gps.length; i++) { if (gps[i]) { gp = gps[i]; break; } }
+  if (!gp) {
+    grid.innerHTML = '<div style="color:var(--text-dim);font-size:clamp(9px,1vw,11px);letter-spacing:2px;grid-column:span 2;text-align:center;padding:16px">Aucune manette connectée</div>';
+    return;
+  }
+  grid.innerHTML = '';
+  const addCell = (raw) => {
+    const mapped = XeInput.ACTION_TO_KEY[raw] || '—';
+    const isActive = raw === activeRaw;
+    const cell = document.createElement('div');
+    cell.style.cssText = 'padding:5px 10px;border:1px solid '+(isActive?'var(--blue)':'var(--border)')+
+      ';background:'+(isActive?'rgba(0,164,220,0.18)':'transparent')+
+      ';font-family:var(--font-mono);font-size:clamp(8px,0.85vw,10px);letter-spacing:1px;display:flex;justify-content:space-between;gap:8px;transition:border-color 0.1s,background 0.1s';
+    cell.innerHTML =
+      '<span style="color:'+(isActive?'#fff':'var(--text-hint)')+'">'+XeInput.prettyRaw(raw)+'</span>'+
+      '<span style="color:'+(isActive?'var(--blue)':(mapped!=='—'?'rgba(0,164,220,0.55)':'var(--text-hint)'))+'">'+mapped+'</span>';
+    grid.appendChild(cell);
+  };
+  for (let i = 0; i < gp.buttons.length; i++) addCell('b'+i);
+  for (let i = 0; i < gp.axes.length; i++) { addCell('a'+i+'-'); addCell('a'+i+'+'); }
+}
+
+function closeGpDebug() {
+  gpDebugActive = false;
+  gpPoller.debugMode = false;
+  gpPoller.onDebug = null;
+  screen = 'main';
+  document.getElementById('gpDebugOverlay').classList.remove('visible');
+  updateContentFocus();
+}
+
+/* ── BT action overlay keyboard handler ── */
+function btActionKey(key) {
+  if (key === 'ArrowUp') {
+    btActionFocusIdx = Math.max(0, btActionFocusIdx - 1);
+    renderBtActionOverlay();
+  } else if (key === 'ArrowDown') {
+    btActionFocusIdx = Math.min(btActionItems.length - 1, btActionFocusIdx + 1);
+    renderBtActionOverlay();
+  } else if (key === 'Enter') {
+    const item = btActionItems[btActionFocusIdx];
+    if (item) executeBtAction(item.action);
+  } else if (key === 'Escape' || key === 'Backspace' || key === 'Back') {
+    closeBtActionOverlay();
+  }
+}
+
+/* ── Périphériques non mappables (IR, capteurs, etc.) ───────────────────── */
+const UNMAPPABLE_KEYWORDS = ['ir','sensor','motion','accelero','gyro','touchpad','touch pad','nunchuk extension'];
+function isUnmappableDevice(name) {
+  if (!name) return false;
+  var nl = name.toLowerCase();
+  return UNMAPPABLE_KEYWORDS.some(function(k) { return nl.indexOf(k) >= 0; });
+}
+
+/* ── Input routing ── */
 function onKey(raw, deviceId) {
   if (!inputReady) return;
 
@@ -1211,6 +2321,22 @@ function onKey(raw, deviceId) {
   if (!key) return;
 
   if (screen === 'kb') { kb.handleKey(key); return; }
+  if (screen === 'kbNum') { kbNum.handleKey(key); return; }
+
+  // ── Mode BT action overlay ──
+  if (screen === 'btAction') { btActionKey(key); return; }
+
+  // ── Mode debug gamepad ──
+  if (screen === 'gpDebug') {
+    if (key === 'Escape' || key === 'Backspace' || key === 'Back') closeGpDebug();
+    return;
+  }
+
+  // ── Mode overlay interface ──
+  if (screen === 'iface') { ifaceOverlayKey(key); return; }
+
+  // ── Mode overlay réseaux connus ──
+  if (screen === 'knownOverlay') { knownOverlayKey(key); return; }
 
   // ── Mode dropdown : focus bloqué dans le menu déroulant ──
   if (activeDropdown) {
@@ -1242,9 +2368,10 @@ function onKey(raw, deviceId) {
     else if (key === 'ArrowRight') { sidebarFocused = false; updateContentFocus(); }
     else if (key === 'Enter') { selectTab(TABS[sidebarFocusIdx]); sidebarFocused = false; updateContentFocus(); }
   } else {
-    if (key === 'ArrowLeft') { sidebarFocused = true; updateSidebarFocus(); return; }
+    if (key === 'ArrowLeft') { sidebarFocused = true; updateContentFocus(); return; }
     const rows = getContentRows();
     const idx = rowFocusMap[activeTab];
+    const currentRow = rows[idx];
     if (key === 'ArrowUp') {
       rowFocusMap[activeTab] = Math.max(0, idx - 1);
       updateContentFocus();
@@ -1253,19 +2380,37 @@ function onKey(raw, deviceId) {
       rowFocusMap[activeTab] = Math.min(rows.length - 1, idx + 1);
       updateContentFocus();
       rows[rowFocusMap[activeTab]]?.scrollIntoView({ block: 'nearest' });
+    } else if (key === 'ArrowRight' && currentRow?.classList.contains('wifi-network')) {
+      // Masquer / démasquer WiFi selon si c'est dans la liste visible ou cachée
+      const ssid = currentRow.dataset.ssid;
+      if (!ssid) return;
+      if (hiddenNetworks.includes(ssid)) {
+        hiddenNetworks.splice(hiddenNetworks.indexOf(ssid), 1);
+        saveHiddenNetworks();
+      } else {
+        hiddenNetworks.push(ssid);
+        saveHiddenNetworks();
+      }
+      renderWifiList();
+      if (hiddenListExpanded) renderHiddenList();
+      rowFocusMap[activeTab] = Math.min(idx, getContentRows().length - 1);
+      updateContentFocus();
+    } else if (key === 'ArrowRight' && currentRow?.classList.contains('bt-item')) {
+      // Masquer l'appareil BT
+      const mac = currentRow.dataset.mac;
+      if (!mac) return;
+      if (!hiddenBtDevices.includes(mac)) hiddenBtDevices.push(mac);
+      saveHiddenBtDevices();
+      renderBtPaired();
+      renderBtScan();
+      if (btHiddenListExpanded) renderHiddenBtList();
+      rowFocusMap[activeTab] = Math.min(idx, getContentRows().length - 1);
+      updateContentFocus();
     } else if (key === 'Enter') {
-      const row = rows[idx];
-      if (row) activateRow(row);
+      if (currentRow) activateRow(currentRow);
     }
   }
 }
-
-gpPoller.onKey = (raw) => {
-  const gps = navigator.getGamepads ? navigator.getGamepads() : [];
-  let deviceId = '__gamepad__';
-  for (let i = 0; i < gps.length; i++) { if (gps[i]) { deviceId = gps[i].id; break; } }
-  onKey(raw, deviceId);
-};
 
 window.addEventListener('error', (e) => {
   console.error('Settings error:', e.error);
