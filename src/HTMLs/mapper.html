@@ -6,6 +6,31 @@
 <title>XeLauncher — Configuration</title>
 <link rel="stylesheet" href="../CSSs/common.css">
 <link rel="stylesheet" href="../CSSs/mapper.css">
+<style>
+  .hold-panel {
+    display: flex; flex-direction: column; align-items: center;
+    gap: clamp(14px, 2.5vh, 22px); position: relative; z-index: 1;
+  }
+  .hold-label {
+    font-family: var(--font-mono); font-size: clamp(11px, 1.3vw, 14px);
+    color: var(--text); letter-spacing: 2px; text-align: center; line-height: 1.6;
+  }
+  .hold-device {
+    font-family: var(--font-mono); font-size: clamp(9px, 0.95vw, 11px);
+    color: var(--blue); letter-spacing: 2px; text-align: center;
+    min-height: 1.4em; max-width: 70vw; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .hold-bar-wrap {
+    width: clamp(200px, 36vw, 420px); height: 4px;
+    background: rgba(255,255,255,0.07); overflow: hidden;
+  }
+  .hold-bar { height: 100%; width: 0%; background: var(--blue); }
+  .hold-confirm {
+    font-family: var(--font-mono); font-size: clamp(9px, 0.95vw, 11px);
+    color: var(--text-hint); letter-spacing: 2px; text-align: center; min-height: 1.2em;
+  }
+</style>
 </head>
 <body>
 <div class="grid-bg"></div>
@@ -15,167 +40,30 @@
 <div class="mapper-screen">
   <div class="mapper-title" id="mapperTitle">Configuration du périphérique</div>
   <div class="mapper-device" id="mapperDevice"></div>
-  <div class="grace-bar-wrap"><div class="grace-bar" id="graceBar"></div></div>
-  <div class="mapper-actions" id="mapperActions">Prêt dans…</div>
-  <div class="mapper-grid" id="mapperGrid"></div>
-  <div class="mapper-hint">Appuyez sur le bouton correspondant à chaque action</div>
-  <button class="btn" id="skipBtn">Utiliser les valeurs par défaut</button>
+
+  <!-- Phase 1 : détection de l'appareil -->
+  <div class="hold-panel" id="holdPanel" style="display:none">
+    <div class="hold-label" id="holdLabel">
+      Appuyez sur un bouton du périphérique<br>que vous souhaitez configurer
+    </div>
+    <div class="hold-bar-wrap"><div class="hold-bar" id="holdBar"></div></div>
+    <div class="hold-device" id="holdDevice"></div>
+    <div class="hold-confirm" id="holdConfirm"></div>
+  </div>
+
+  <!-- Phase 2 : mapping des touches -->
+  <div class="grace-bar-wrap" id="graceBarWrap" style="display:none">
+    <div class="grace-bar" id="graceBar"></div>
+  </div>
+  <div class="mapper-actions" id="mapperActions" style="display:none">Prêt dans…</div>
+  <div class="mapper-grid" id="mapperGrid" style="display:none"></div>
+  <div class="mapper-hint" id="mapperHint" style="display:none">
+    Appuyez sur le bouton correspondant à chaque action
+  </div>
+  <button class="btn" id="skipBtn" style="display:none">Utiliser les valeurs par défaut</button>
 </div>
 
 <script src="../JSs/input.js"></script>
-<script>
-'use strict';
-
-/* ── Params passés via sessionStorage ───────────────────────────────────── */
-const deviceId = sessionStorage.getItem('mapper_deviceId') || 'unknown';
-const deviceType = sessionStorage.getItem('mapper_type') || 'remote'; // 'remote' | 'gamepad'
-
-/* ── State ──────────────────────────────────────────────────────────────── */
-const GRACE_MS    = 800;
-const COOLDOWN_MS = 350;
-
-const toast    = new XeInput.Toast(document.getElementById('toast'));
-const mapper   = new XeInput.InputMapper();
-const actions  = [...XeInput.ACTION_KEYS];
-let currentIdx = 0;
-let result     = {};
-let waiting    = false;
-let cooldown   = false;
-
-/* ── UI refs ────────────────────────────────────────────────────────────── */
-const titleEl   = document.getElementById('mapperTitle');
-const deviceEl  = document.getElementById('mapperDevice');
-const actionsEl = document.getElementById('mapperActions');
-const gridEl    = document.getElementById('mapperGrid');
-const graceBar  = document.getElementById('graceBar');
-const skipBtn   = document.getElementById('skipBtn');
-
-/* ── Init ───────────────────────────────────────────────────────────────── */
-document.addEventListener('DOMContentLoaded', () => {
-  titleEl.textContent  = deviceType === 'gamepad' ? 'Configuration de la manette' : 'Configuration de la télécommande';
-  deviceEl.textContent = deviceId;
-
-  skipBtn.addEventListener('click', () => {
-    mapper.save(deviceId, mapper.getDefault());
-    goBack();
-  });
-
-  renderGrid();
-  startGrace();
-
-  // ── Écoute IPC brute SANS filtre ACCEPTED_ACTIONS ──────────────────────
-  // On bypass complètement EvdevPoller._onEvent pour le mapper :
-  // on veut capturer TOUS les boutons, même ceux que xe_input.py envoie
-  // sous des noms non standards (ex: 'return', 'home', 'key_back'…).
-  if (window.xeLauncher && window.xeLauncher.onXeInputEvent) {
-    window.xeLauncher.offXeInputEvent && window.xeLauncher.offXeInputEvent();
-    window.xeLauncher.onXeInputEvent((data) => {
-      if (!data || !data.action || !data.device) return;
-      // Filtrer sur le device en cours de configuration uniquement
-      if (deviceId !== '__remote__' && data.device !== deviceId) return;
-      if (!waiting) return;
-      receiveInput(data.action);
-    });
-  }
-
-  // Clavier physique — fallback
-  document.addEventListener('keydown', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!waiting) return;
-    receiveInput(e.key);
-  }, true);
-});
-
-/* ── Période de grâce ───────────────────────────────────────────────────── */
-function startGrace() {
-  waiting = false;
-  graceBar.style.transition = 'none';
-  graceBar.style.width = '100%';
-
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      graceBar.style.transition = `width ${GRACE_MS}ms linear`;
-      graceBar.style.width = '0%';
-    });
-  });
-
-  actionsEl.textContent = 'Prêt dans…';
-  setTimeout(nextStep, GRACE_MS);
-}
-
-/* ── Étapes ─────────────────────────────────────────────────────────────── */
-function nextStep() {
-  if (currentIdx >= actions.length) {
-    mapper.save(deviceId, result);
-    toast.show('Périphérique configuré !', false, 1500);
-    setTimeout(goBack, 1600);
-    return;
-  }
-
-  const action = actions[currentIdx];
-  actionsEl.innerHTML = '🔘 Appuyez sur : <strong>' + action.label + '</strong>';
-  graceBar.style.transition = 'none';
-  graceBar.style.width = '0%';
-  waiting = true;
-  renderGrid();
-}
-
-function receiveInput(raw) {
-  if (!waiting) return;
-  if (cooldown) return;
-
-  cooldown = true;
-  waiting  = false;
-  setTimeout(() => { cooldown = false; }, COOLDOWN_MS);
-
-  result[actions[currentIdx].id] = raw;
-  currentIdx++;
-  renderGrid();
-
-  if (currentIdx >= actions.length) {
-    mapper.save(deviceId, result);
-    actionsEl.textContent = '✓ Configuration terminée !';
-    actionsEl.classList.add('done');
-    toast.show('Périphérique configuré !', false, 1500);
-    setTimeout(goBack, 1600);
-  } else {
-    actionsEl.textContent = '✓';
-    setTimeout(nextStep, 200);
-  }
-}
-
-/* ── Rendu grille ───────────────────────────────────────────────────────── */
-function renderGrid() {
-  gridEl.innerHTML = '';
-  actions.forEach((a, i) => {
-    const item = document.createElement('div');
-    item.className = 'mapper-btn'
-      + (result[a.id]                  ? ' assigned'       : '')
-      + (i === currentIdx && waiting   ? ' current-target' : '');
-
-    const lbl = document.createElement('span');
-    lbl.textContent = a.label;
-    item.appendChild(lbl);
-
-    if (result[a.id]) {
-      const kn = document.createElement('span');
-      kn.className = 'mapper-key-name';
-      kn.textContent = result[a.id];
-      item.appendChild(kn);
-    }
-    gridEl.appendChild(item);
-  });
-}
-
-/* ── Retour au menu ─────────────────────────────────────────────────────── */
-function goBack() {
-  if (window.xeLauncher && window.xeLauncher.goBack) {
-    window.xeLauncher.goBack();
-  } else {
-    window.location.href = 'menu.html';
-  }
-}
-</script>
+<script src="../JSs/pages/mapper.js"></script>
 </body>
 </html>

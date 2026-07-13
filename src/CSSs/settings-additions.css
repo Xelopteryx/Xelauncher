@@ -1,0 +1,306 @@
+/* ═══════════════════════════════════════════════════════════════
+   settings-additions.css
+   Styles supplémentaires pour les nouvelles fonctionnalités :
+   - Police AdminFont globale
+   - Tailles de texte augmentées
+   - Résolution 3 colonnes
+   - Sorties audio dynamiques
+   - Overlay actions appareil (controllers)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Police ── */
+@font-face {
+  font-family: 'AdminFont';
+  src: url('../FONTs/admin.woff2') format('woff2');
+  font-weight: 400;
+}
+
+/* Appliquer la police à tout settings */
+.settings-screen, .settings-screen * {
+  font-family: 'AdminFont', 'Share Tech Mono', monospace;
+}
+
+/* ── Textes plus grands partout dans settings ── */
+.settings-row-label {
+  font-size: clamp(13px, 1.5vw, 18px) !important;
+  letter-spacing: 1.5px;
+}
+.settings-row-value {
+  font-size: clamp(13px, 1.5vw, 18px) !important;
+}
+.section-title {
+  font-size: clamp(14px, 1.6vw, 20px) !important;
+  letter-spacing: 4px;
+  margin-bottom: clamp(14px, 2.2vh, 24px);
+}
+.sidebar-item {
+  font-size: clamp(12px, 1.3vw, 16px) !important;
+  letter-spacing: 2px;
+  padding: clamp(12px, 1.6vh, 18px) clamp(14px, 2vw, 24px) !important;
+}
+.sidebar-item .icon {
+  font-size: 0 !important; /* les SVG ont leur propre taille */
+}
+.sidebar-item .icon svg {
+  width: clamp(18px, 2vw, 24px);
+  height: clamp(18px, 2vw, 24px);
+}
+.hint {
+  font-size: clamp(11px, 1.2vw, 14px) !important;
+  letter-spacing: 2px;
+}
+.bt-name, .device-name, .wifi-ssid {
+  font-size: clamp(13px, 1.5vw, 17px) !important;
+}
+.wifi-hidden-header {
+  font-size: clamp(12px, 1.3vw, 15px) !important;
+}
+
+/* ── Panel résolution 3 colonnes ── */
+.res-columns-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: clamp(8px, 1.2vw, 16px);
+  padding: clamp(12px, 2vh, 20px) clamp(16px, 2.5vw, 28px);
+}
+
+.res-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.res-col-header {
+  font-family: 'AdminFont', 'Share Tech Mono', monospace;
+  font-size: clamp(11px, 1.2vw, 14px);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: rgba(0, 164, 220, 0.5);
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--blue-dim);
+  margin-bottom: 4px;
+}
+
+.res-col-item {
+  font-family: 'AdminFont', 'Share Tech Mono', monospace;
+  font-size: clamp(12px, 1.3vw, 15px);
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  padding: clamp(8px, 1.2vh, 12px) clamp(10px, 1.4vw, 16px);
+  border: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.res-col-item:hover {
+  background: var(--blue-bg);
+  color: var(--text);
+}
+
+.res-col-item.selected {
+  border-color: var(--blue-dim);
+  border-left-color: var(--blue);
+  color: var(--blue);
+  background: var(--blue-bg);
+}
+
+.res-col-item.active {
+  background: rgba(0, 164, 220, 0.18);
+  border-left-color: var(--blue);
+  border-color: rgba(0, 164, 220, 0.35);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(0, 164, 220, 0.18);
+}
+
+/* ── Sorties audio ── */
+.audio-sink-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+}
+
+.audio-sink-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: clamp(10px, 1.4vh, 16px) clamp(14px, 2vw, 22px);
+  font-family: 'AdminFont', 'Share Tech Mono', monospace;
+  font-size: clamp(13px, 1.4vw, 16px);
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.12s;
+  text-transform: uppercase;
+}
+
+.audio-sink-item:hover {
+  background: var(--blue-bg);
+  color: var(--text);
+}
+
+.audio-sink-item.selected {
+  border-color: var(--blue-dim);
+  border-left-color: var(--blue);
+  color: var(--blue);
+  background: var(--blue-bg);
+}
+
+.audio-sink-item.active {
+  background: rgba(0, 164, 220, 0.18);
+  border-left-color: var(--blue);
+  border-color: rgba(0, 164, 220, 0.35);
+  color: #fff;
+}
+
+.audio-sink-icon {
+  display: flex;
+  align-items: center;
+  color: rgba(0, 164, 220, 0.6);
+  flex-shrink: 0;
+}
+
+.audio-sink-desc {
+  flex: 1;
+}
+
+.audio-sink-check {
+  color: #a5d6a7;
+  font-size: clamp(14px, 1.6vw, 18px);
+  flex-shrink: 0;
+}
+
+/* ── Overlay actions contrôleur ── */
+#deviceActionOverlay.visible {
+  display: flex;
+}
+
+/* Assurer que les device-items sont navigables */
+.device-item {
+  cursor: pointer;
+}
+
+.device-item.active {
+  background: rgba(0, 164, 220, 0.14);
+  border-left-color: var(--blue);
+  box-shadow: inset 0 0 0 1px rgba(0, 164, 220, 0.18);
+}
+
+.device-item.active .device-name { color: #fff; }
+
+/* ── Icônes SVG sidebar ── */
+.sidebar-item .icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(22px, 2.5vw, 28px);
+  flex-shrink: 0;
+}
+
+/* ── BT hidden items navigables ── */
+.bt-item-hidden.active {
+  background: rgba(0, 164, 220, 0.14);
+  border-left-color: var(--blue);
+  box-shadow: inset 0 0 0 1px rgba(0, 164, 220, 0.18);
+}
+
+/* ── Option items plus grands ── */
+.option-item {
+  font-size: clamp(12px, 1.3vw, 15px) !important;
+  padding: 7px 16px !important;
+  letter-spacing: 2px;
+}
+
+/* ── Known overlay rows plus grands ── */
+.known-overlay-ssid {
+  font-size: clamp(13px, 1.4vw, 17px) !important;
+  letter-spacing: 2px;
+}
+
+.known-prio-btn {
+  font-size: clamp(12px, 1.2vw, 14px) !important;
+  padding: 6px 12px !important;
+}
+
+/* ── Iface overlay textes plus grands ── */
+.iface-overlay-label {
+  font-size: clamp(13px, 1.4vw, 17px) !important;
+  letter-spacing: 2px;
+}
+
+.iface-overlay-value {
+  font-size: clamp(13px, 1.5vw, 18px) !important;
+}
+
+/* ── BT action overlay ── */
+.bt-action-title {
+  font-size: clamp(16px, 2vw, 24px) !important;
+  letter-spacing: 4px;
+}
+
+.bt-action-btn {
+  font-size: clamp(13px, 1.4vw, 16px) !important;
+  letter-spacing: 2px;
+  padding: clamp(12px, 1.7vh, 18px) clamp(16px, 2.5vw, 28px) !important;
+}
+
+/* ── Toast ── */
+.toast {
+  font-size: clamp(13px, 1.4vw, 16px) !important;
+  letter-spacing: 2px;
+  padding: 10px 26px !important;
+}
+
+/* ── Version info ── */
+.version-info {
+  font-size: clamp(10px, 1vw, 13px) !important;
+  letter-spacing: 2px;
+}
+
+/* ── Scrollbar ── */
+.settings-main::-webkit-scrollbar { width: 5px; }
+.settings-main::-webkit-scrollbar-track { background: transparent; }
+.settings-main::-webkit-scrollbar-thumb { background: var(--blue-dim); }
+
+/* ── Boutons confirm/cancel résolution ── */
+#resConfirmBtn, #resCancelBtn {
+  font-size: clamp(12px, 1.3vw, 15px) !important;
+  padding: 10px 20px !important;
+  letter-spacing: 2px;
+}
+
+#resCancelBtn {
+  color: rgba(192, 57, 43, 0.8) !important;
+  border-color: rgba(192, 57, 43, 0.3) !important;
+}
+
+#resCancelBtn:hover, #resCancelBtn.active {
+  background: rgba(192, 57, 43, 0.1) !important;
+  border-color: var(--red) !important;
+  color: #e85555 !important;
+}
+
+#resRevertCountdown {
+  font-weight: bold;
+  animation: pulse-glow 1s ease-in-out infinite;
+}
+
+/* ── Barres signal dans réseaux masqués ── */
+#hiddenNetList .wifi-signal .bar {
+  background: var(--text-hint);
+}
+#hiddenNetList .wifi-signal .bar.lit {
+  background: rgba(0, 164, 220, 0.5);
+}
+
+/* ── Device icon SVG inline ── */
+.device-icon-svg {
+  color: rgba(0, 164, 220, 0.6);
+  margin-right: 10px;
+  flex-shrink: 0;
+}

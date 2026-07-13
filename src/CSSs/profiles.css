@@ -16,7 +16,7 @@
 }
 .server-btn {
   font-family: var(--font-mono);
-  font-size: clamp(9px,1vw,12px);
+  font-size: var(--fs-label);
   letter-spacing: 2px;
   text-transform: uppercase;
   background: rgba(255,255,255,0.03);
@@ -43,7 +43,7 @@
 }
 .server-setup-label {
   font-family: var(--font-title);
-  font-size: clamp(12px,1.6vw,18px);
+  font-size: var(--fs-title);
   letter-spacing: 5px;
   color: var(--blue);
   text-transform: uppercase;
@@ -60,7 +60,7 @@
   border: 1px solid var(--blue-dim);
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: clamp(14px,2vw,22px);
+  font-size: var(--fs-title);
   letter-spacing: 3px;
   padding: clamp(10px,1.5vh,16px) clamp(20px,3vw,32px);
   text-align: center;
@@ -90,9 +90,9 @@
   object-fit: contain; opacity: 0.85;
 }
 .header-title {
-  font-family: var(--font-title);
+  font-family: var(--font-jellyfin);
   color: rgba(0,164,220,0.6);
-  font-size: clamp(8px,1vw,12px);
+  font-size: var(--fs-label);
   letter-spacing: 7px;
   text-transform: uppercase;
 }
@@ -107,7 +107,7 @@
   border: 1px solid rgba(0,164,220,0.22);
   color: rgba(0,164,220,0.45);
   font-family: var(--font-mono);
-  font-size: clamp(9px,1vw,12px);
+  font-size: var(--fs-label);
   letter-spacing: 2px;
   padding: 7px 14px;
   cursor: pointer;
@@ -132,7 +132,7 @@
   display: flex; flex-direction: column;
   align-items: center; gap: 12px;
   cursor: pointer;
-  transition: transform 0.18s, filter 0.18s;
+  transition: transform 0.22s ease, filter 0.22s ease, opacity 0.22s ease;
   outline: none;
 }
 .avatar-wrap {
@@ -145,16 +145,16 @@
   object-fit: cover;
   border: 2px solid rgba(0,164,220,0.18);
   display: block;
-  transition: border-color 0.18s, box-shadow 0.18s;
+  transition: border-color 0.22s ease, box-shadow 0.22s ease;
 }
 .profile-name {
-  font-family: var(--font-mono);
-  font-size: clamp(10px,1.2vw,13px);
+  font-family: var(--font-jellyfin);
+  font-size: var(--fs-body);
   letter-spacing: 2px;
   color: var(--text-dim);
   text-align: center;
   text-transform: uppercase;
-  transition: color 0.18s;
+  transition: color 0.22s ease, opacity 0.22s ease;
 }
 .profile-card.active .avatar-wrap img {
   border-color: var(--blue);
@@ -162,8 +162,12 @@
   animation: pulse-glow 2s ease-in-out infinite;
 }
 .profile-card.active .profile-name { color: var(--blue); }
-.profile-card.active { transform: scale(1.07) translateY(-4px); }
-.profile-card.inactive { filter: grayscale(0.7) brightness(0.48); transform: scale(0.95); }
+.profile-card.active { transform: scale(1.07) translateY(-4px); filter: none; opacity: 1; }
+.profile-card.inactive {
+  filter: grayscale(0.7) brightness(0.48);
+  transform: scale(0.95) translateY(2px);
+  opacity: 0.6;
+}
 .profile-card.pressing { animation: xb-press 0.35s cubic-bezier(0.36,0.07,0.19,0.97) forwards; }
 
 /* Add card */
@@ -176,7 +180,7 @@
   transition: all 0.18s;
 }
 .plus-icon {
-  font-size: clamp(40px,6vw,70px);
+  font-size: clamp(48px,7vw,80px);
   color: rgba(255,255,255,0.2);
   font-family: var(--font-mono);
   margin-top: -4px;
@@ -199,7 +203,7 @@
 .editor-title {
   font-family: var(--font-title);
   color: rgba(0,164,220,0.8);
-  font-size: clamp(12px,1.5vw,18px);
+  font-size: var(--fs-title);
   letter-spacing: 5px;
   text-transform: uppercase;
 }
@@ -221,7 +225,7 @@
   border: 1px solid var(--blue-dim);
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: clamp(12px,1.3vw,15px);
+  font-size: var(--fs-body);
   padding: clamp(7px,1vh,10px) clamp(12px,1.8vw,16px);
   outline: none;
   cursor: default;
@@ -247,7 +251,7 @@
 .avatar-picker-title {
   font-family: var(--font-title);
   color: rgba(0,164,220,0.8);
-  font-size: clamp(12px,1.5vw,16px);
+  font-size: var(--fs-body);
   letter-spacing: 5px;
   text-transform: uppercase;
 }

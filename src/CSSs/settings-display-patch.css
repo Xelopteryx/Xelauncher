@@ -1,0 +1,252 @@
+/* ═══════════════════════════════════════════════════════════════
+   CORRECTIFS — settings-display-patch.css
+   À inclure APRÈS settings.css dans settings.html
+   ─────────────────────────────────────────────────────────────
+   1. Supprime la limite 760 px : utilise tout l'espace disponible
+   2. Panneau résolution 3 colonnes
+   3. Rotation inline
+   4. Zone de confirmation (Confirmer / Annuler) centrée
+═══════════════════════════════════════════════════════════════ */
+
+/* ── 1. Utiliser tout l'espace ─────────────────────────────── */
+.tab-content {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+}
+
+/* Les lignes s'étirent sur toute la largeur disponible */
+.settings-row {
+  padding: clamp(12px,1.8vh,22px) clamp(20px,3vw,40px);
+}
+.settings-row-label {
+  font-size: var(--fs-body);
+  letter-spacing: 2px;
+}
+.settings-row-value {
+  font-size: var(--fs-body);
+  letter-spacing: 2px;
+}
+.section-title {
+  font-size: var(--fs-title);
+  padding: 0 clamp(20px,3vw,40px);
+  margin-bottom: clamp(14px,2.2vh,24px);
+}
+
+/* ── 2. Panneau résolution 3 colonnes ─────────────────────── */
+.res-columns-panel {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+
+.res-col {
+  border-right: 1px solid var(--border);
+  padding: 0 0 clamp(8px,1.2vh,16px) 0;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+.res-col:last-child { border-right: none; }
+.res-col.res-col-active { opacity: 1; }
+
+.res-col-title {
+  font-family: var(--font-title);
+  font-size: var(--fs-label);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: rgba(0,164,220,0.6);
+  padding: clamp(10px,1.5vh,18px) clamp(16px,2.5vw,28px) clamp(6px,1vh,12px);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: clamp(4px,0.6vh,8px);
+}
+.res-col.res-col-active .res-col-title {
+  color: var(--blue);
+  border-bottom-color: var(--blue-dim);
+}
+
+.res-item {
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  letter-spacing: 2px;
+  padding: clamp(8px,1.2vh,14px) clamp(16px,2.5vw,28px);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.12s;
+  border-left: 2px solid transparent;
+}
+.res-item:hover {
+  background: var(--blue-bg);
+  color: var(--text);
+}
+.res-item.res-item-current {
+  color: rgba(0,164,220,0.8);
+  border-left-color: var(--blue-dim);
+}
+.res-item.res-item-focused {
+  background: rgba(0,164,220,0.16);
+  border-left-color: var(--blue);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(0,164,220,0.2);
+}
+.res-item.res-item-current.res-item-focused {
+  border-left-color: var(--blue);
+  color: #fff;
+}
+
+/* ── Zone de confirmation résolution/rotation ─────────────── */
+#resConfirmZone {
+  display: none;
+  position: fixed;
+  bottom: clamp(24px,4vh,60px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 900;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(10px,1.5vh,18px);
+  background: rgba(8,8,14,0.97);
+  border: 1px solid var(--blue-dim);
+  padding: clamp(16px,2.5vh,28px) clamp(28px,5vw,60px);
+  box-shadow: 0 0 40px rgba(0,164,220,0.18);
+}
+
+.res-confirm-info {
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  letter-spacing: 2px;
+  color: var(--text-hint);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.res-confirm-btns {
+  display: flex;
+  gap: clamp(12px,2vw,24px);
+}
+
+.res-confirm-btns .btn {
+  min-width: clamp(120px,14vw,200px);
+  font-size: var(--fs-body);
+  padding: clamp(10px,1.5vh,18px) clamp(20px,3vw,36px);
+}
+.res-confirm-btns .btn#resCancelBtn {
+  color: rgba(192,57,43,0.7);
+  border-color: rgba(192,57,43,0.3);
+}
+.res-confirm-btns .btn#resCancelBtn.active {
+  color: #ff6b6b;
+  border-color: var(--red);
+  background: rgba(192,57,43,0.12);
+  box-shadow: 0 0 16px rgba(192,57,43,0.2);
+}
+.res-confirm-btns .btn#resConfirmBtn.active {
+  color: #a5d6a7;
+  border-color: rgba(165,214,167,0.5);
+  background: rgba(165,214,167,0.08);
+  box-shadow: 0 0 16px rgba(165,214,167,0.2);
+}
+
+/* ── 3. Rotation inline ────────────────────────────────────── */
+.rot-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px;
+  margin-right: 6px;
+  font-size: var(--fs-small);
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  transition: all 0.12s;
+}
+.rot-option.rot-option-active {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: var(--blue-bg);
+}
+.rot-icon {
+  font-family: monospace;
+  font-size: 1.1em;
+  opacity: 0.8;
+}
+
+/* ── 4. Hint "bandes noires" ───────────────────────────────── */
+.res-keepaspect-hint {
+  font-size: var(--fs-hint);
+  letter-spacing: 2px;
+  color: var(--text-hint);
+  text-transform: uppercase;
+  padding: clamp(6px,1vh,12px) clamp(16px,2.5vw,28px);
+  border-top: 1px solid var(--border);
+}
+
+/* ── Hint navigation colonnes ─────────────────────────────── */
+.res-nav-hint {
+  font-family: var(--font-mono);
+  font-size: var(--fs-hint);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-hint);
+  padding: clamp(8px,1.2vh,14px) clamp(16px,2.5vw,28px);
+  text-align: center;
+  border-top: 1px solid var(--border);
+}
+
+/* ══════════════════════════════════════════════════════════
+   AUDIO SINKS
+══════════════════════════════════════════════════════════ */
+.audio-sink-list {
+  padding: clamp(4px,0.6vh,8px) 0;
+}
+
+.audio-sink-item {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px,1.5vw,18px);
+  padding: clamp(10px,1.5vh,16px) clamp(20px,3vw,40px);
+  font-size: var(--fs-body);
+  letter-spacing: 1.5px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.12s;
+  background: transparent;
+  border-top: none;
+  border-right: none;
+  border-bottom: 1px solid var(--border);
+  width: 100%;
+  text-align: left;
+}
+.audio-sink-item:last-child { border-bottom: none; }
+.audio-sink-item.selected {
+  border-left-color: var(--blue);
+  background: rgba(0,164,220,0.10);
+  color: #fff;
+}
+.audio-sink-item.sink-suspended { opacity: 0.45; }
+
+.sink-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+}
+.sink-dot-on  { background: #a5d6a7; box-shadow: 0 0 6px rgba(165,214,167,0.7); }
+.sink-dot-off { background: rgba(255,255,255,0.2); }
+
+.sink-label {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audio-sink-item.selected .sink-label { color: #fff; }
+
+.sink-state {
+  font-family: var(--font-mono);
+  font-size: var(--fs-hint);
+  color: var(--text-hint);
+  letter-spacing: 1px;
+  flex-shrink: 0;
+}
+.audio-sink-item.selected .sink-state { color: rgba(0,164,220,0.7); }

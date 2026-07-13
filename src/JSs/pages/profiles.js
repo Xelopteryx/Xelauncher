@@ -1,0 +1,550 @@
+/**
+ * profiles.js
+ * Sélection de profil Jellyfin, éditeur, avatar picker, mapper inline.
+ * Dépendances : input.js (XeInput)
+ */
+
+'use strict';
+
+/* -- État global -- */
+var serverUrl     = '';
+var profiles      = [];
+var focusZone     = 1;
+var currentScreen = 'loading';
+
+var editingProfile    = null;
+var editorFocusIdx    = 0;
+var editorBtnIdx      = 0;
+var EDITOR_FIELDS     = ['eName', 'eUser', 'ePass'];
+var editorBtnsVisible = [];
+
+var avatarList     = [];
+var avatarFocusIdx = 0;
+
+var serverEditValue = '';
+var serverPingTimer = null;
+var inputReady      = false;
+
+var _mapper        = null;
+var _mapperActive  = false;
+var _mapperWaiting = false;
+var _mapperDeviceId = '';
+var _mapperIdx      = 0;
+var _mapperResult   = {};
+
+/* -- Toast -- */
+var _toast = null;
+function showToast(msg, isError) { if (_toast) _toast.show(msg, isError); }
+
+/* -- Clavier virtuel -- */
+var _kb = null;
+
+function openKb(label, initial, callback, type) {
+  if (_kb) {
+    _kb.value    = initial || '';
+    _kb.type     = (type === 'url') ? 'url' : 'normal';
+    _kb.mode     = 'letters';
+    _kb.caps     = false;
+    _kb.section  = 'kb';
+    _kb.row      = 0;
+    _kb.col      = 0;
+    _kb.topFocus = 0;
+    _kb.onConfirm = function(val) { closeKb(); if (callback) callback(val); };
+    _kb.onCancel  = function() { closeKb(); };
+    document.getElementById('kbLabel').textContent   = label;
+    document.getElementById('kbDisplay').textContent = (initial || '') + '|';
+    _kb._render();
+  }
+  document.getElementById('kbOverlay').classList.add('visible');
+  currentScreen = 'kb';
+}
+
+function closeKb() {
+  document.getElementById('kbOverlay').classList.remove('visible');
+  currentScreen = getPrevScreen();
+}
+
+/* -- Init -- */
+document.addEventListener('DOMContentLoaded', function() {
+  waitForXeInput(initProfiles);
+});
+
+function waitForXeInput(cb, attempts) {
+  attempts = attempts || 0;
+  if (window.XeInput && window.XeInput.Toast && window.XeInput.InputMapper &&
+      window.XeInput.EvdevPoller && window.XeInput.VirtualKeyboard) {
+    cb();
+  } else if (attempts < 50) {
+    setTimeout(function() { waitForXeInput(cb, attempts + 1); }, 20);
+  } else {
+    console.error('XeInput failed to load after 1s');
+  }
+}
+
+function initProfiles() {
+  _toast = new XeInput.Toast(document.getElementById('toast'));
+
+  _kb = new XeInput.VirtualKeyboard(
+    document.getElementById('kbRows'),
+    document.getElementById('kbDisplay'),
+    document.getElementById('kbOverlay'),
+    'normal'
+  );
+
+  document.getElementById('kbModeLetters').addEventListener('click', function() { _kb.setMode('letters'); });
+  document.getElementById('kbModeNums').addEventListener('click',    function() { _kb.setMode('nums'); });
+  document.getElementById('kbModeSpecials').addEventListener('click',function() { _kb.setMode('specials'); });
+
+  document.getElementById('backBtn').addEventListener('click',    goBack);
+  document.getElementById('serverBtn').addEventListener('click',  openServerSetup);
+  document.getElementById('eBtnAvatar').addEventListener('click', openAvatarPicker);
+  document.getElementById('eBtnSave').addEventListener('click',   saveEditor);
+  document.getElementById('eBtnDelete').addEventListener('click', deleteEditor);
+  document.getElementById('eBtnCancel').addEventListener('click', closeEditor);
+
+  if (XeInput.requestWakeLock) XeInput.requestWakeLock();
+
+  if (window.xeLauncher) {
+    window.xeLauncher.getProfiles().then(function(data) {
+      serverUrl = (data && data.server)   ? data.server   : '';
+      profiles  = (data && data.profiles) ? data.profiles : [];
+      if (!serverUrl) showServerSetup();
+      else            showProfilesView();
+
+      var pendingRaw = null;
+      try { pendingRaw = sessionStorage.getItem('jmpmap_pendingProfile'); } catch(e) {}
+      if (pendingRaw) {
+        try { sessionStorage.removeItem('jmpmap_pendingProfile'); } catch(e) {}
+        var pendingProfile = null;
+        try { pendingProfile = JSON.parse(pendingRaw); } catch(e) {}
+        if (pendingProfile && serverUrl) {
+          setTimeout(function() { launchProfile(pendingProfile); }, 600);
+        }
+      }
+    }).catch(function() { showServerSetup(); });
+  } else {
+    showServerSetup();
+  }
+
+  _mapper = new XeInput.InputMapper();
+  var _gpPoller = new XeInput.EvdevPoller(function(resolved) {
+    if (!inputReady) return;
+    handleKey(resolved);
+  });
+  _gpPoller._customMaps = _mapper._maps;
+  _gpPoller._lastGpId   = '__keyboard__';
+  _gpPoller.onRawEvent  = function(raw, device) {
+    _gpPoller._lastGpId = device || '__keyboard__';
+    if (_mapperActive && _mapperWaiting) { _mapperReceive(raw); return; }
+  };
+  _gpPoller.start();
+  setTimeout(function() { inputReady = true; }, 1000);
+}
+
+/* -- Utilitaires -- */
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function getPrevScreen() {
+  if (document.getElementById('editorOverlay').classList.contains('visible')) return 'editor';
+  if (document.getElementById('avatarPicker').classList.contains('visible'))  return 'avatar';
+  var pv = document.getElementById('profilesView');
+  if (pv && pv.style.display !== 'none') return 'profiles';
+  return 'server';
+}
+
+/* ----------------------------------------
+   SERVEUR
+---------------------------------------- */
+function showServerSetup() {
+  document.getElementById('serverSetup').style.display  = 'flex';
+  document.getElementById('profilesView').style.display = 'none';
+  currentScreen   = 'server';
+  serverEditValue = serverUrl || '';
+  updateServerDisplay();
+}
+
+function openServerSetup() { showServerSetup(); }
+
+function updateServerDisplay() {
+  var el = document.getElementById('serverInput');
+  el.textContent = (serverEditValue || '') + '|';
+  el.classList.toggle('active', currentScreen === 'server');
+  pingServer(serverEditValue);
+}
+
+function pingServer(url) {
+  var icon = document.getElementById('serverPingIcon');
+  if (!url || url.length < 4) { icon.textContent = ''; icon.className = 'server-ping-icon'; return; }
+  icon.className   = 'server-ping-icon checking';
+  icon.textContent = '?';
+  clearTimeout(serverPingTimer);
+  serverPingTimer = setTimeout(function() {
+    var fullUrl = url.indexOf('://') < 0 ? 'http://' + url : url;
+    fetch(fullUrl + '/System/Ping', { signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined })
+      .then(function(r) {
+        if (r.ok || r.status < 500) { icon.className = 'server-ping-icon ok';   icon.textContent = '? En ligne'; }
+        else throw new Error();
+      })
+      .catch(function() { icon.className = 'server-ping-icon fail'; icon.textContent = '? Hors ligne'; });
+  }, 700);
+}
+
+function confirmServer() {
+  if (!serverEditValue) return;
+  var fullUrl = serverEditValue.indexOf('://') < 0 ? 'http://' + serverEditValue : serverEditValue;
+  serverUrl = fullUrl;
+  if (window.xeLauncher?.saveServer) window.xeLauncher.saveServer(serverUrl).catch(function() {});
+  showProfilesView();
+  showToast('Serveur configuré', false);
+}
+
+/* ----------------------------------------
+   VUE PROFILS
+---------------------------------------- */
+function showProfilesView() {
+  document.getElementById('serverSetup').style.display  = 'none';
+  var pv = document.getElementById('profilesView');
+  pv.style.display       = 'flex';
+  pv.style.flexDirection = 'column';
+  pv.style.alignItems    = 'center';
+  pv.style.gap           = 'clamp(16px,3.5vh,40px)';
+  pv.style.width         = '100%';
+  pv.style.position      = 'relative';
+  pv.style.zIndex        = '1';
+  document.getElementById('serverBtnIp').textContent = serverUrl || '—';
+  currentScreen = 'profiles';
+  focusZone     = 1;
+  renderProfiles();
+}
+
+function renderProfiles() {
+  var grid = document.getElementById('profilesGrid');
+  grid.innerHTML = '';
+
+  profiles.forEach(function(p, i) {
+    var zone = i + 1;
+    var card = document.createElement('div');
+    card.className = 'profile-card' + (focusZone === zone ? ' active' : ' inactive');
+    card.id = 'pcard-' + i;
+    var avatarSrc = p.avatarData || '';
+    card.innerHTML =
+      '<div class="avatar-wrap"><img src="' + escHtml(avatarSrc) +
+      '" alt="' + escHtml(p.name) + '" onerror="this.style.display=\'none\'"></div>' +
+      '<span class="profile-name">' + escHtml(p.name) + '</span>';
+    card.addEventListener('click',    function() { focusZone = zone; renderProfiles(); });
+    card.addEventListener('dblclick', function() { focusZone = zone; confirmProfile(); });
+    grid.appendChild(card);
+  });
+
+  var addZone = profiles.length + 1;
+  var addCard = document.createElement('div');
+  addCard.className = 'profile-card profile-add' + (focusZone === addZone ? ' active' : ' inactive');
+  addCard.id = 'pcard-add';
+  addCard.innerHTML =
+    '<div class="avatar-wrap"><div class="avatar-placeholder"><span class="plus-icon">+</span></div></div>' +
+    '<span class="profile-name">Ajouter</span>';
+  addCard.addEventListener('click',    function() { focusZone = addZone; renderProfiles(); });
+  addCard.addEventListener('dblclick', function() { focusZone = addZone; confirmProfile(); });
+  grid.appendChild(addCard);
+
+  var serverZone = profiles.length + 2;
+  document.getElementById('serverBtn').classList.toggle('active', focusZone === serverZone);
+  document.getElementById('backBtn').classList.toggle('active',   focusZone === 0);
+}
+
+function confirmProfile() {
+  var addZone    = profiles.length + 1;
+  var serverZone = profiles.length + 2;
+  if (focusZone === 0)          { goBack(); return; }
+  if (focusZone === serverZone) { openServerSetup(); return; }
+  if (focusZone === addZone)    { openEditor(null); return; }
+  var profile = profiles[focusZone - 1];
+  var card    = document.getElementById('pcard-' + (focusZone - 1));
+  if (card) card.classList.add('pressing');
+  setTimeout(function() {
+    if (card) card.classList.remove('pressing');
+    launchProfile(profile);
+  }, 350);
+}
+
+function goBack() {
+  if (window.xeLauncher) window.xeLauncher.goBack();
+  else window.history.back();
+}
+
+function launchProfile(profile) {
+  if (!window.xeLauncher) { showToast('xeLauncher non disponible', true); return; }
+  document.getElementById('loadingText').textContent = 'Connexion en cours…';
+  document.getElementById('loadingOverlay').classList.add('visible');
+  window.xeLauncher.jellyfinAuthenticate(serverUrl, profile.username, profile.password)
+    .then(function(result) {
+      document.getElementById('loadingOverlay').classList.remove('visible');
+      if (!result.ok || !result.accessToken) {
+        showToast('Erreur : ' + (result.error || 'Identifiants incorrects'), true);
+        return;
+      }
+      showToast('Bienvenue ' + profile.name + ' !', false);
+      setTimeout(function() {
+        window.xeLauncher.launchJellyfinWithToken(serverUrl, result.accessToken, result.userId, result.serverId);
+      }, 800);
+    })
+    .catch(function() {
+      document.getElementById('loadingOverlay').classList.remove('visible');
+      showToast('Erreur réseau', true);
+    });
+}
+
+/* ----------------------------------------
+   ÉDITEUR
+---------------------------------------- */
+function openEditor(profile) {
+  editingProfile = profile
+    ? JSON.parse(JSON.stringify(profile))
+    : { id: 'p_' + Date.now(), name: '', username: '', password: '', avatarData: null };
+  document.getElementById('editorTitle').textContent       = profile ? 'Modifier — ' + profile.name : 'Nouveau profil';
+  document.getElementById('eName').textContent             = editingProfile.name;
+  document.getElementById('eUser').textContent             = editingProfile.username;
+  document.getElementById('ePass').textContent             = editingProfile.password ? '••••••••' : '';
+  document.getElementById('editorAvatarPreview').src       = editingProfile.avatarData || '';
+  document.getElementById('eBtnDelete').style.display      = profile ? '' : 'none';
+  editorBtnsVisible = profile
+    ? ['eBtnAvatar', 'eBtnSave', 'eBtnDelete', 'eBtnCancel']
+    : ['eBtnAvatar', 'eBtnSave', 'eBtnCancel'];
+  editorFocusIdx = 0;
+  editorBtnIdx   = 0;
+  updateEditorFocus();
+  document.getElementById('editorOverlay').classList.add('visible');
+  currentScreen = 'editor';
+}
+
+function closeEditor() {
+  document.getElementById('editorOverlay').classList.remove('visible');
+  currentScreen = 'profiles';
+}
+
+function updateEditorFocus() {
+  EDITOR_FIELDS.forEach(function(id, i) {
+    document.getElementById(id).classList.toggle('active', editorFocusIdx === i);
+  });
+  editorBtnsVisible.forEach(function(id, i) {
+    document.getElementById(id).classList.toggle('active', editorFocusIdx === 3 && editorBtnIdx === i);
+  });
+}
+
+function editorConfirm() {
+  var LABELS = ['Nom affiché', 'Utilisateur Jellyfin', 'Mot de passe'];
+  var KEYS   = ['name', 'username', 'password'];
+  if (editorFocusIdx < 3) {
+    var key = KEYS[editorFocusIdx];
+    var cur = editingProfile[key] || '';
+    openKb(LABELS[editorFocusIdx], cur, function(val) {
+      editingProfile[key] = val;
+      var elId = EDITOR_FIELDS[editorFocusIdx];
+      document.getElementById(elId).textContent = editorFocusIdx === 2 ? '••••••••' : val;
+      currentScreen = 'editor';
+    }, 'normal');
+  } else {
+    var btnId = editorBtnsVisible[editorBtnIdx];
+    if      (btnId === 'eBtnAvatar') openAvatarPicker();
+    else if (btnId === 'eBtnSave')   saveEditor();
+    else if (btnId === 'eBtnDelete') deleteEditor();
+    else                             closeEditor();
+  }
+}
+
+function saveEditor() {
+  if (!editingProfile.name || !editingProfile.username) { showToast('Nom et utilisateur requis', true); return; }
+  if (!window.xeLauncher) { closeEditor(); return; }
+  window.xeLauncher.saveProfile(editingProfile).then(function() {
+    closeEditor();
+    return window.xeLauncher.getProfiles();
+  }).then(function(data) {
+    profiles  = data.profiles || [];
+    serverUrl = data.server   || serverUrl;
+    renderProfiles();
+    showToast('Profil sauvegardé', false);
+  }).catch(function() { showToast('Erreur sauvegarde', true); });
+}
+
+function deleteEditor() {
+  if (!editingProfile.id || !window.xeLauncher) return;
+  window.xeLauncher.deleteProfile(editingProfile.id).then(function() {
+    closeEditor();
+    return window.xeLauncher.getProfiles();
+  }).then(function(data) {
+    profiles = data.profiles || [];
+    renderProfiles();
+    showToast('Profil supprimé', false);
+  }).catch(function() { showToast('Erreur suppression', true); });
+}
+
+/* ----------------------------------------
+   AVATAR PICKER
+---------------------------------------- */
+function openAvatarPicker() {
+  if (!window.xeLauncher) return;
+  window.xeLauncher.getAvatars().then(function(files) {
+    avatarList     = files || [];
+    avatarFocusIdx = 0;
+    return renderAvatarGrid();
+  }).then(function() {
+    document.getElementById('avatarPicker').classList.add('visible');
+    currentScreen = 'avatar';
+  }).catch(function() { showToast('Erreur chargement avatars', true); });
+}
+
+function renderAvatarGrid() {
+  var grid = document.getElementById('avatarGrid');
+  grid.innerHTML = '';
+  if (!avatarList.length) {
+    grid.innerHTML = '<div class="avatar-empty">Aucun avatar dans ~/xelauncher/avatars/</div>';
+    return Promise.resolve();
+  }
+  var promises = avatarList.map(function(file, i) {
+    return window.xeLauncher.getAvatarData(file).then(function(data) {
+      if (!data) return;
+      var img = document.createElement('img');
+      img.className   = 'avatar-thumb' + (i === avatarFocusIdx ? ' active' : '');
+      img.src         = data;
+      img.dataset.idx = i;
+      img.dataset.src = data;
+      img.addEventListener('click', function() { selectAvatar(data); });
+      grid.appendChild(img);
+    });
+  });
+  return Promise.all(promises);
+}
+
+function updateAvatarFocus() {
+  document.querySelectorAll('.avatar-thumb').forEach(function(el, i) {
+    el.classList.toggle('active', i === avatarFocusIdx);
+  });
+}
+
+function selectAvatar(data) {
+  if (editingProfile) editingProfile.avatarData = data;
+  document.getElementById('editorAvatarPreview').src = data;
+  document.getElementById('avatarPicker').classList.remove('visible');
+  currentScreen = 'editor';
+}
+
+/* ----------------------------------------
+   NAVIGATION CLAVIER
+---------------------------------------- */
+function handleKey(key) {
+  if (currentScreen === 'kb') {
+    if (_kb && _kb.handleKey(key)) return;
+    if (key === 'Escape') closeKb();
+    return;
+  }
+
+  if (currentScreen === 'avatar') {
+    var thumbs = document.querySelectorAll('.avatar-thumb');
+    var cols   = Math.max(3, Math.floor(window.innerWidth * 0.7 / 120));
+    if      (key === 'ArrowLeft')  { avatarFocusIdx = Math.max(0, avatarFocusIdx - 1); updateAvatarFocus(); }
+    else if (key === 'ArrowRight') { avatarFocusIdx = Math.min(thumbs.length - 1, avatarFocusIdx + 1); updateAvatarFocus(); }
+    else if (key === 'ArrowUp')    { avatarFocusIdx = Math.max(0, avatarFocusIdx - cols); updateAvatarFocus(); }
+    else if (key === 'ArrowDown')  { avatarFocusIdx = Math.min(thumbs.length - 1, avatarFocusIdx + cols); updateAvatarFocus(); }
+    else if (key === 'Enter')      { var t = thumbs[avatarFocusIdx]; if (t) selectAvatar(t.dataset.src); }
+    else if (key === 'Escape')     { document.getElementById('avatarPicker').classList.remove('visible'); currentScreen = 'editor'; }
+    return;
+  }
+
+  if (currentScreen === 'editor') {
+    var maxBtn = editorBtnsVisible.length - 1;
+    if      (key === 'ArrowUp')    { if (editorFocusIdx > 0) { editorFocusIdx--; updateEditorFocus(); } }
+    else if (key === 'ArrowDown')  { if (editorFocusIdx < 3) { editorFocusIdx++; updateEditorFocus(); } }
+    else if (key === 'ArrowLeft')  { if (editorFocusIdx === 3) { editorBtnIdx = Math.max(0, editorBtnIdx - 1); updateEditorFocus(); } }
+    else if (key === 'ArrowRight') { if (editorFocusIdx === 3) { editorBtnIdx = Math.min(maxBtn, editorBtnIdx + 1); updateEditorFocus(); } }
+    else if (key === 'Enter')      editorConfirm();
+    else if (key === 'Escape')     closeEditor();
+    return;
+  }
+
+  if (currentScreen === 'server') {
+    if (key === 'Enter') {
+      openKb('Adresse du serveur (ex: 192.168.1.100:8096)', serverEditValue, function(val) {
+        serverEditValue = val;
+        updateServerDisplay();
+        currentScreen = 'server';
+        if (serverEditValue) confirmServer();
+      }, 'url');
+    } else if (key === 'Escape') goBack();
+    return;
+  }
+
+  if (currentScreen === 'profiles') {
+    var total = profiles.length + 2;
+    if      (key === 'ArrowLeft')  { focusZone = focusZone > 0     ? focusZone - 1 : total; renderProfiles(); }
+    else if (key === 'ArrowRight') { focusZone = focusZone < total ? focusZone + 1 : 0;     renderProfiles(); }
+    else if (key === 'ArrowUp')    { focusZone = 0; renderProfiles(); }
+    else if (key === 'ArrowDown')  { if (focusZone === 0) { focusZone = 1; renderProfiles(); } }
+    else if (key === 'Enter')      confirmProfile();
+    else if (key === 'Triangle')   { if (focusZone > 0 && focusZone <= profiles.length) openEditor(profiles[focusZone - 1]); }
+    else if (key === 'Escape')     goBack();
+    return;
+  }
+}
+
+/* ----------------------------------------
+   MAPPER INLINE
+---------------------------------------- */
+function _openMapper(deviceId) {
+  _mapperDeviceId = deviceId;
+  _mapperIdx      = 0;
+  _mapperResult   = {};
+  _mapperActive   = true;
+  _mapperWaiting  = false;
+  var el = document.getElementById('mapperOverlay');
+  el.innerHTML = '';
+  el.className = 'mapper-overlay visible';
+  var title = document.createElement('div'); title.className = 'mapper-title'; title.textContent = 'Configuration de la manette'; el.appendChild(title);
+  var dev = document.createElement('div');   dev.className   = 'mapper-device'; dev.textContent   = deviceId.substring(0, 60);    el.appendChild(dev);
+  var act = document.createElement('div');   act.className   = 'mapper-actions'; act.id = 'mapperAct'; el.appendChild(act);
+  var grid = document.createElement('div'); grid.className  = 'mapper-grid';    grid.id = 'mapperGrid'; el.appendChild(grid);
+  var hint = document.createElement('div'); hint.className  = 'mapper-hint';    hint.textContent = 'Appuyez sur le bouton correspondant à chaque action'; el.appendChild(hint);
+  var skipBtn = document.createElement('button');
+  skipBtn.className = 'btn'; skipBtn.textContent = 'Utiliser les valeurs par défaut'; skipBtn.style.marginTop = '8px';
+  skipBtn.addEventListener('click', function() { _mapper.save(_mapperDeviceId, _mapper.getDefault()); _closeMapper(); showToast('Manette configurée !', false); });
+  el.appendChild(skipBtn);
+  _renderMapper();
+  _mapperNextStep();
+}
+
+function _mapperNextStep() {
+  if (_mapperIdx >= XeInput.ACTION_KEYS.length) { _mapper.save(_mapperDeviceId, _mapperResult); _closeMapper(); showToast('Manette configurée !', false); return; }
+  _mapperWaiting = true;
+  var act = document.getElementById('mapperAct');
+  if (act) act.textContent = 'Appuyez pour : ' + XeInput.ACTION_KEYS[_mapperIdx].label;
+  _renderMapper();
+}
+
+function _mapperReceive(rawKey) {
+  if (!_mapperWaiting) return;
+  _mapperResult[XeInput.ACTION_KEYS[_mapperIdx].id] = rawKey;
+  _mapperIdx++;
+  _mapperWaiting = false;
+  setTimeout(_mapperNextStep, 200);
+  _renderMapper();
+}
+
+function _renderMapper() {
+  var grid = document.getElementById('mapperGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  XeInput.ACTION_KEYS.forEach(function(action, i) {
+    var btn = document.createElement('div');
+    btn.className = 'mapper-btn' + (i < _mapperIdx ? ' assigned' : '') + (i === _mapperIdx && _mapperWaiting ? ' current-target' : '');
+    var label = document.createElement('span'); label.textContent = action.label; btn.appendChild(label);
+    if (i < _mapperIdx) { var kn = document.createElement('span'); kn.className = 'mapper-key-name'; kn.textContent = _mapperResult[action.id] || '—'; btn.appendChild(kn); }
+    grid.appendChild(btn);
+  });
+}
+
+function _closeMapper() {
+  _mapperActive = false; _mapperWaiting = false;
+  var el = document.getElementById('mapperOverlay');
+  el.classList.remove('visible'); el.innerHTML = '';
+}

@@ -1,0 +1,411 @@
+/* calibration.css */
+
+/* ── Écrans ─────────────────────────────────────────────────── */
+.calib-screen {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  animation: fadeIn 0.4s ease-in both;
+  gap: clamp(16px, 3vh, 36px);
+}
+
+/* ── Header étape 1 ──────────────────────────────────────────── */
+.calib-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  z-index: 1;
+}
+
+.calib-step-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-hint);
+  letter-spacing: 4px;
+  color: rgba(0, 164, 220, 0.45);
+  text-transform: uppercase;
+}
+
+.calib-title {
+  font-family: var(--font-title);
+  font-size: var(--fs-hero);
+  color: var(--gold);
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.calib-subtitle {
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--text-dim);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+/* ── Grille de ratios ────────────────────────────────────────── */
+.ratio-grid {
+  display: flex;
+  gap: clamp(12px, 2vw, 28px);
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 86vw;
+  position: relative;
+  z-index: 1;
+}
+
+.ratio-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: clamp(14px, 2vh, 22px) clamp(16px, 2.5vw, 28px);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, transform 0.18s;
+  min-width: clamp(100px, 12vw, 160px);
+}
+
+.ratio-card.active {
+  border-color: var(--gold);
+  background: rgba(232, 213, 176, 0.06);
+  transform: scale(1.05) translateY(-3px);
+  box-shadow: 0 0 32px rgba(232, 213, 176, 0.15);
+}
+
+.ratio-card.inactive {
+  filter: brightness(0.5);
+  transform: scale(0.96);
+}
+
+.ratio-preview {
+  width: clamp(60px, 9vw, 120px);
+  height: clamp(36px, 5.5vw, 72px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ratio-box {
+  border: 1px solid rgba(232, 213, 176, 0.4);
+  background: rgba(232, 213, 176, 0.05);
+  max-width: 100%;
+  max-height: 100%;
+  width: 100%;
+}
+
+.ratio-card.active .ratio-box {
+  border-color: var(--gold);
+  background: rgba(232, 213, 176, 0.1);
+}
+
+.ratio-label {
+  font-family: var(--font-title);
+  font-size: var(--fs-body);
+  color: rgba(232, 213, 176, 0.6);
+  letter-spacing: 3px;
+  transition: color 0.18s;
+}
+
+.ratio-card.active .ratio-label {
+  color: var(--gold);
+}
+
+.ratio-desc {
+  font-family: var(--font-mono);
+  font-size: var(--fs-hint);
+  color: var(--text-hint);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+/* ── Canvas de calibration ───────────────────────────────────── */
+.calib-canvas {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.calib-bg-pattern {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg,   transparent, transparent 59px, rgba(255,255,255,0.03) 59px, rgba(255,255,255,0.03) 60px),
+    repeating-linear-gradient(90deg,  transparent, transparent 59px, rgba(255,255,255,0.03) 59px, rgba(255,255,255,0.03) 60px);
+}
+
+/* Halo extérieur (zone hors safe area) */
+.calib-canvas::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 8, 14, 0.55);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Safe frame ──────────────────────────────────────────────── */
+.safe-frame {
+  position: absolute;
+  z-index: 2;
+  /* position et taille gérées par JS */
+}
+
+.frame-line {
+  position: absolute;
+  background: rgba(0, 164, 220, 0.35);
+}
+
+.frame-top    { top: 0;    left: 20px;  right: 20px; height: 1px; }
+.frame-bottom { bottom: 0; left: 20px;  right: 20px; height: 1px; }
+.frame-left   { left: 0;   top: 20px;   bottom: 20px; width: 1px; }
+.frame-right  { right: 0;  top: 20px;   bottom: 20px; width: 1px; }
+
+/* ── Coins draggables ────────────────────────────────────────── */
+.corner {
+  position: absolute;
+  width: clamp(28px, 3.5vw, 48px);
+  height: clamp(28px, 3.5vw, 48px);
+  z-index: 10;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+/* Dessin des coins en L */
+.corner::before,
+.corner::after {
+  content: '';
+  position: absolute;
+  background: var(--gold);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+#cornerTL { top: 0;    left: 0;  }
+#cornerTR { top: 0;    right: 0; }
+#cornerBL { bottom: 0; left: 0;  }
+#cornerBR { bottom: 0; right: 0; }
+
+/* Branche horizontale */
+#cornerTL::before, #cornerTR::before,
+#cornerBL::before, #cornerBR::before {
+  height: 3px;
+  width: 100%;
+}
+#cornerTL::before { top: 0; left: 0; }
+#cornerTR::before { top: 0; right: 0; }
+#cornerBL::before { bottom: 0; left: 0; }
+#cornerBR::before { bottom: 0; right: 0; }
+
+/* Branche verticale */
+#cornerTL::after { width: 3px; height: 100%; top: 0; left: 0; }
+#cornerTR::after { width: 3px; height: 100%; top: 0; right: 0; }
+#cornerBL::after { width: 3px; height: 100%; bottom: 0; left: 0; }
+#cornerBR::after { width: 3px; height: 100%; bottom: 0; right: 0; }
+
+.corner.active::before,
+.corner.active::after {
+  background: #fff;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+}
+
+@keyframes corner-pulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(255,255,255,0); }
+  50%       { box-shadow: 0 0 18px rgba(255,255,255,0.4); }
+}
+
+.corner.active {
+  animation: corner-pulse 1s ease-in-out infinite;
+}
+
+/* ── Contenu safe area ───────────────────────────────────────── */
+.safe-content {
+  position: absolute;
+  inset: clamp(20px, 3vw, 48px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 2vh, 20px);
+  pointer-events: none;
+}
+
+.preview-title {
+  font-family: var(--font-title);
+  color: var(--gold);
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  text-align: center;
+  /* taille définie par JS via --calib-scale */
+  font-size: calc(var(--fs-hero) * var(--calib-text-scale, 1));
+}
+
+.preview-body {
+  font-family: var(--font-mono);
+  color: var(--text);
+  letter-spacing: 2px;
+  text-align: center;
+  font-size: calc(var(--fs-body) * var(--calib-text-scale, 1));
+}
+
+.preview-hint {
+  font-family: var(--font-mono);
+  color: var(--text-hint);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  text-align: center;
+  font-size: calc(var(--fs-hint) * var(--calib-text-scale, 1));
+}
+
+/* ── Slider texte ────────────────────────────────────────────── */
+.text-scale-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: clamp(8px, 2vh, 24px);
+  pointer-events: none;
+}
+
+.text-scale-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-hint);
+  letter-spacing: 3px;
+  color: rgba(0, 164, 220, 0.5);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.text-scale-track {
+  position: relative;
+  width: clamp(100px, 14vw, 200px);
+  height: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.text-scale-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: var(--blue);
+  transition: width 0.1s;
+}
+
+.text-scale-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  background: var(--blue);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--blue);
+  transition: left 0.1s;
+}
+
+.text-scale-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-hint);
+  letter-spacing: 2px;
+  color: var(--blue);
+  min-width: 3em;
+  text-align: right;
+}
+
+/* ── Mesures ─────────────────────────────────────────────────── */
+.calib-measure {
+  position: fixed;
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 1vw, 12px);
+  letter-spacing: 2px;
+  color: rgba(0, 164, 220, 0.5);
+  z-index: 5;
+  pointer-events: none;
+  text-transform: uppercase;
+}
+
+.calib-measure-top    { top: 6px;   left: 50%; transform: translateX(-50%); }
+.calib-measure-bottom { bottom: 6px; left: 50%; transform: translateX(-50%); }
+.calib-measure-left   { left: 6px;  top: 50%;  transform: translateY(-50%); }
+.calib-measure-right  { right: 6px; top: 50%;  transform: translateY(-50%); }
+
+/* ── Panneau de contrôle (overlay bas) ───────────────────────── */
+.calib-controls {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: linear-gradient(to top, rgba(8,8,14,0.97) 60%, transparent);
+  padding: clamp(12px, 2vh, 24px) clamp(16px, 3vw, 40px);
+}
+
+.calib-controls-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(20px, 3vw, 48px);
+  max-width: 100%;
+}
+
+.ctrl-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.ctrl-section:last-child {
+  flex-direction: row;
+  gap: 10px;
+}
+
+.ctrl-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-hint);
+  letter-spacing: 4px;
+  color: rgba(0, 164, 220, 0.45);
+  text-transform: uppercase;
+}
+
+/* Sélecteur de coin */
+.corner-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.csq {
+  width: clamp(26px, 3vw, 36px);
+  height: clamp(26px, 3vw, 36px);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-small);
+  color: var(--text-hint);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.csq.active {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(232, 213, 176, 0.08);
+}
+
+/* Grille des hints */
+.ctrl-hint-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-hint);
+}
+
+.ctrl-hint-grid span:nth-child(odd)  { color: var(--blue);      letter-spacing: 1px; white-space: nowrap; }
+.ctrl-hint-grid span:nth-child(even) { color: var(--text-hint); letter-spacing: 1px; }

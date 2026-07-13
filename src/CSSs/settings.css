@@ -5,10 +5,11 @@
   z-index: 1;
   display: flex;
   height: 100vh;
+  font-family: var(--font-title);
 }
 
 .settings-sidebar {
-  width: clamp(180px, 18vw, 260px);
+  width: clamp(220px, 20vw, 300px);
   background: rgba(10,10,15,0.97);
   border-right: 1px solid var(--border);
   display: flex;
@@ -44,8 +45,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-family: var(--font-mono);
-  font-size: clamp(9px,1.05vw,12px);
+  font-family: var(--font-admin);
+  font-size: var(--fs-label);
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -54,7 +55,7 @@
 }
 
 .sidebar-item .icon {
-  font-size: clamp(13px,1.5vw,17px);
+  font-size: var(--fs-body);
   width: 22px;
   text-align: center;
 }
@@ -73,7 +74,7 @@
 
 .section-title {
   font-family: var(--font-title);
-  font-size: clamp(11px,1.4vw,16px);
+  font-size: var(--fs-title);
   font-weight: 400;
   margin-bottom: clamp(12px,2vh,20px);
   color: rgba(0,164,220,0.7);
@@ -96,23 +97,23 @@
   cursor: pointer;
   transition: all 0.15s;
   border-left: 2px solid transparent;
-  font-family: var(--font-mono);
+  font-family: var(--font-admin);
 }
 
 .settings-row.active { background: var(--blue-bg); border-left-color: var(--blue); }
 
 .settings-row-label {
-  font-size: clamp(10px,1.15vw,13px);
+  font-size: var(--fs-body);
   letter-spacing: 1.5px;
   color: var(--text);
   text-transform: uppercase;
 }
 
 .settings-row-value {
-  font-size: clamp(10px,1.15vw,13px);
+  font-size: var(--fs-body);
   color: rgba(0,164,220,0.7);
   letter-spacing: 2px;
-  font-family: var(--font-mono);
+  font-family: var(--font-admin);
 }
 
 /* Toggle */
@@ -137,7 +138,7 @@
   padding: clamp(9px,1.3vh,14px) clamp(14px,2vw,22px);
   display: flex; justify-content: space-between; align-items: center;
   border-bottom: 1px solid var(--border);
-  cursor: pointer; transition: 0.15s; font-family: var(--font-mono);
+  cursor: pointer; transition: 0.15s; font-family: var(--font-admin);
   border-left: 2px solid transparent;
 }
 .wifi-network:hover,.bt-item:hover,.iface-item:hover,.device-item:hover { background: var(--blue-bg); }
@@ -145,13 +146,13 @@
 .wifi-network.current { border-left-color: #a5d6a7; }
 
 .wifi-ssid {
-  font-size: clamp(10px,1.15vw,13px); letter-spacing: 1.5px;
+  font-size: var(--fs-body); letter-spacing: 1.5px;
   color: var(--text); text-transform: uppercase;
 }
 
 .wifi-meta {
   display: flex; gap: 10px; align-items: center;
-  color: var(--text-dim); font-size: clamp(9px,1vw,11px);
+  color: var(--text-dim); font-size: var(--fs-small);
 }
 
 /* Signal bars CSS */
@@ -167,12 +168,12 @@
 .wifi-signal .bar:nth-child(4) { height: 14px; }
 
 .wifi-security {
-  font-size: clamp(8px,0.9vw,10px); letter-spacing: 1px;
+  font-size: var(--fs-hint); letter-spacing: 1px;
   color: rgba(0,164,220,0.5); text-transform: uppercase;
 }
 
 .wifi-hidden-label {
-  font-size: clamp(8px,0.85vw,10px); letter-spacing: 1px;
+  font-size: var(--fs-hint); letter-spacing: 1px;
   color: rgba(255,200,0,0.5); text-transform: uppercase;
 }
 
@@ -183,12 +184,12 @@
 .iface-dot.down { background: var(--red); }
 
 .iface-name {
-  flex: 1; font-size: clamp(10px,1.15vw,13px);
+  flex: 1; font-size: var(--fs-body);
   letter-spacing: 1.5px; text-transform: uppercase; color: var(--text);
 }
 
 .iface-ip {
-  font-size: clamp(9px,1.05vw,12px); font-family: var(--font-mono);
+  font-size: var(--fs-label); font-family: var(--font-admin);
   color: rgba(0,164,220,0.7); letter-spacing: 1px;
 }
 
@@ -203,11 +204,11 @@
 }
 .iface-field { display: flex; flex-direction: column; gap: 4px; }
 .iface-field-label {
-  font-size: clamp(8px,0.9vw,10px); letter-spacing: 3px;
-  color: rgba(0,164,220,0.5); text-transform: uppercase; font-family: var(--font-mono);
+  font-size: var(--fs-hint); letter-spacing: 3px;
+  color: rgba(0,164,220,0.5); text-transform: uppercase; font-family: var(--font-admin);
 }
 .iface-field-value {
-  font-family: var(--font-mono); font-size: clamp(10px,1.1vw,13px);
+  font-family: var(--font-admin); font-size: var(--fs-key);
   letter-spacing: 1px; color: var(--text);
   background: var(--bg2); border: 1px solid var(--blue-dim);
   padding: 6px 10px; cursor: pointer; transition: border-color 0.15s;
@@ -215,7 +216,7 @@
 .iface-field-value.active { border-color: var(--blue); color: #fff; }
 .iface-apply-btn {
   grid-column: span 2;
-  font-family: var(--font-mono); font-size: clamp(9px,1vw,11px);
+  font-family: var(--font-admin); font-size: var(--fs-small);
   letter-spacing: 3px; text-transform: uppercase;
   background: transparent; border: 1px solid var(--blue-dim);
   color: rgba(0,164,220,0.7); padding: 8px 0; cursor: pointer;
@@ -224,7 +225,7 @@
 .iface-apply-btn.active { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
 
 .iface-mode-btn {
-  font-family: var(--font-mono); font-size: clamp(8px,0.9vw,10px);
+  font-family: var(--font-admin); font-size: var(--fs-hint);
   letter-spacing: 2px; text-transform: uppercase;
   background: transparent; border: 1px solid var(--border);
   color: var(--text-dim); padding: 4px 12px; cursor: pointer; transition: all 0.15s;
@@ -234,13 +235,13 @@
 /* Bluetooth */
 .bt-icon,.device-icon { font-size: clamp(14px,1.6vw,18px); margin-right: 10px; flex-shrink: 0; }
 .bt-name,.device-name {
-  flex: 1; font-size: clamp(10px,1.15vw,13px);
+  flex: 1; font-size: var(--fs-body);
   letter-spacing: 1.5px; text-transform: uppercase; color: var(--text);
 }
-.bt-connected { font-size: clamp(8px,0.9vw,10px); color: #a5d6a7; letter-spacing: 1px; margin-right: 10px; }
-.bt-mac { font-size: clamp(8px,0.9vw,10px); font-family: var(--font-mono); color: var(--text-hint); letter-spacing: 1px; }
+.bt-connected { font-size: var(--fs-hint); color: #a5d6a7; letter-spacing: 1px; margin-right: 10px; }
+.bt-mac { font-size: var(--fs-hint); font-family: var(--font-admin); color: var(--text-hint); letter-spacing: 1px; }
 .bt-hide-hint {
-  font-size: clamp(8px,0.85vw,10px); letter-spacing: 1px;
+  font-size: var(--fs-hint); letter-spacing: 1px;
   color: var(--text-hint); text-transform: uppercase; margin-left: 10px;
   opacity: 0; transition: opacity 0.15s;
 }
@@ -251,8 +252,8 @@
 .bt-hidden-section .wifi-hidden-header {
   display: flex; justify-content: space-between; align-items: center;
   padding: clamp(9px,1.3vh,14px) clamp(14px,2vw,22px);
-  cursor: pointer; font-family: var(--font-mono);
-  font-size: clamp(9px,1vw,11px); letter-spacing: 2px; text-transform: uppercase;
+  cursor: pointer; font-family: var(--font-admin);
+  font-size: var(--fs-small); letter-spacing: 2px; text-transform: uppercase;
   color: var(--text-dim); border-left: 2px solid transparent; transition: 0.15s;
   opacity: 0.6;
 }
@@ -272,14 +273,14 @@
 .bt-action-overlay.visible { display: flex; }
 .bt-action-title {
   font-family: var(--font-title);
-  font-size: clamp(14px,1.8vw,22px);
+  font-size: var(--fs-title);
   letter-spacing: 5px;
   text-transform: uppercase;
   color: var(--gold);
   text-align: center;
 }
 .bt-action-mac {
-  font-size: clamp(9px,1vw,11px);
+  font-size: var(--fs-small);
   letter-spacing: 2px;
   color: var(--text-hint);
   text-align: center;
@@ -292,8 +293,8 @@
 }
 .bt-action-btn {
   padding: clamp(10px,1.5vh,16px) clamp(16px,2.5vw,28px);
-  font-family: var(--font-mono);
-  font-size: clamp(10px,1.2vw,14px);
+  font-family: var(--font-admin);
+  font-size: var(--fs-body);
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -325,7 +326,7 @@
 .option-item {
   padding: 5px 12px; background: rgba(255,255,255,0.03);
   border: 1px solid var(--border); cursor: pointer;
-  font-family: var(--font-mono); font-size: clamp(9px,1vw,11px);
+  font-family: var(--font-admin); font-size: var(--fs-small);
   letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim);
   transition: 0.15s; outline: none;
 }
@@ -342,13 +343,13 @@
 .kb-overlay.visible { bottom: 0; }
 .kb-label {
   text-align: center; font-family: var(--font-title);
-  font-size: clamp(10px,1.2vw,14px); letter-spacing: 4px;
+  font-size: var(--fs-body); letter-spacing: 4px;
   color: rgba(0,164,220,0.7); text-transform: uppercase; margin-bottom: 8px;
 }
 .kb-display {
   background: var(--bg2); border: 1px solid rgba(0,164,220,0.45);
-  color: var(--blue); font-family: var(--font-mono);
-  font-size: clamp(14px,2vw,22px); letter-spacing: 3px;
+  color: var(--blue); font-family: var(--font-admin);
+  font-size: var(--fs-title); letter-spacing: 3px;
   padding: clamp(8px,1.2vh,12px) clamp(24px,4vw,40px);
   min-width: clamp(240px,45vw,580px); text-align: center;
   margin: 0 auto clamp(12px,1.8vh,20px); display: block;
@@ -356,7 +357,7 @@
 .kb-panel { max-width: 860px; margin: 0 auto; }
 .kb-modes { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
 .kb-mode-btn {
-  font-family: var(--font-mono); font-size: clamp(9px,1vw,11px);
+  font-family: var(--font-admin); font-size: var(--fs-small);
   letter-spacing: 2px; text-transform: uppercase;
   background: transparent; border: 1px solid var(--border);
   color: var(--text-dim); padding: 5px 16px; cursor: pointer; transition: all 0.15s; outline: none;
@@ -370,7 +371,7 @@
 .kb-key {
   height: clamp(28px,4vh,50px); background: rgba(255,255,255,0.03);
   border: 1px solid var(--border); color: var(--text-dim);
-  font-family: var(--font-mono); font-size: clamp(9px,1.1vw,13px);
+  font-family: var(--font-admin); font-size: clamp(9px,1.1vw,13px);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; text-transform: uppercase; transition: all 0.1s; user-select: none;
 }
@@ -387,10 +388,10 @@
   gap: clamp(16px,3vh,28px);
 }
 .mapper-overlay.visible { display: flex; }
-.mapper-title { font-family: var(--font-title); color: var(--gold); font-size: clamp(14px,1.8vw,22px); letter-spacing: 5px; text-transform: uppercase; text-align: center; }
-.mapper-device { font-size: clamp(10px,1.2vw,13px); color: var(--text-dim); letter-spacing: 2px; text-align: center; }
+.mapper-title { font-family: var(--font-title); color: var(--gold); font-size: var(--fs-title); letter-spacing: 5px; text-transform: uppercase; text-align: center; }
+.mapper-device { font-size: var(--fs-body); color: var(--text-dim); letter-spacing: 2px; text-align: center; }
 .mapper-actions {
-  font-size: clamp(12px,1.5vw,16px); color: var(--blue); letter-spacing: 3px; text-align: center;
+  font-size: var(--fs-body); color: var(--blue); letter-spacing: 3px; text-align: center;
   padding: clamp(12px,2vh,20px) clamp(20px,3vw,32px); border: 1px solid var(--blue-dim);
   background: var(--blue-bg); min-width: clamp(260px,40vw,500px);
   animation: pulse-glow 1.5s ease-in-out infinite;
@@ -400,24 +401,24 @@
   display: flex; align-items: center; gap: 12px;
   padding: clamp(10px,1.5vh,14px) clamp(14px,2vw,20px);
   background: rgba(255,255,255,0.03); border: 1px solid var(--border);
-  font-size: clamp(10px,1.1vw,12px); letter-spacing: 2px; color: var(--text-dim);
-  text-transform: uppercase; font-family: var(--font-mono);
+  font-size: var(--fs-small); letter-spacing: 2px; color: var(--text-dim);
+  text-transform: uppercase; font-family: var(--font-admin);
 }
 .mapper-btn.assigned { border-color: var(--blue-dim); color: var(--blue); }
 .mapper-btn.current-target { border-color: var(--gold); color: rgba(232,213,176,0.9); background: rgba(232,213,176,0.08); animation: pulse-glow 0.8s ease-in-out infinite; }
-.mapper-key-name { margin-left: auto; font-size: clamp(9px,1vw,11px); color: rgba(0,164,220,0.7); }
-.mapper-hint { font-size: clamp(8px,0.9vw,10px); letter-spacing: 2px; color: var(--text-hint); text-transform: uppercase; text-align: center; }
+.mapper-key-name { margin-left: auto; font-size: var(--fs-small); color: rgba(0,164,220,0.7); }
+.mapper-hint { font-size: var(--fs-hint); letter-spacing: 2px; color: var(--text-hint); text-transform: uppercase; text-align: center; }
 
 /* Loading */
 .loading-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 500; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
 .loading-overlay.visible { display: flex; }
-.loading-text { font-size: clamp(10px,1.2vw,13px); letter-spacing: 4px; color: rgba(0,164,220,0.6); text-transform: uppercase; }
+.loading-text { font-size: var(--fs-body); letter-spacing: 4px; color: rgba(0,164,220,0.6); text-transform: uppercase; }
 
 /* Toast */
 .toast {
   position: fixed; bottom: clamp(16px,3vh,40px); left: 50%; transform: translateX(-50%);
   background: var(--blue-bg); border: 1px solid var(--blue-dim); color: var(--blue);
-  font-family: var(--font-mono); font-size: clamp(10px,1.1vw,12px); letter-spacing: 2px;
+  font-family: var(--font-admin); font-size: var(--fs-small); letter-spacing: 2px;
   padding: 8px 22px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 600;
   white-space: nowrap; text-transform: uppercase;
 }
@@ -425,7 +426,7 @@
 .toast.error { border-color: var(--red-dim); color: #e85555; background: rgba(192,57,43,0.08); }
 
 /* Version */
-.version-info { position: fixed; bottom: 10px; right: 14px; font-family: var(--font-mono); font-size: clamp(8px,0.85vw,10px); letter-spacing: 2px; color: var(--text-hint); z-index: 100; text-transform: uppercase; }
+.version-info { position: fixed; bottom: 10px; right: 14px; font-family: var(--font-admin); font-size: var(--fs-hint); letter-spacing: 2px; color: var(--text-hint); z-index: 100; text-transform: uppercase; }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 4px; }
@@ -445,12 +446,12 @@
 .iface-overlay.visible { display: flex; }
 
 .iface-overlay-title {
-  font-family: var(--font-title); font-size: clamp(14px,1.8vw,22px);
+  font-family: var(--font-title); font-size: var(--fs-title);
   letter-spacing: 5px; text-transform: uppercase; color: var(--blue);
   display: flex; align-items: center; margin-bottom: 8px;
 }
 .iface-overlay-hint {
-  font-family: var(--font-mono); font-size: clamp(8px,0.9vw,10px);
+  font-family: var(--font-admin); font-size: var(--fs-hint);
   letter-spacing: 2px; text-transform: uppercase;
   color: var(--text-hint); margin-bottom: 16px;
 }
@@ -458,22 +459,22 @@
   width: clamp(320px,55vw,640px);
   display: flex; justify-content: space-between; align-items: center;
   padding: clamp(12px,1.8vh,20px) clamp(16px,2.5vw,28px);
-  font-family: var(--font-mono); border: 1px solid var(--border);
+  font-family: var(--font-admin); border: 1px solid var(--border);
   border-left: 2px solid transparent; background: rgba(13,13,24,0.7);
   transition: all 0.15s; margin-bottom: 2px;
 }
 .iface-overlay-row.focused { background: var(--blue-bg); border-left-color: var(--blue); }
 
 .iface-overlay-label {
-  font-size: clamp(11px,1.25vw,15px); letter-spacing: 2px;
+  font-size: var(--fs-body); letter-spacing: 2px;
   text-transform: uppercase; color: var(--text);
 }
 .iface-overlay-value {
-  font-size: clamp(12px,1.4vw,16px); color: rgba(0,164,220,0.7);
+  font-size: var(--fs-body); color: rgba(0,164,220,0.7);
   letter-spacing: 1px; display: flex; align-items: center; gap: 6px;
 }
 .iface-mode-chip {
-  font-family: var(--font-mono); font-size: clamp(10px,1.1vw,13px);
+  font-family: var(--font-admin); font-size: var(--fs-key);
   letter-spacing: 2px; text-transform: uppercase;
   padding: 4px 12px; border: 1px solid var(--border); color: var(--text-dim);
 }
@@ -487,8 +488,8 @@
 }
 .iface-split-btn {
   display: flex; align-items: center; justify-content: center;
-  padding: clamp(12px,1.8vh,20px); font-family: var(--font-mono);
-  font-size: clamp(11px,1.25vw,15px); letter-spacing: 2px; text-transform: uppercase;
+  padding: clamp(12px,1.8vh,20px); font-family: var(--font-admin);
+  font-size: var(--fs-body); letter-spacing: 2px; text-transform: uppercase;
   border: 1px solid var(--border); background: rgba(13,13,24,0.7);
   color: rgba(0,164,220,0.7); border-left: 2px solid transparent; transition: all 0.15s;
 }
@@ -510,8 +511,8 @@
   align-items: center;
   padding: clamp(8px,1.2vh,12px) clamp(14px,2vw,22px);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: clamp(9px,1vw,11px);
+  font-family: var(--font-admin);
+  font-size: var(--fs-small);
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--text-hint);
@@ -545,8 +546,8 @@
   align-items: center;
   padding: clamp(8px,1.2vh,12px) clamp(14px,2vw,22px);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: clamp(9px,1vw,11px);
+  font-family: var(--font-admin);
+  font-size: var(--fs-small);
   letter-spacing: 2px;
   text-transform: uppercase;
   color: rgba(0,164,220,0.6);
@@ -558,8 +559,8 @@
 
 /* Badge de priorité */
 .wifi-priority-badge {
-  font-family: var(--font-mono);
-  font-size: clamp(8px,0.85vw,10px);
+  font-family: var(--font-admin);
+  font-size: var(--fs-hint);
   letter-spacing: 1px;
   color: rgba(0,164,220,0.5);
   background: rgba(0,164,220,0.08);
@@ -580,12 +581,12 @@
   gap: 10px;
   padding: clamp(8px,1.2vh,12px) clamp(14px,2vw,22px);
   border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono);
+  font-family: var(--font-admin);
   background: rgba(0,164,220,0.02);
 }
 .wifi-priority-ssid {
   flex: 1;
-  font-size: clamp(10px,1.15vw,13px);
+  font-size: var(--fs-body);
   letter-spacing: 1.5px;
   color: var(--text);
   text-transform: uppercase;
@@ -599,8 +600,8 @@
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: clamp(9px,1vw,11px);
+  font-family: var(--font-admin);
+  font-size: var(--fs-small);
   padding: 4px 10px;
   cursor: pointer;
   transition: all 0.15s;
@@ -622,8 +623,8 @@
 .wifi-prio-apply, .wifi-prio-cancel {
   flex: 1;
   background: transparent;
-  font-family: var(--font-mono);
-  font-size: clamp(9px,1vw,11px);
+  font-family: var(--font-admin);
+  font-size: var(--fs-small);
   letter-spacing: 3px;
   text-transform: uppercase;
   padding: clamp(8px,1.2vh,12px);
@@ -639,7 +640,7 @@
 
 /* Hint masquer/démasquer réseau WiFi */
 .wifi-hide-hint {
-  font-family: var(--font-mono); font-size: clamp(9px,1.1vw,13px);
+  font-family: var(--font-admin); font-size: clamp(9px,1.1vw,13px);
   letter-spacing: 2px; text-transform: uppercase;
   color: transparent; transition: color 0.15s; flex-shrink: 0; white-space: nowrap;
 }
@@ -653,14 +654,14 @@
   display: flex; align-items: center; gap: 10px;
   padding: clamp(8px,1.2vh,12px) clamp(10px,1.5vw,16px);
   background: rgba(255,255,255,0.03); border: 1px solid var(--border);
-  font-family: var(--font-mono); font-size: clamp(9px,1vw,11px);
+  font-family: var(--font-admin); font-size: var(--fs-small);
   letter-spacing: 2px; color: var(--text-dim); text-transform: uppercase;
   cursor: pointer; transition: all 0.15s; border-left: 2px solid transparent;
 }
 .jf-key-btn.active { background: var(--blue-bg); border-left-color: var(--blue); color: var(--text); }
 .jf-key-btn.mapped { border-color: var(--blue-dim); color: var(--blue); }
 .jf-key-btn.waiting { border-color: var(--gold); color: rgba(232,213,176,0.9); background: rgba(232,213,176,0.06); animation: pulse-glow 0.8s ease-in-out infinite; }
-.jf-key-name { margin-left: auto; font-size: clamp(8px,0.9vw,10px); color: rgba(0,164,220,0.6); }
+.jf-key-name { margin-left: auto; font-size: var(--fs-hint); color: rgba(0,164,220,0.6); }
 
 /* Known networks overlay rows */
 .known-overlay-row {
@@ -669,7 +670,7 @@
   justify-content: space-between;
   align-items: center;
   padding: clamp(10px,1.5vh,16px) clamp(16px,2.5vw,28px);
-  font-family: var(--font-mono);
+  font-family: var(--font-admin);
   border: 1px solid var(--border);
   border-left: 2px solid transparent;
   background: rgba(13,13,24,0.7);
@@ -690,7 +691,7 @@
   min-width: 0;
 }
 .known-overlay-ssid {
-  font-size: clamp(11px,1.25vw,15px);
+  font-size: var(--fs-body);
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--text);
@@ -699,7 +700,7 @@
   text-overflow: ellipsis;
 }
 .known-overlay-connected {
-  font-size: clamp(9px,1vw,11px);
+  font-size: var(--fs-small);
   color: #a5d6a7;
   letter-spacing: 1px;
   margin-left: 6px;
@@ -717,8 +718,8 @@
 
 /* Reorder sub-mode */
 .known-reorder-hint {
-  font-family: var(--font-mono);
-  font-size: clamp(8px,0.9vw,10px);
+  font-family: var(--font-admin);
+  font-size: var(--fs-hint);
   letter-spacing: 2px;
   text-transform: uppercase;
   color: rgba(232,213,176,0.6);
@@ -758,8 +759,8 @@
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: clamp(9px,1vw,11px);
+  font-family: var(--font-admin);
+  font-size: var(--fs-small);
   padding: 4px 10px;
   cursor: pointer;
   transition: all 0.15s;
@@ -930,3 +931,141 @@
 
 /* ── Item device (manettes) ── */
 .device-item.active .device-name { color: #fff; }
+
+/* ══════════════════════════════════════
+   SIDEBAR — Icônes SVG (remplacement emojis)
+══════════════════════════════════════ */
+.sidebar-item .icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(22px, 2.5vw, 28px);
+  height: clamp(22px, 2.5vw, 28px);
+  flex-shrink: 0;
+  font-size: 0;
+}
+
+.sidebar-item .icon svg {
+  width: clamp(16px, 1.8vw, 22px);
+  height: clamp(16px, 1.8vw, 22px);
+}
+
+/* ══════════════════════════════════════
+   AFFICHAGE — Panel résolution 3 colonnes
+══════════════════════════════════════ */
+.res-columns-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: clamp(8px, 1.2vw, 16px);
+  padding: clamp(12px, 2vh, 20px) clamp(16px, 2.5vw, 28px);
+}
+
+.res-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.res-col-header {
+  font-family: var(--font-admin);
+  font-size: var(--fs-small);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: rgba(0, 164, 220, 0.5);
+  padding: 6px 10px 10px;
+  border-bottom: 1px solid var(--blue-dim);
+  margin-bottom: 4px;
+}
+
+.res-col-item {
+  font-family: var(--font-admin);
+  font-size: var(--fs-body);
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  padding: clamp(8px, 1.1vh, 12px) clamp(10px, 1.4vw, 16px);
+  border: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.12s;
+  text-transform: uppercase;
+}
+
+.res-col-item:hover    { background: var(--blue-bg); color: var(--text); }
+.res-col-item.selected { border-color: var(--blue-dim); border-left-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+.res-col-item.active   { background: rgba(0,164,220,0.18); border-left-color: var(--blue); border-color: rgba(0,164,220,0.35); color: #fff; box-shadow: inset 0 0 0 1px rgba(0,164,220,0.18); }
+
+#resConfirmBtn,
+#resCancelBtn {
+  font-family: var(--font-admin);
+  font-size: var(--fs-body);
+  letter-spacing: 2px;
+}
+
+#resCancelBtn                             { color: rgba(192,57,43,0.8); border-color: rgba(192,57,43,0.3); }
+#resCancelBtn:hover, #resCancelBtn.active { background: rgba(192,57,43,0.1); border-color: var(--red); color: #e85555; }
+
+#resRevertCountdown {
+  color: var(--blue);
+  display: inline-block;
+  animation: pulse-glow 1s ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════
+   AUDIO — Sorties dynamiques
+══════════════════════════════════════ */
+.audio-sink-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+}
+
+.audio-sink-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: clamp(10px, 1.4vh, 16px) clamp(14px, 2vw, 22px);
+  font-family: var(--font-admin);
+  font-size: var(--fs-body);
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.12s;
+  text-transform: uppercase;
+}
+
+.audio-sink-item:hover    { background: var(--blue-bg); color: var(--text); }
+.audio-sink-item.selected { border-color: var(--blue-dim); border-left-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+.audio-sink-item.active   { background: rgba(0,164,220,0.18); border-left-color: var(--blue); border-color: rgba(0,164,220,0.35); color: #fff; box-shadow: inset 0 0 0 1px rgba(0,164,220,0.18); }
+
+.audio-sink-icon  { display: flex; align-items: center; color: rgba(0,164,220,0.6); flex-shrink: 0; }
+.audio-sink-desc  { flex: 1; }
+.audio-sink-check { color: #a5d6a7; font-size: var(--fs-body); flex-shrink: 0; }
+
+/* ══════════════════════════════════════
+   BLUETOOTH — Items masqués navigables/cliquables
+══════════════════════════════════════ */
+.bt-item-hidden         { opacity: 0.7; cursor: pointer; }
+.bt-item-hidden:hover   { opacity: 1; background: var(--blue-bg); }
+.bt-item-hidden.active  { opacity: 1; background: rgba(0,164,220,0.14); border-left-color: var(--blue); box-shadow: inset 0 0 0 1px rgba(0,164,220,0.18); }
+
+#hiddenBtList { max-height: 40vh; overflow-y: auto; }
+
+/* Signal atténué dans les listes masquées */
+#hiddenNetList .wifi-signal .bar,
+#hiddenBtList  .wifi-signal .bar      { background: var(--text-hint); }
+#hiddenNetList .wifi-signal .bar.lit,
+#hiddenBtList  .wifi-signal .bar.lit  { background: rgba(0,164,220,0.45); }
+
+/* ══════════════════════════════════════
+   CONTROLLERS — SVG icon dans device-item
+══════════════════════════════════════ */
+.device-icon-svg {
+  color: rgba(0, 164, 220, 0.6);
+  margin-right: 10px;
+  flex-shrink: 0;
+}

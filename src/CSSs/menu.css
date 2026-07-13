@@ -22,7 +22,7 @@
 .top-bar-btn {
   display: flex; align-items: center; gap: 8px;
   font-family: var(--font-mono);
-  font-size: clamp(10px,1.1vw,12px);
+  font-size: var(--fs-label);
   letter-spacing: 2px;
   text-transform: uppercase;
   background: rgba(255,255,255,0.04);
@@ -36,14 +36,14 @@
 .top-bar-btn.active { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.35); color: var(--text); }
 .top-bar-btn.settings-btn { color: rgba(232,213,176,0.7); }
 .top-bar-btn.settings-btn.active { border-color: var(--gold); color: var(--gold); background: rgba(232,213,176,0.08); }
-.top-bar-close { margin-left: auto; background: transparent; border: none; color: var(--text-hint); font-size: 20px; cursor: pointer; line-height: 1; }
+.top-bar-close { margin-left: auto; background: transparent; border: none; color: var(--text-hint); font-size: var(--fs-title); cursor: pointer; line-height: 1; }
 .top-bar-close.active { color: var(--text); }
 
 /* Title */
 .launcher-title {
   font-family: var(--font-title);
   color: rgba(232,213,176,0.4);
-  font-size: clamp(8px,1.1vw,11px);
+  font-size: var(--fs-label);
   letter-spacing: 8px;
   text-transform: uppercase;
   margin-bottom: clamp(16px,4vh,36px);
@@ -64,11 +64,12 @@
   padding: clamp(20px,4vh,40px) clamp(14px,2.5vw,28px);
   cursor: pointer;
   position: relative; overflow: hidden;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease, background 0.18s ease;
   display: flex; flex-direction: column;
   align-items: center; gap: clamp(10px,2vh,20px);
   min-height: clamp(160px,28vh,290px);
   justify-content: center;
+  container-type: inline-size; /* permet cqi sur .card-label */
 }
 
 .card-logo {
@@ -80,14 +81,32 @@
 
 .card-label {
   font-family: var(--font-title);
-  font-size: clamp(14px,2.5vw,24px);
-  letter-spacing: 3px;
+  /* Responsive : se réduit proportionnellement à la carte.
+     La carte fait ~36vw au max (72vw / 2 cartes). On vise ~9% de cette largeur.
+     clamp floor = lisible sur 320px, ceil = plafonné sur TV 4K */
+  font-size: clamp(24px, 9.6cqi, 76px);
+  letter-spacing: 0.06em;
   transition: color 0.18s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-align: center;
+}
+
+/* Fallback si cqi non supporté (Firefox < 116, Safari < 16) */
+@supports not (font-size: 1cqi) {
+  .card-label {
+    font-size: clamp(24px, 5.6vw, 76px);
+  }
 }
 
 /* Retropie card */
 .card-retro { border-color: var(--red); }
-.card-retro .card-label { color: #e85555; }
+.card-retro .card-label {
+  color: #e85555;
+  font-family: var(--font-retropie);
+}
 .card-retro.active {
   background: rgba(192,57,43,0.09);
   box-shadow: 0 0 56px rgba(192,57,43,0.42), inset 0 0 36px rgba(192,57,43,0.07);
@@ -98,7 +117,11 @@
 
 /* Jellyfin card */
 .card-jellyfin { border-color: var(--blue); }
-.card-jellyfin .card-label { color: var(--blue); }
+.card-jellyfin .card-label {
+  color: var(--blue);
+  font-family: var(--font-jellyfin);
+  font-size: clamp(30px, 12cqi, 95px);
+}
 .card-jellyfin.active {
   background: var(--blue-bg);
   box-shadow: 0 0 56px rgba(0,164,220,0.42), inset 0 0 36px rgba(0,164,220,0.07);
@@ -114,7 +137,7 @@
 .nav-hint {
   position: relative; z-index: 1;
   margin-top: clamp(12px,3vh,28px);
-  font-size: clamp(8px,0.9vw,10px);
+  font-size: var(--fs-hint);
   letter-spacing: 2px;
   color: var(--text-hint);
   text-transform: uppercase;
@@ -136,7 +159,7 @@
 .power-title {
   font-family: var(--font-title);
   color: rgba(232,213,176,0.65);
-  font-size: clamp(11px,1.4vw,16px);
+  font-size: var(--fs-body);
   letter-spacing: 6px;
   text-transform: uppercase;
   border-bottom: 1px solid rgba(232,213,176,0.18);
@@ -150,7 +173,7 @@
   border: 1px solid var(--border);
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: clamp(10px,1.2vw,14px);
+  font-size: var(--fs-body);
   letter-spacing: 3px;
   color: var(--text-dim);
   text-transform: uppercase;
@@ -159,4 +182,4 @@
 .power-btn.active { background: rgba(192,57,43,0.12); border-color: var(--red-dim); color: #e85555; }
 .power-btn.restart.active { background: rgba(255,200,0,0.08); border-color: rgba(255,200,0,0.45); color: rgba(255,200,0,0.9); }
 .power-btn.cancel.active { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.3); color: var(--text); }
-.power-icon { font-size: clamp(14px,1.6vw,18px); }
+.power-icon { font-size: var(--fs-title); }

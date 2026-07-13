@@ -1,5 +1,5 @@
 /**
- * XeLauncher � preload.js
+ * XeLauncher � preload.js
  * Exposes safe IPC bridge to renderer processes.
  */
 
@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld('xeLauncher', {
   openSettings:            ()                       => ipcRenderer.invoke('open-settings'),
   launchRetropie:          ()                       => ipcRenderer.invoke('launch-retropie'),
   launchJellyfin:          ()                       => ipcRenderer.invoke('launch-jellyfin'),
-  launchJellyfinWithToken: (server, token, userId, serverId) => ipcRenderer.invoke('launch-jellyfin-token', server, token, userId, serverId),
+  launchJellyfinWithToken: (server, token, userId, serverId, username, password) => ipcRenderer.invoke('launch-jellyfin-token', server, token, userId, serverId, username, password),
 
   /* Jellyfin auth */
   jellyfinAuthenticate:    (server, user, pass)     => ipcRenderer.invoke('jellyfin-authenticate', server, user, pass),
@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld('xeLauncher', {
   getDisplayModes:         ()                       => ipcRenderer.invoke('get-display-modes'),
   setDisplay:              (opts)                   => ipcRenderer.invoke('set-display', opts),
   setAudio:                (opts)                   => ipcRenderer.invoke('set-audio', opts),
+  getAudioSinks:           ()                       => ipcRenderer.invoke('get-audio-sinks'),
+  debugAudio:              ()                       => ipcRenderer.invoke('debug-audio'),
 
   /* Network */
   getInterfaces:           ()                       => ipcRenderer.invoke('get-interfaces'),
@@ -69,6 +71,7 @@ contextBridge.exposeInMainWorld('xeLauncher', {
   btPower:                 (on)                     => ipcRenderer.invoke('bt-power', on),
 
   isAvailable:             ()                       => true,
+  saveCalibration:         (data)                   => ipcRenderer.invoke('save-calibration', data),
 
   /* xe_input daemon — evdev universel */
   onXeInputEvent: (cb) => { ipcRenderer.removeAllListeners('xe-input-event'); ipcRenderer.on('xe-input-event', (_, data) => cb(data)); },
@@ -78,4 +81,7 @@ contextBridge.exposeInMainWorld('xeLauncher', {
   /* Mapping Jellyfin — persisté sur disque pour xe_jmp_input.py */
   saveJfMapping:           (mapping)                => ipcRenderer.invoke('save-jf-mapping', mapping),
   loadJfMapping:           ()                       => ipcRenderer.invoke('load-jf-mapping'),
+
+  /* Signale au main process que le renderer est visuellement prêt */
+  rendererReady:           ()                       => ipcRenderer.send('renderer-ready'),
 })

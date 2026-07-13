@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>XeLauncher — Calibration écran</title>
+  <link rel="stylesheet" href="../CSSs/common.css">
+  <link rel="stylesheet" href="../CSSs/calibration.css">
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="vignette"></div>
+
+<!-- ══════════════════════════════════════
+     ÉTAPE 1 — Choix du ratio
+══════════════════════════════════════ -->
+<div class="calib-screen" id="stepRatio">
+
+  <div class="calib-header">
+    <div class="calib-step-label">ÉTAPE 1 / 2</div>
+    <div class="calib-title">Type d'écran</div>
+    <div class="calib-subtitle">Sélectionnez le format de votre écran</div>
+  </div>
+
+  <div class="ratio-grid" id="ratioGrid">
+
+    <div class="ratio-card" data-ratio="16:9" data-w="16" data-h="9">
+      <div class="ratio-preview">
+        <div class="ratio-box" style="aspect-ratio:16/9"></div>
+      </div>
+      <div class="ratio-label">16:9</div>
+      <div class="ratio-desc">TV HD / Full HD / 4K</div>
+    </div>
+
+    <div class="ratio-card" data-ratio="21:9" data-w="21" data-h="9">
+      <div class="ratio-preview">
+        <div class="ratio-box" style="aspect-ratio:21/9"></div>
+      </div>
+      <div class="ratio-label">21:9</div>
+      <div class="ratio-desc">Ultrawide</div>
+    </div>
+
+    <div class="ratio-card" data-ratio="32:9" data-w="32" data-h="9">
+      <div class="ratio-preview">
+        <div class="ratio-box" style="aspect-ratio:32/9"></div>
+      </div>
+      <div class="ratio-label">32:9</div>
+      <div class="ratio-desc">Super Ultrawide</div>
+    </div>
+
+    <div class="ratio-card" data-ratio="4:3" data-w="4" data-h="3">
+      <div class="ratio-preview">
+        <div class="ratio-box" style="aspect-ratio:4/3"></div>
+      </div>
+      <div class="ratio-label">4:3</div>
+      <div class="ratio-desc">Écran classique / CRT</div>
+    </div>
+
+    <div class="ratio-card" data-ratio="5:4" data-w="5" data-h="4">
+      <div class="ratio-preview">
+        <div class="ratio-box" style="aspect-ratio:5/4"></div>
+      </div>
+      <div class="ratio-label">5:4</div>
+      <div class="ratio-desc">Moniteur carré</div>
+    </div>
+
+    <div class="ratio-card" data-ratio="16:10" data-w="16" data-h="10">
+      <div class="ratio-preview">
+        <div class="ratio-box" style="aspect-ratio:16/10"></div>
+      </div>
+      <div class="ratio-label">16:10</div>
+      <div class="ratio-desc">Moniteur PC</div>
+    </div>
+
+  </div>
+
+  <div class="hint">←→ naviguer · ✕ valider</div>
+
+</div>
+
+<!-- ══════════════════════════════════════
+     ÉTAPE 2 — Calibration zone + texte
+══════════════════════════════════════ -->
+<div class="calib-screen" id="stepCalib" style="display:none">
+
+  <!-- Zone de cadrage plein écran -->
+  <div class="calib-canvas" id="calibCanvas">
+
+    <!-- Fond de référence -->
+    <div class="calib-bg-pattern"></div>
+
+    <!-- Cadre de safe zone (redimensionnable par les coins) -->
+    <div class="safe-frame" id="safeFrame">
+
+      <!-- Les 4 coins draggables -->
+      <div class="corner" id="cornerTL" data-corner="tl"></div>
+      <div class="corner" id="cornerTR" data-corner="tr"></div>
+      <div class="corner" id="cornerBL" data-corner="bl"></div>
+      <div class="corner" id="cornerBR" data-corner="br"></div>
+
+      <!-- Lignes du cadre -->
+      <div class="frame-line frame-top"></div>
+      <div class="frame-line frame-bottom"></div>
+      <div class="frame-line frame-left"></div>
+      <div class="frame-line frame-right"></div>
+
+      <!-- Preview du contenu à l'intérieur -->
+      <div class="safe-content" id="safeContent">
+
+        <div class="preview-title" id="previewTitle">XeLauncher</div>
+        <div class="preview-body" id="previewBody">
+          Texte principal — lisible à 3 mètres ?
+        </div>
+        <div class="preview-hint" id="previewHint">
+          INDICATIONS · BOUTONS · LABELS
+        </div>
+
+        <!-- Contrôle taille du texte -->
+        <div class="text-scale-ctrl" id="textScaleCtrl">
+          <div class="text-scale-label">TAILLE DU TEXTE</div>
+          <div class="text-scale-track">
+            <div class="text-scale-fill" id="textScaleFill"></div>
+            <div class="text-scale-thumb" id="textScaleThumb"></div>
+          </div>
+          <div class="text-scale-value" id="textScaleValue">100%</div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Mesures affichées -->
+    <div class="calib-measure calib-measure-top" id="measureTop">0px</div>
+    <div class="calib-measure calib-measure-left" id="measureLeft">0px</div>
+    <div class="calib-measure calib-measure-right" id="measureRight">0px</div>
+    <div class="calib-measure calib-measure-bottom" id="measureBottom">0px</div>
+
+  </div>
+
+  <!-- UI de contrôle (hors canvas) -->
+  <div class="calib-controls" id="calibControls">
+    <div class="calib-controls-inner">
+
+      <div class="ctrl-section">
+        <div class="ctrl-label">COIN ACTIF</div>
+        <div class="corner-selector" id="cornerSelector">
+          <div class="csq csq-tl active" data-corner="tl">↖</div>
+          <div class="csq csq-tr" data-corner="tr">↗</div>
+          <div class="csq csq-bl" data-corner="bl">↙</div>
+          <div class="csq csq-br" data-corner="br">↘</div>
+        </div>
+      </div>
+
+      <div class="ctrl-section">
+        <div class="ctrl-label">NAVIGATION</div>
+        <div class="ctrl-hint-grid">
+          <span>←→↑↓</span><span>déplacer le coin</span>
+          <span>L1 / R1</span><span>changer de coin</span>
+          <span>L2</span><span>texte plus petit</span>
+          <span>R2</span><span>texte plus grand</span>
+          <span>✕</span><span>confirmer</span>
+          <span>○</span><span>retour</span>
+        </div>
+      </div>
+
+      <div class="ctrl-section">
+        <button class="btn" id="btnReset">Réinitialiser</button>
+        <button class="btn active" id="btnConfirm">Confirmer</button>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="../JSs/input.js"></script>
+<script src="../JSs/pages/calibration.js"></script>
+<script>
+  window.addEventListener('load', () =>
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => window.xeLauncher.rendererReady())
+    )
+  )
+</script>
+</body>
+</html>
