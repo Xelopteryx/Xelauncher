@@ -649,6 +649,19 @@ configure_input_system() {
         fi
     done
 
+    # Regle udev garantissant group=input, mode=0660 sur tous les
+    # /dev/input/event* — necessaire car sans elle, l'acces depend de
+    # la session logind (uaccess) qui n'existe pas forcement sur un
+    # autologin TTY1 sans seat graphique complet.
+    local udev_rule="/etc/udev/rules.d/99-xelauncher-input.rules"
+    local udev_content='SUBSYSTEM=="input", GROUP="input", MODE="0660"'
+    if [[ ! -f "$udev_rule" ]] || ! grep -qF "$udev_content" "$udev_rule" 2>/dev/null; then
+        echo "$udev_content" | sudo tee "$udev_rule" >/dev/null
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --subsystem-match=input
+        changed=1
+    fi
+
     # Support Wiimote (hid-wiimote) : module a charger au boot
     local modules_file="/etc/modules-load.d/xelauncher.conf"
     if [[ ! -f "$modules_file" ]] || ! grep -q "^hid-wiimote$" "$modules_file" 2>/dev/null; then
@@ -658,8 +671,8 @@ configure_input_system() {
     fi
 
     if [[ $changed -eq 1 ]]; then
-        ok "Systeme d'entree configure (groupes input/bluetooth, module hid-wiimote)"
-        done_action "Groupes input/bluetooth + module hid-wiimote configures"
+        ok "Systeme d'entree configure (groupes input/bluetooth, regle udev, module hid-wiimote)"
+        done_action "Groupes input/bluetooth + regle udev 99-xelauncher-input.rules + module hid-wiimote configures"
         warn "Une deconnexion/redemarrage est necessaire pour que les groupes soient effectifs"
     else
         ok "Systeme d'entree deja configure"
@@ -774,6 +787,14 @@ uninstall_all() {
     ok "Xorg desinstalle"
     done_action "Xorg / xinit / openbox desinstalle"
     anything_done=1
+
+    if [[ -f "/etc/udev/rules.d/99-xelauncher-input.rules" ]]; then
+        sudo rm -f "/etc/udev/rules.d/99-xelauncher-input.rules"
+        sudo udevadm control --reload-rules 2>/dev/null || true
+        ok "Regle udev input supprimee"
+        done_action "/etc/udev/rules.d/99-xelauncher-input.rules supprimee"
+        anything_done=1
+    fi
 
     if [[ -f "/etc/modules-load.d/xelauncher.conf" ]]; then
         sudo rm -f "/etc/modules-load.d/xelauncher.conf"
