@@ -1,0 +1,62 @@
+// Fond noir
+Window.SetBackgroundTopColor(0.039, 0.039, 0.059);
+Window.SetBackgroundBottomColor(0.039, 0.039, 0.059);
+
+screen_width = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+// Logo centré, mis à l'échelle sur la hauteur de l'écran, sans déformation
+logo_image = Image("prometheus.png");
+logo_original_width = logo_image.GetWidth();
+logo_original_height = logo_image.GetHeight();
+scale_factor = screen_height / logo_original_height;
+new_width = logo_original_width * scale_factor;
+new_height = screen_height;
+logo_image = logo_image.Scale(new_width, new_height);
+logo_sprite = Sprite(logo_image);
+logo_sprite.SetX(screen_width / 2 - new_width / 2);
+logo_sprite.SetY(0);
+logo_sprite.SetZ(0);
+
+// Indicateur de progression en bas à gauche (texte "X%")
+progress_sprite = Sprite();
+progress_sprite.SetX(20);
+progress_sprite.SetY(screen_height - 40);
+progress_sprite.SetZ(10);
+
+fun progress_callback(duration, progress)
+{
+    percent = Math.Int(progress * 100);
+    label_text = "Chargement... " + percent + "%";
+    label_image = Image.Text(label_text, 1, 1, 1, 1, "Sans 14");
+    progress_sprite.SetImage(label_image);
+}
+Plymouth.SetBootProgressFunction(progress_callback);
+
+// ── Fade-out déclenché par "plymouth --update=fade" ──
+fade_opacity = 1;
+fading = 0;
+
+fun fade_step()
+{
+    if (fading == 1) {
+        fade_opacity -= 0.08;
+        if (fade_opacity <= 0) {
+            fade_opacity = 0;
+            logo_sprite.SetOpacity(0);
+            progress_sprite.SetOpacity(0);
+        } else {
+            logo_sprite.SetOpacity(fade_opacity);
+            progress_sprite.SetOpacity(fade_opacity);
+        }
+    }
+}
+
+fun status_callback(status)
+{
+    if (status == "fade") {
+        fading = 1;
+    }
+}
+Plymouth.SetUpdateStatusFunction(status_callback);
+Plymouth.SetRefreshFunction(fade_step);

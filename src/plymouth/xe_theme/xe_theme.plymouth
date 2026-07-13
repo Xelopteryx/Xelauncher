@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Xe-Launcher
+Description=Custom boot logo Prometheus
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/xe_theme
+ScriptFile=/usr/share/plymouth/themes/xe_theme/xe_theme.script

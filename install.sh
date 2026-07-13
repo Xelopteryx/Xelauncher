@@ -10,9 +10,8 @@ readonly REPO_URL="https://github.com/Xelopteryx/Xelauncher.git"
 readonly INSTALL_DIR="$HOME/xelauncher"
 readonly LOCK_FILE="/var/tmp/xelauncher_install.lock"
 readonly LOG_FILE="$HOME/xelauncher_install.log"
-readonly RETROPIE_SPLASH_DIR="$HOME/RetroPie/splashscreens"
-readonly RETROPIE_SPLASH_LIST="/opt/retropie/configs/all/splashscreen.list"
 readonly SUDOERS_FILE="/etc/sudoers.d/xelauncher"
+readonly PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/xe_theme"
 
 readonly RED='\033[1;31m'
 readonly GREEN='\033[1;32m'
@@ -438,72 +437,81 @@ configure_retropie_menu() {
         || warn "Echec modification es_systems.cfg — a faire manuellement"
 }
 
-configure_splashscreen() {
+configure_boot_splash() {
     local logo="$INSTALL_DIR/src/LOGOs/prometheus.png"
-    if [[ -f "$logo" ]]; then
-        mkdir -p "$RETROPIE_SPLASH_DIR"
-        cp "$logo" "$RETROPIE_SPLASH_DIR/prometheus.png"
-        sudo mkdir -p "$(dirname "$RETROPIE_SPLASH_LIST")"
-        echo "$RETROPIE_SPLASH_DIR/prometheus.png" | sudo tee "$RETROPIE_SPLASH_LIST" >/dev/null
-        ok "Splashscreen RetroPie configure"
-        done_action "Splashscreen Prometheus configure"
-    else
-        warn "Logo introuvable a $logo — splashscreen ignore"
+    local theme_src="$INSTALL_DIR/src/PLYMOUTHs/xe_theme"
+
+    if [[ ! -f "$logo" ]]; then
+        warn "Logo introuvable a $logo — thème Plymouth ignore"
+        return 0
     fi
+    if [[ ! -f "$theme_src/xe_theme.plymouth" || ! -f "$theme_src/xe_theme.script" ]]; then
+        warn "Thème Plymouth introuvable dans $theme_src — ignore (verifiez le depot)"
+        return 0
+    fi
+
+    # -- Installation du thème xe_theme --
+    sudo mkdir -p "$PLYMOUTH_THEME_DIR"
+    sudo cp "$theme_src/xe_theme.plymouth" "$theme_src/xe_theme.script" "$PLYMOUTH_THEME_DIR/"
+    sudo cp "$logo" "$PLYMOUTH_THEME_DIR/prometheus.png"
+
+    local current_theme
+    current_theme=$(plymouth-set-default-theme 2>/dev/null || true)
+    if [[ "$current_theme" != "xe_theme" ]]; then
+        sudo plymouth-set-default-theme xe_theme
+        if command -v update-initramfs >/dev/null 2>&1; then
+            sudo update-initramfs -u || warn "update-initramfs a echoue — le theme peut necessiter un redemarrage supplementaire"
+        fi
+        ok "Theme Plymouth xe_theme installe et active"
+        done_action "Theme Plymouth xe_theme installe et defini par defaut"
+    else
+        sudo cp -f "$theme_src/xe_theme.plymouth" "$theme_src/xe_theme.script" "$PLYMOUTH_THEME_DIR/" 2>/dev/null || true
+        ok "Theme Plymouth xe_theme deja actif (fichiers resynchronises)"
+    fi
+
+    # -- S'assurer que Plymouth est actif au boot (quiet splash) --
+    local cmdline="/boot/firmware/cmdline.txt"
+    [[ -f "$cmdline" ]] || cmdline="/boot/cmdline.txt"
+    if [[ -f "$cmdline" ]]; then
+        local changed=0
+        grep -q '\bsplash\b' "$cmdline" || { sudo sed -i '1 s/$/ splash/' "$cmdline"; changed=1; }
+        grep -q '\bquiet\b' "$cmdline" || { sudo sed -i '1 s/$/ quiet/' "$cmdline"; changed=1; }
+        # Au cas ou une precedente config RetroPie l'aurait desactive
+        if grep -q 'plymouth.enable=0' "$cmdline"; then
+            sudo sed -i 's/ *plymouth\.enable=0//' "$cmdline"
+            changed=1
+        fi
+        [[ $changed -eq 1 ]] && done_action "$cmdline mis a jour (quiet splash, plymouth.enable=0 retire si present)"
+    fi
+
+    # -- Desactiver le splashscreen propre a RetroPie (asplashscreen) --
+    # pour eviter qu'il ne s'affiche par-dessus / apres celui de Plymouth.
+    if systemctl list-unit-files 2>/dev/null | grep -q '^asplashscreen\.service'; then
+        if systemctl is-enabled asplashscreen >/dev/null 2>&1; then
+            sudo systemctl disable asplashscreen 2>/dev/null || true
+            ok "Splashscreen RetroPie (asplashscreen) desactive"
+            done_action "asplashscreen.service (splash RetroPie) desactive au profit de Plymouth"
+        else
+            ok "Splashscreen RetroPie deja desactive"
+        fi
+    fi
+    sudo rm -f /etc/splashscreen.list
 }
 
 create_start_script() {
-    cat > "$INSTALL_DIR/start.sh" <<'EOF'
-#!/bin/bash
-exec startx -- :0 vt1 -nolisten tcp
-EOF
-    chmod +x "$INSTALL_DIR/start.sh"
-    ok "Script start.sh cree"
-
-    # Déterminer le bon binaire electron
-    local electron_bin="$INSTALL_DIR/node_modules/.bin/electron"
-
-    cat > "$INSTALL_DIR/xelauncher.sh" <<EOF
-#!/bin/bash
-# ============================================================
-#  xelauncher.sh  — Script wrapper XeLauncher
-# ============================================================
-
-SCRIPT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-LAUNCH_FILE="/tmp/xelauncher-launch-next"
-ELECTRON_BIN="$electron_bin"
-MAIN_JS="\$SCRIPT_DIR/src/JSs/main.js"
-
-log() {
-  echo "[xelauncher.sh] \$*" | tee -a "\$SCRIPT_DIR/xelauncher.log"
-}
-
-log "Démarrage — electron: \$ELECTRON_BIN — main: \$MAIN_JS"
-
-while true; do
-  rm -f "\$LAUNCH_FILE"
-  log "Lancement Electron..."
-  "\$ELECTRON_BIN" "\$MAIN_JS" --no-sandbox 2>>"\$SCRIPT_DIR/electron.log"
-  EXIT_CODE=\$?
-  log "Electron terminé (code \$EXIT_CODE)"
-
-  if [ -f "\$LAUNCH_FILE" ]; then
-    CMD=\$(cat "\$LAUNCH_FILE")
-    rm -f "\$LAUNCH_FILE"
-    log "Lancement externe: \$CMD"
-    eval "\$CMD"
-    log "Application externe terminée, retour au launcher"
-    sleep 1
-  else
-    log "Arrêt propre du launcher"
-    break
-  fi
-done
-
-log "xelauncher.sh terminé"
-EOF
-    chmod +x "$INSTALL_DIR/xelauncher.sh"
-    ok "Script xelauncher.sh cree"
+    # start.sh et xelauncher.sh sont desormais versionnes dans le depot
+    # (avec DBUS_SESSION_BUS_ADDRESS, XAUTHORITY, xdg-desktop-portal-gtk,
+    # logs/ consolides, etc.) : on ne les regenere plus ici, on se
+    # contente de les rendre executables pour ne pas ecraser le travail
+    # fait dans le repo avec un vieux template.
+    for f in "$INSTALL_DIR/start.sh" "$INSTALL_DIR/xelauncher.sh"; do
+        if [[ -f "$f" ]]; then
+            chmod +x "$f"
+            ok "$(basename "$f") rendu executable (fourni par le depot)"
+        else
+            warn "$(basename "$f") introuvable dans le depot — verifiez le clonage"
+        fi
+    done
 
     cat > "$HOME/.xinitrc" <<EOF
 #!/bin/bash
@@ -511,11 +519,15 @@ xset s off
 xset -dpms
 xset s noblank
 openbox &
+
+# Neutralise le curseur souris de façon permanente (XFixesHideCursor).
+python3 "$INSTALL_DIR/scripts/xe_cursor_pin.py" &
+
 exec "$INSTALL_DIR/xelauncher.sh"
 EOF
     chmod +x "$HOME/.xinitrc"
-    ok "Fichier .xinitrc cree (avec openbox + xelauncher.sh)"
-    done_action "~/.xinitrc, start.sh et xelauncher.sh crees"
+    ok "Fichier .xinitrc cree (openbox + xe_cursor_pin.py + xelauncher.sh)"
+    done_action "~/.xinitrc cree ; start.sh/xelauncher.sh du depot rendus executables"
 }
 
 configure_autologin() {
@@ -622,6 +634,38 @@ configure_sudoers() {
     done_action "Regles sudoers configurees ($SUDOERS_FILE)"
 }
 
+configure_input_system() {
+    local changed=0
+
+    # xe_input.py lit /dev/input/event* directement : l'utilisateur doit
+    # appartenir aux groupes input et bluetooth pour y acceder sans root.
+    for grp in input bluetooth; do
+        if ! getent group "$grp" >/dev/null 2>&1; then
+            sudo groupadd "$grp" 2>/dev/null || true
+        fi
+        if ! groups "$REAL_USER" | grep -q "\b${grp}\b"; then
+            sudo usermod -a -G "$grp" "$REAL_USER"
+            changed=1
+        fi
+    done
+
+    # Support Wiimote (hid-wiimote) : module a charger au boot
+    local modules_file="/etc/modules-load.d/xelauncher.conf"
+    if [[ ! -f "$modules_file" ]] || ! grep -q "^hid-wiimote$" "$modules_file" 2>/dev/null; then
+        echo "hid-wiimote" | sudo tee -a "$modules_file" >/dev/null
+        sudo modprobe hid-wiimote 2>/dev/null || warn "hid-wiimote non charge (module absent ou deja charge)"
+        changed=1
+    fi
+
+    if [[ $changed -eq 1 ]]; then
+        ok "Systeme d'entree configure (groupes input/bluetooth, module hid-wiimote)"
+        done_action "Groupes input/bluetooth + module hid-wiimote configures"
+        warn "Une deconnexion/redemarrage est necessaire pour que les groupes soient effectifs"
+    else
+        ok "Systeme d'entree deja configure"
+    fi
+}
+
 create_required_dirs() {
     mkdir -p \
         "$INSTALL_DIR/src/AVATARs" \
@@ -629,9 +673,11 @@ create_required_dirs() {
         "$INSTALL_DIR/src/HTMLs" \
         "$INSTALL_DIR/src/JSs" \
         "$INSTALL_DIR/src/CSSs" \
-        "$INSTALL_DIR/src/FONTs"
-    ok "Dossiers src/ crees"
-    done_action "Dossiers src/ crees/verifies"
+        "$INSTALL_DIR/src/FONTs" \
+        "$INSTALL_DIR/src/PLYMOUTHs" \
+        "$INSTALL_DIR/logs"
+    ok "Dossiers src/ et logs/ crees"
+    done_action "Dossiers src/ et logs/ crees/verifies"
 }
 
 uninstall_all() {
@@ -729,9 +775,27 @@ uninstall_all() {
     done_action "Xorg / xinit / openbox desinstalle"
     anything_done=1
 
-    if [[ -f "$RETROPIE_SPLASH_DIR/prometheus.png" ]]; then
-        rm -f "$RETROPIE_SPLASH_DIR/prometheus.png"
-        done_action "Splashscreen supprime"
+    if [[ -f "/etc/modules-load.d/xelauncher.conf" ]]; then
+        sudo rm -f "/etc/modules-load.d/xelauncher.conf"
+        ok "Chargement hid-wiimote au boot supprime"
+        done_action "/etc/modules-load.d/xelauncher.conf supprime"
+        anything_done=1
+    fi
+
+    if [[ -d "$PLYMOUTH_THEME_DIR" ]]; then
+        current_theme=$(plymouth-set-default-theme 2>/dev/null || true)
+        if [[ "$current_theme" == "xe_theme" ]]; then
+            for fallback in pix debian text; do
+                if plymouth-set-default-theme --list 2>/dev/null | grep -qx "$fallback"; then
+                    sudo plymouth-set-default-theme "$fallback"
+                    command -v update-initramfs >/dev/null 2>&1 && sudo update-initramfs -u
+                    break
+                fi
+            done
+        fi
+        sudo rm -rf "$PLYMOUTH_THEME_DIR"
+        ok "Theme Plymouth xe_theme supprime"
+        done_action "Theme Plymouth xe_theme supprime"
         anything_done=1
     fi
 
@@ -811,45 +875,52 @@ main() {
         exit 0
     fi
 
-    section "1/9 — Mise a jour systeme"
+    section "1/10 — Mise a jour systeme"
     sudo apt-get update -q
     ok "Paquets a jour"
 
-    section "2/9 — Dependances systeme"
+    section "2/10 — Dependances systeme"
     check_and_install_packages \
         git curl wget \
-        network-manager \
+        network-manager wireless-tools \
         bluetooth bluez bluez-tools \
         flatpak \
-        xdotool \
+        xdotool x11-utils xdg-desktop-portal-gtk \
         xserver-xorg xinit openbox \
         unzip jq dialog xmlstarlet \
         fbi \
+        psmisc \
+        plymouth plymouth-themes \
+        python3 python3-evdev python3-xlib \
+        pulseaudio-utils \
         libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
         libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 \
         libxss1 libxtst6 libgtk-3-0 \
         chromium || true
 
-    section "3/9 — Node.js"
+    section "3/10 — Node.js"
     install_nodejs
 
-    section "4/9 — Tailscale"
+    section "4/10 — Tailscale"
     install_tailscale
 
-    section "5/9 — Flatpak + Jellyfin"
+    section "5/10 — Flatpak + Jellyfin"
     install_flatpak_jellyfin
 
-    section "6/9 — Clonage du depot"
+    section "6/10 — Clonage du depot"
     clone_or_update_repo
 
-    section "7/9 — Dependances Node"
+    section "7/10 — Dependances Node"
     install_npm_deps
 
-    section "8/9 — RetroPie"
+    section "8/10 — RetroPie"
     install_retropie
 
-    section "9/9 — Configuration du systeme"
-    configure_splashscreen
+    section "9/10 — Configuration entrees (evdev/Wiimote)"
+    configure_input_system
+
+    section "10/10 — Configuration du systeme"
+    configure_boot_splash
     configure_retropie_menu
     create_start_script
     configure_autologin
