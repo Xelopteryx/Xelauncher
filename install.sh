@@ -18,6 +18,9 @@ readonly SUDOERS_FILE="/etc/sudoers.d/xelauncher"
 readonly PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/xe_theme"
 readonly JELLYFIN_APP_ID="org.jellyfin.JellyfinDesktop"
 readonly JELLYFIN_OLD_APP_ID="com.github.iwalton3.jellyfin-media-player"
+readonly BOOT_MARK_BEGIN="# >>> XeLauncher boot >>>"
+readonly BOOT_MARK_END="# <<< XeLauncher boot <<<"
+readonly GETTY_OVERRIDE="/etc/systemd/system/getty@tty1.service.d/override.conf"
 
 readonly RED='\033[1;31m'
 readonly GREEN='\033[1;32m'
@@ -589,6 +592,77 @@ configure_retropie_menu() {
         || warn "Echec modification es_systems.cfg — a faire manuellement"
 }
 
+# Boot silencieux : ligne de commande noyau.
+#  - quiet splash plymouth.ignore-serial-consoles : Plymouth actif, pas de texte
+#  - logo.nologo vt.global_cursor_default=0 loglevel=3 : pas de logos/curseur/messages
+#  - console=tty1 -> console=tty3 : le texte du noyau va sur un AUTRE terminal (Ctrl+Alt+F3)
+# $1 = cmdline.txt. Sauvegarde <fichier>.xelauncher.bak au premier passage.
+# Code retour : 0 = modifie, 1 = deja a jour.
+cmdline_apply() {
+    local file=$1 line tok new cur
+    local -a old out
+    line=$(head -n1 "$file")
+    read -ra old <<<"$line"
+    out=()
+    for tok in "${old[@]}"; do
+        case "$tok" in
+            plymouth.enable=0|loglevel=*|vt.global_cursor_default=*) ;;   # re-poses ci-dessous
+            console=tty1) out+=("console=tty3") ;;
+            *) out+=("$tok") ;;
+        esac
+    done
+    for tok in quiet splash plymouth.ignore-serial-consoles logo.nologo loglevel=3 vt.global_cursor_default=0; do
+        [[ " ${out[*]} " == *" $tok "* ]] || out+=("$tok")
+    done
+    new="${out[*]}"
+    cur="${old[*]}"
+    [[ "$new" == "$cur" ]] && return 1
+    [[ -f "$file.xelauncher.bak" ]] || sudo cp -a "$file" "$file.xelauncher.bak"
+    echo "$new" | sudo tee "$file" >/dev/null
+    return 0
+}
+
+# config.txt (Raspberry Pi) : pas d'ecran arc-en-ciel, initramfs charge par le firmware
+# (necessaire pour que Plymouth demarre tot). Bloc delimite => retirable proprement.
+apply_boot_config_txt() {
+    local cfg="" c block
+    for c in /boot/firmware/config.txt /boot/config.txt; do
+        [[ -f "$c" ]] && { cfg="$c"; break; }
+    done
+    [[ -n "$cfg" ]] || return 0
+    grep -qF "$BOOT_MARK_BEGIN" "$cfg" && return 0
+    block="$BOOT_MARK_BEGIN"$'\n'"[all]"$'\n'"disable_splash=1"
+    if ! grep -qE '^[[:space:]]*(auto_initramfs=1|initramfs[[:space:]])' "$cfg"; then
+        block+=$'\n'"auto_initramfs=1"
+    fi
+    block+=$'\n'"$BOOT_MARK_END"
+    [[ -f "$cfg.xelauncher.bak" ]] || sudo cp -a "$cfg" "$cfg.xelauncher.bak"
+    printf '\n%s\n' "$block" | sudo tee -a "$cfg" >/dev/null
+    ok "$cfg : disable_splash=1 (+ auto_initramfs si absent)"
+    done_action "$cfg mis a jour (bloc XeLauncher boot)"
+}
+
+# Verifie que le theme est bien dans l'initramfs (sinon pas de logo au boot).
+verify_plymouth_initramfs() {
+    command -v lsinitramfs >/dev/null 2>&1 || return 0
+    local img n checked=0
+    for img in "/boot/initrd.img-$(uname -r)" /boot/firmware/initramfs_2712 /boot/firmware/initramfs8; do
+        [[ -f "$img" ]] || continue
+        checked=1
+        n=$(lsinitramfs "$img" 2>/dev/null | grep -c 'xe_theme' || true)
+        if [[ "${n:-0}" -gt 0 ]]; then
+            ok "Theme xe_theme present dans $(basename "$img")"
+        else
+            warn "Theme xe_theme ABSENT de $img : pas de logo au boot"
+            fail_action "Plymouth : theme absent de l'initramfs ($img)"
+        fi
+    done
+    if [[ $checked -eq 0 ]]; then
+        warn "Aucun initramfs trouve (update-initramfs a-t-il echoue ?) : le logo risque de ne pas apparaitre"
+        fail_action "Plymouth : aucun initramfs trouve"
+    fi
+}
+
 configure_boot_splash() {
     local logo="$INSTALL_DIR/src/LOGOs/prometheus.png"
     local theme_src="$INSTALL_DIR/src/plymouth/xe_theme"
@@ -611,30 +685,51 @@ configure_boot_splash() {
     current_theme=$(plymouth-set-default-theme 2>/dev/null || true)
     if [[ "$current_theme" != "xe_theme" ]]; then
         sudo plymouth-set-default-theme xe_theme
-        if command -v update-initramfs >/dev/null 2>&1; then
-            sudo update-initramfs -u || warn "update-initramfs a echoue — le theme peut necessiter un redemarrage supplementaire"
-        fi
-        ok "Theme Plymouth xe_theme installe et active"
+        ok "Theme Plymouth xe_theme active"
         done_action "Theme Plymouth xe_theme installe et defini par defaut"
     else
-        sudo cp -f "$theme_src/xe_theme.plymouth" "$theme_src/xe_theme.script" "$PLYMOUTH_THEME_DIR/" 2>/dev/null || true
         ok "Theme Plymouth xe_theme deja actif (fichiers resynchronises)"
     fi
 
-    # -- S'assurer que Plymouth est actif au boot (quiet splash) --
+    # -- Boot silencieux : parametres noyau --
     local cmdline="/boot/firmware/cmdline.txt"
     [[ -f "$cmdline" ]] || cmdline="/boot/cmdline.txt"
     if [[ -f "$cmdline" ]]; then
-        local changed=0
-        grep -q '\bsplash\b' "$cmdline" || { sudo sed -i '1 s/$/ splash/' "$cmdline"; changed=1; }
-        grep -q '\bquiet\b' "$cmdline" || { sudo sed -i '1 s/$/ quiet/' "$cmdline"; changed=1; }
-        # Au cas ou une precedente config RetroPie l'aurait desactive
-        if grep -q 'plymouth.enable=0' "$cmdline"; then
-            sudo sed -i 's/ *plymouth\.enable=0//' "$cmdline"
-            changed=1
+        if cmdline_apply "$cmdline"; then
+            ok "$cmdline mis a jour (boot silencieux, texte noyau sur tty3)"
+            done_action "$cmdline : quiet splash logo.nologo loglevel=3 console=tty3 (sauvegarde .xelauncher.bak)"
+        else
+            ok "$cmdline deja a jour"
         fi
-        [[ $changed -eq 1 ]] && done_action "$cmdline mis a jour (quiet splash, plymouth.enable=0 retire si present)"
+    else
+        warn "cmdline.txt introuvable : boot silencieux non configure (parametres noyau a ajouter a la main)"
+        fail_action "cmdline.txt introuvable : ajouter 'quiet splash console=tty3' a la main"
     fi
+
+    case "$PLATFORM" in
+        rpi*) apply_boot_config_txt ;;
+    esac
+
+    # -- Plymouth reste affiche jusqu'a ce qu'Electron appelle 'plymouth quit' (main-window.js) --
+    # Sans ca, systemd le coupe des le demarrage du getty et le texte de login apparait.
+    # Le .bash_profile fait 'plymouth deactivate' avant startx pour liberer le DRM.
+    if command -v plymouth >/dev/null 2>&1; then
+        sudo systemctl mask plymouth-quit.service plymouth-quit-wait.service >/dev/null 2>&1 || true
+        ok "plymouth-quit masque : le splash reste jusqu'a l'affichage d'Electron"
+        done_action "plymouth-quit(.service/-wait.service) masques"
+    fi
+
+    # -- Reconstruire l'initramfs APRES tout le reste (theme + plymouth-label) --
+    if command -v update-initramfs >/dev/null 2>&1; then
+        log "Regeneration de l'initramfs (embarque le theme Plymouth)..."
+        if sudo update-initramfs -u; then
+            done_action "initramfs regenere (theme Plymouth embarque)"
+        else
+            warn "update-initramfs a echoue : le theme ne sera pas dans l'initramfs"
+            fail_action "Plymouth : update-initramfs a echoue"
+        fi
+    fi
+    verify_plymouth_initramfs
 
     # -- Desactiver le splashscreen propre a RetroPie (asplashscreen) --
     # pour eviter qu'il ne s'affiche par-dessus / apres celui de Plymouth.
@@ -685,24 +780,40 @@ EOF
     done_action "~/.xinitrc cree ; start.sh/xelauncher.sh du depot rendus executables"
 }
 
+xe_profile_block() {
+    cat <<'EOF'
+# Lancement de XeLauncher (Prometheus Entertainment System)
+if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+    # Libere le DRM pour X en gardant le splash a l'ecran (Electron fera 'plymouth quit')
+    sudo -n /usr/bin/plymouth deactivate >/dev/null 2>&1 || sudo -n /usr/bin/plymouth quit >/dev/null 2>&1
+    exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp >"$HOME/.xelauncher-startx.log" 2>&1
+fi
+EOF
+}
+
 configure_autologin() {
     if command -v raspi-config >/dev/null 2>&1; then
         log "Configuration de l'autologin console via raspi-config"
         sudo raspi-config nonint do_boot_behaviour B2
         ok "Autologin console configure"
         done_action "Autologin TTY1 configure via raspi-config"
-    else
-        log "Configuration manuelle de l'autologin sur TTY1"
-        sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
-        cat <<EOF | sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf
+    fi
+
+    # Autologin silencieux (pas de /etc/issue, pas d'effacement d'ecran). Ecrit dans tous les cas :
+    # override.conf passe apres l'autologin.conf de raspi-config et prend le dessus.
+    log "Autologin silencieux sur TTY1"
+    sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
+    cat <<EOF | sudo tee "$GETTY_OVERRIDE" >/dev/null
 [Service]
 ExecStart=
-ExecStart=-/sbin/agetty --autologin $REAL_USER --noclear %I \$TERM
+ExecStart=-/sbin/agetty --autologin $REAL_USER --noclear --noissue %I \$TERM
 EOF
-        sudo systemctl daemon-reload
-        ok "Autologin configure manuellement"
-        done_action "Autologin TTY1 configure manuellement (systemd)"
-    fi
+    sudo systemctl daemon-reload
+    ok "Autologin TTY1 silencieux configure"
+    done_action "Autologin TTY1 silencieux (systemd, $GETTY_OVERRIDE)"
+
+    # Supprime "Last login" / motd a l'ouverture de session
+    touch "$HOME/.hushlogin"
 
     local BASH_PROFILE="$HOME/.bash_profile"
 
@@ -710,32 +821,17 @@ EOF
         if ! grep -q '\.bashrc' "$BASH_PROFILE" 2>/dev/null; then
             echo '[ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"' >> "$BASH_PROFILE"
         fi
-        cat >> "$BASH_PROFILE" <<'EOF'
-
-# Lancement de XeLauncher (Prometheus Entertainment System)
-if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    echo "Demarrage de XeLauncher..."
-    exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
-fi
-EOF
+        { echo ""; xe_profile_block; } >> "$BASH_PROFILE"
         ok "XeLauncher ajoute au demarrage dans .bash_profile"
-        done_action "~/.bash_profile configure (startx sur TTY1)"
+        done_action "~/.bash_profile configure (startx sur TTY1, sans texte)"
+    elif grep -q "plymouth deactivate" "$BASH_PROFILE" 2>/dev/null; then
+        ok "XeLauncher deja correctement configure dans .bash_profile"
     else
-        if grep -q "exec startx ./start.sh\|cd.*xelauncher" "$BASH_PROFILE" 2>/dev/null; then
-            sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$BASH_PROFILE"
-            cat >> "$BASH_PROFILE" <<'EOF'
-
-# Lancement de XeLauncher (Prometheus Entertainment System)
-if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    echo "Demarrage de XeLauncher..."
-    exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
-fi
-EOF
-            ok ".bash_profile mis a jour (ancienne entree corrigee)"
-            done_action "~/.bash_profile corrige"
-        else
-            ok "XeLauncher deja correctement configure dans .bash_profile"
-        fi
+        # Ancien bloc (avec echo "Demarrage..." et sans handoff Plymouth) : on le remplace
+        sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$BASH_PROFILE"
+        { echo ""; xe_profile_block; } >> "$BASH_PROFILE"
+        ok ".bash_profile mis a jour (demarrage silencieux + handoff Plymouth)"
+        done_action "~/.bash_profile corrige (silencieux + plymouth deactivate)"
     fi
 
     if grep -q "XeLauncher" "$HOME/.profile" 2>/dev/null; then
@@ -786,12 +882,13 @@ configure_sudoers() {
     #   ipc-system.js  : systemctl reboot/poweroff, apt update / apt-get update+upgrade
     #   ipc-jellyfin.js: systemctl start tailscaled, tailscale up
     #   main-window.js : plymouth --update=fade, plymouth quit
+    #   .bash_profile  : plymouth deactivate (avant startx)
     # SETENV est necessaire car le JS ecrit "sudo DEBIAN_FRONTEND=noninteractive apt-get ...".
     local tmp
     tmp=$(mktemp) || { warn "mktemp a echoue : sudoers non configure"; return 0; }
     cat > "$tmp" <<EOF
 # XeLauncher : commandes lancees par l'interface sans mot de passe
-$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl start tailscaled, /usr/bin/tailscale up, /usr/bin/plymouth --update=fade, /usr/bin/plymouth quit, SETENV: /usr/bin/apt-get update -qq, /usr/bin/apt-get upgrade -y -qq, /usr/bin/apt update -qq
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl start tailscaled, /usr/bin/tailscale up, /usr/bin/plymouth --update=fade, /usr/bin/plymouth quit, /usr/bin/plymouth deactivate, SETENV: /usr/bin/apt-get update -qq, /usr/bin/apt-get upgrade -y -qq, /usr/bin/apt update -qq
 EOF
     # Un sudoers invalide peut casser sudo : on valide avant d'installer.
     if command -v visudo >/dev/null 2>&1 && ! sudo visudo -cf "$tmp" >/dev/null 2>&1; then
@@ -987,6 +1084,31 @@ uninstall_all() {
         anything_done=1
     fi
 
+    # -- Boot silencieux : retour a l'etat d'avant --
+    if systemctl is-enabled plymouth-quit.service 2>/dev/null | grep -q masked; then
+        sudo systemctl unmask plymouth-quit.service plymouth-quit-wait.service 2>/dev/null || true
+        done_action "plymouth-quit demasque"
+        anything_done=1
+    fi
+    for f in /boot/firmware/cmdline.txt /boot/cmdline.txt /boot/firmware/config.txt /boot/config.txt; do
+        if [[ -f "$f.xelauncher.bak" ]]; then
+            case "$f" in
+                */cmdline.txt) sudo cp -a "$f.xelauncher.bak" "$f" ;;
+                */config.txt)  sudo sed -i "/^# >>> XeLauncher boot >>>\$/,/^# <<< XeLauncher boot <<<\$/d" "$f" ;;
+            esac
+            sudo rm -f "$f.xelauncher.bak"
+            done_action "$f remis comme avant XeLauncher"
+            anything_done=1
+        fi
+    done
+    if [[ -f "$GETTY_OVERRIDE" ]]; then
+        sudo rm -f "$GETTY_OVERRIDE"
+        sudo systemctl daemon-reload
+        done_action "Autologin silencieux (getty override) supprime"
+        anything_done=1
+    fi
+    rm -f "$HOME/.xelauncher-startx.log"
+
     if [[ -d "$PLYMOUTH_THEME_DIR" ]]; then
         current_theme=$(plymouth-set-default-theme 2>/dev/null || true)
         if [[ "$current_theme" == "xe_theme" ]]; then
@@ -1109,7 +1231,7 @@ main() {
         unzip jq dialog xmlstarlet \
         fbi \
         psmisc \
-        plymouth plymouth-themes \
+        plymouth plymouth-themes plymouth-label \
         python3 python3-evdev python3-xlib python3-plyvel python3-websocket \
         x11-xserver-utils xterm alsa-utils \
         pulseaudio-utils \
