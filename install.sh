@@ -3,6 +3,10 @@
 # |              XeLauncher — Script d'installation              |
 # |           Prometheus Entertainment System — RPI5/PC          |
 # +--------------------------------------------------------------+
+#
+#  Usage : ./install.sh [--i | --u] [--no-retropie | --retropie]
+#          curl -fsSL <url>/install.sh | bash -s -- --i --no-retropie
+#  (voir --help)
 
 set -uo pipefail
 
@@ -12,6 +16,8 @@ readonly LOCK_FILE="/var/tmp/xelauncher_install.lock"
 readonly LOG_FILE="$HOME/xelauncher_install.log"
 readonly SUDOERS_FILE="/etc/sudoers.d/xelauncher"
 readonly PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/xe_theme"
+readonly JELLYFIN_APP_ID="org.jellyfin.JellyfinDesktop"
+readonly JELLYFIN_OLD_APP_ID="com.github.iwalton3.jellyfin-media-player"
 
 readonly RED='\033[1;31m'
 readonly GREEN='\033[1;32m'
@@ -23,12 +29,23 @@ readonly RESET='\033[0m'
 AUTO_MODE=""
 MODE=""
 ACTIONS_DONE=()
+FAILED_STEPS=()
+
+# RetroPie : optionnel. XE_RETROPIE=yes|no ou --retropie / --no-retropie.
+# Vide = on demande (menu interactif) ou on installe (mode --i).
+RETROPIE_CHOICE=""
+case "${XE_RETROPIE:-}" in yes|no) RETROPIE_CHOICE="$XE_RETROPIE" ;; esac
+INSTALL_RETROPIE=1
+RETROPIE_INTERRUPTED=0
+REMOVE_RETROPIE=0
+REMOVE_ROMS=0
 
 log()         { echo -e "${CYAN}→${RESET} $1"; }
 ok()          { echo -e "${GREEN}✔${RESET} $1"; }
 warn()        { echo -e "${YELLOW}!${RESET} $1"; }
 error()       { echo -e "${RED}✖${RESET} $1" >&2; }
 done_action() { ACTIONS_DONE+=("$1"); }
+fail_action() { FAILED_STEPS+=("$1"); }
 
 section() {
     echo ""
@@ -87,6 +104,40 @@ download_with_retry() {
     return 1
 }
 
+usage() {
+    cat <<EOF
+Usage : $0 [--i | --u] [--no-retropie | --retropie]
+
+  --i             installation sans menu
+  --u             desinstallation sans menu
+  --no-retropie   ne pas installer RetroPie (avec --u : ne pas le desinstaller)
+  --retropie      installer RetroPie sans poser la question (avec --u : le desinstaller)
+  -h, --help      cette aide
+
+Equivalent : XE_RETROPIE=yes|no
+Via curl    : curl -fsSL <url>/install.sh | bash -s -- --i --no-retropie
+Pendant l'installation de RetroPie, Ctrl+C passe cette etape sans arreter le reste.
+EOF
+}
+
+# ask_yn "question" y|n  -> code 0 = oui, 1 = non (defaut si pas de terminal)
+ask_yn() {
+    local prompt=$1 def=${2:-n} ans hint
+    [[ "$def" == "y" ]] && hint="Y/n" || hint="y/N"
+    # Pas de terminal (cron, CI...) : on prend la valeur par defaut sans bruit
+    if ! { true </dev/tty; } 2>/dev/null; then
+        [[ "$def" == "y" ]]; return
+    fi
+    while true; do
+        read -rp "  $prompt ($hint) : " ans </dev/tty || { [[ "$def" == "y" ]]; return; }
+        case "${ans:-$def}" in
+            y|Y|o|O) return 0 ;;
+            n|N)     return 1 ;;
+            *) echo "  Tapez 'y' ou 'n'." ;;
+        esac
+    done
+}
+
 detect_state() {
     HAS_RETROPIE=0
     HAS_JELLYFIN=0
@@ -97,7 +148,7 @@ detect_state() {
     HAS_AUTOLOGIN=0
 
     command -v emulationstation >/dev/null 2>&1 && HAS_RETROPIE=1
-    flatpak info com.github.iwalton3.jellyfin-media-player >/dev/null 2>&1 && HAS_JELLYFIN=1
+    flatpak info "$JELLYFIN_APP_ID" >/dev/null 2>&1 && HAS_JELLYFIN=1
     command -v startx >/dev/null 2>&1 && HAS_X=1
     command -v node >/dev/null 2>&1 && {
         local v; v=$(node -v | cut -dv -f2 | cut -d. -f1)
@@ -128,6 +179,39 @@ print_state() {
     echo ""
 }
 
+# Decide si RetroPie sera installe. Appele AVANT la redirection des logs
+# (sinon la question n'apparait pas a l'ecran).
+decide_retropie() {
+    INSTALL_RETROPIE=1
+    case "$RETROPIE_CHOICE" in
+        no)  INSTALL_RETROPIE=0 ;;
+        yes) INSTALL_RETROPIE=1 ;;
+        *)
+            if [[ -z "$AUTO_MODE" && $HAS_RETROPIE -eq 0 ]]; then
+                ask_yn "Installer RetroPie (20-60 min) ?" y || INSTALL_RETROPIE=0
+            fi
+            ;;
+    esac
+}
+
+# Desinstallation : RetroPie et surtout ~/RetroPie (ROMs) ne partent que si on le demande.
+decide_uninstall_retropie() {
+    REMOVE_RETROPIE=0
+    REMOVE_ROMS=0
+    case "$RETROPIE_CHOICE" in
+        yes) REMOVE_RETROPIE=1 ;;
+        no)  REMOVE_RETROPIE=0 ;;
+        *)
+            if [[ $HAS_RETROPIE -eq 1 || -d "$HOME/RetroPie-Setup" ]]; then
+                ask_yn "Desinstaller aussi RetroPie ?" n && REMOVE_RETROPIE=1
+            fi
+            ;;
+    esac
+    if [[ $REMOVE_RETROPIE -eq 1 && -d "$HOME/RetroPie" ]]; then
+        ask_yn "Supprimer aussi ~/RetroPie (ROMs, BIOS, sauvegardes) ?" n && REMOVE_ROMS=1
+    fi
+}
+
 interactive_menu() {
     if [[ -n "$AUTO_MODE" ]]; then
         MODE="$AUTO_MODE"
@@ -142,8 +226,11 @@ interactive_menu() {
         print_state
 
         if [[ "$MODE" == "install" ]]; then
+            decide_retropie
             echo -e "${YELLOW}⚠  Mode automatique :${RESET} Installation en cours..."
+            [[ $INSTALL_RETROPIE -eq 0 ]] && echo "   RetroPie sera ignore."
         else
+            decide_uninstall_retropie
             echo -e "${RED}⚠  Mode automatique :${RESET} Desinstallation en cours..."
         fi
         echo ""
@@ -194,11 +281,22 @@ interactive_menu() {
     echo ""
 
     if [[ "$MODE" == "install" ]]; then
-        echo -e "${YELLOW}⚠  Attention :${RESET} L'installation peut durer ${WHITE}une heure ou plus${RESET},"
-        echo    "   notamment a cause de RetroPie."
+        decide_retropie
+        if [[ $INSTALL_RETROPIE -eq 1 ]]; then
+            echo -e "${YELLOW}⚠  Attention :${RESET} L'installation peut durer ${WHITE}une heure ou plus${RESET},"
+            echo    "   notamment a cause de RetroPie (Ctrl+C pendant RetroPie = passer cette etape)."
+        else
+            echo -e "${YELLOW}⚠  Attention :${RESET} L'installation peut prendre un moment. RetroPie sera ignore."
+        fi
         echo    "   Assurez-vous que le systeme reste allume et connecte a Internet."
     else
-        echo -e "${RED}⚠  Desinstallation :${RESET} Tout ce qu'XeLauncher a installe sera supprime."
+        decide_uninstall_retropie
+        echo -e "${RED}⚠  Desinstallation :${RESET} Tout ce qu'XeLauncher a installe sera supprime"
+        if [[ $REMOVE_RETROPIE -eq 1 ]]; then
+            echo    "   (RetroPie inclus$([[ $REMOVE_ROMS -eq 1 ]] && echo ', ROMs comprises'))."
+        else
+            echo    "   (RetroPie conserve)."
+        fi
     fi
 
     echo ""
@@ -215,18 +313,33 @@ interactive_menu() {
 }
 
 check_and_install_packages() {
-    local to_install=()
+    local to_install=() pkg
     for pkg in "$@"; do
         if ! dpkg -s "$pkg" 2>/dev/null | grep -q "^Status: install ok installed"; then
             to_install+=("$pkg")
         fi
     done
-    if [[ ${#to_install[@]} -gt 0 ]]; then
-        log "Installation des paquets manquants: ${to_install[*]}"
-        sudo apt-get install -y "${to_install[@]}" \
-            || { error "Echec installation paquets: ${to_install[*]}"; exit 1; }
+    [[ ${#to_install[@]} -eq 0 ]] && return 0
+
+    log "Installation des paquets manquants: ${to_install[*]}"
+    if sudo apt-get install -y "${to_install[@]}"; then
         done_action "Paquets systeme installes : ${to_install[*]}"
+        return 0
     fi
+
+    # Un seul nom de paquet inconnu (ex. renommage t64 sur Debian 13) fait echouer
+    # tout le lot : on reessaie un par un et on continue.
+    warn "Installation groupee echouee, nouvel essai paquet par paquet"
+    local good=() bad=()
+    for pkg in "${to_install[@]}"; do
+        if sudo apt-get install -y "$pkg"; then good+=("$pkg"); else bad+=("$pkg"); fi
+    done
+    [[ ${#good[@]} -gt 0 ]] && done_action "Paquets systeme installes : ${good[*]}"
+    if [[ ${#bad[@]} -gt 0 ]]; then
+        warn "Paquets NON installes : ${bad[*]}"
+        fail_action "Paquets non installes : ${bad[*]}"
+    fi
+    return 0
 }
 
 install_nodejs() {
@@ -271,14 +384,14 @@ install_flatpak_jellyfin() {
 
     if [[ $HAS_JELLYFIN -eq 0 ]]; then
         log "Installation de Jellyfin Media Player"
-        sudo flatpak install -y flathub com.github.iwalton3.jellyfin-media-player \
+        sudo flatpak install -y flathub "$JELLYFIN_APP_ID" \
             2>&1 | grep -v $'^\033' | tee -a "$LOG_FILE" || \
             { error "Echec installation Jellyfin"; exit 1; }
         ok "Jellyfin Media Player installe"
         done_action "Jellyfin Media Player installe via flatpak"
     else
         log "Mise a jour de Jellyfin Media Player"
-        flatpak update -y com.github.iwalton3.jellyfin-media-player 2>/dev/null \
+        sudo flatpak update -y "$JELLYFIN_APP_ID" 2>/dev/null \
             && done_action "Jellyfin Media Player mis a jour" || true
         ok "Jellyfin a jour"
     fi
@@ -291,7 +404,11 @@ install_flatpak_jellyfin() {
         sudo usermod -a -G flatpak "$REAL_USER"
     fi
     flatpak override --user --socket=x11 --share=network \
-        com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
+        "$JELLYFIN_APP_ID" 2>/dev/null || true
+    if flatpak info "$JELLYFIN_OLD_APP_ID" >/dev/null 2>&1; then
+        warn "Ancien Jellyfin Media Player detecte : XeLauncher utilise $JELLYFIN_APP_ID"
+        warn "  (le retirer : sudo flatpak uninstall $JELLYFIN_OLD_APP_ID)"
+    fi
     ok "Flatpak et Jellyfin configures"
 }
 
@@ -378,6 +495,11 @@ install_npm_deps() {
 }
 
 install_retropie() {
+    if [[ $INSTALL_RETROPIE -eq 0 ]]; then
+        warn "RetroPie ignore (--no-retropie ou choix a l'invite)"
+        return 0
+    fi
+
     if [[ $HAS_RETROPIE -eq 1 ]]; then
         ok "RetroPie deja installe"
         return 0
@@ -385,9 +507,15 @@ install_retropie() {
 
     if [[ "$PLATFORM" == "rpi5" ]]; then
         log "Installation de RetroPie sur Raspberry Pi 5 (optimisee)"
-        if ! grep -q "dtoverlay=vc4-kms-v3d" /boot/config.txt 2>/dev/null; then
-            echo "dtoverlay=vc4-kms-v3d" | sudo tee -a /boot/config.txt
-            log "Configuration GPU ajoutee (redemarrage requis plus tard)"
+        # /boot/config.txt n'existe plus sur Raspberry Pi OS recent : c'est /boot/firmware/config.txt
+        local boot_cfg="" candidate
+        for candidate in /boot/firmware/config.txt /boot/config.txt; do
+            [[ -f "$candidate" ]] && { boot_cfg="$candidate"; break; }
+        done
+        if [[ -n "$boot_cfg" ]] && ! grep -qE '^[[:space:]]*dtoverlay=vc4-kms-v3d' "$boot_cfg"; then
+            echo "dtoverlay=vc4-kms-v3d" | sudo tee -a "$boot_cfg" >/dev/null
+            log "Configuration GPU ajoutee dans $boot_cfg (redemarrage requis plus tard)"
+            done_action "dtoverlay=vc4-kms-v3d ajoute dans $boot_cfg"
         fi
     else
         log "Installation de RetroPie (20-40 minutes)"
@@ -395,15 +523,35 @@ install_retropie() {
 
     if [[ ! -d "$HOME/RetroPie-Setup" ]]; then
         git clone --depth=1 https://github.com/RetroPie/RetroPie-Setup.git "$HOME/RetroPie-Setup" \
-            || { error "Echec clonage RetroPie-Setup"; exit 1; }
+            || { warn "Echec clonage RetroPie-Setup : RetroPie ignore"
+                 fail_action "RetroPie : clonage de RetroPie-Setup echoue"
+                 return 0; }
     fi
 
-    cd "$HOME/RetroPie-Setup"
+    cd "$HOME/RetroPie-Setup" \
+        || { warn "RetroPie-Setup inaccessible : RetroPie ignore"
+             fail_action "RetroPie : dossier RetroPie-Setup inaccessible"
+             return 0; }
     git pull --rebase 2>/dev/null || true
 
-    log "Lancement de l'installation RetroPie..."
-    sudo __nodialog=1 ./retropie_packages.sh setup basic_install \
-        || { error "Echec installation RetroPie"; exit 1; }
+    log "Lancement de l'installation RetroPie... (Ctrl+C = passer cette etape, le reste continue)"
+    RETROPIE_INTERRUPTED=0
+    trap 'RETROPIE_INTERRUPTED=1' INT
+    sudo __nodialog=1 ./retropie_packages.sh setup basic_install
+    local rc=$?
+    trap - INT
+    cd "$HOME" || true
+
+    if [[ $RETROPIE_INTERRUPTED -eq 1 ]]; then
+        warn "RetroPie interrompu (Ctrl+C) : etape ignoree, le reste de l'installation continue"
+        fail_action "RetroPie : installation interrompue (relancer l'installateur pour reprendre)"
+        return 0
+    fi
+    if [[ $rc -ne 0 ]]; then
+        warn "Echec installation RetroPie (code $rc), voir $LOG_FILE : le reste continue"
+        fail_action "RetroPie : installation echouee (code $rc)"
+        return 0
+    fi
 
     mkdir -p "$HOME/RetroPie/roms"/{nes,snes,gb,gba,n64,psx,mame,arcade}
 
@@ -412,11 +560,15 @@ install_retropie() {
         done_action "RetroPie installe (basic_install)"
     else
         warn "RetroPie n'a pas pu etre confirme. Verifiez $LOG_FILE"
+        fail_action "RetroPie : emulationstation introuvable apres installation"
     fi
 }
 
 configure_retropie_menu() {
     local cfg="/etc/emulationstation/es_systems.cfg"
+    if [[ $INSTALL_RETROPIE -eq 0 && $HAS_RETROPIE -eq 0 ]]; then
+        return 0    # RetroPie ignore : rien a configurer
+    fi
     if [[ ! -f "$cfg" ]]; then
         warn "es_systems.cfg introuvable — configuration RetroPie menu ignoree"
         return 0
@@ -439,7 +591,7 @@ configure_retropie_menu() {
 
 configure_boot_splash() {
     local logo="$INSTALL_DIR/src/LOGOs/prometheus.png"
-    local theme_src="$INSTALL_DIR/src/PLYMOUTHs/xe_theme"
+    local theme_src="$INSTALL_DIR/src/plymouth/xe_theme"
 
     if [[ ! -f "$logo" ]]; then
         warn "Logo introuvable a $logo — thème Plymouth ignore"
@@ -521,12 +673,15 @@ xset s noblank
 openbox &
 
 # Neutralise le curseur souris de façon permanente (XFixesHideCursor).
-python3 "$INSTALL_DIR/scripts/xe_cursor_pin.py" &
+# (ignore si le script n'est pas present dans le depot)
+if [ -f "$INSTALL_DIR/scripts/xe_cursor_pin.py" ]; then
+    python3 "$INSTALL_DIR/scripts/xe_cursor_pin.py" &
+fi
 
 exec "$INSTALL_DIR/xelauncher.sh"
 EOF
     chmod +x "$HOME/.xinitrc"
-    ok "Fichier .xinitrc cree (openbox + xe_cursor_pin.py + xelauncher.sh)"
+    ok "Fichier .xinitrc cree (openbox + xelauncher.sh ; xe_cursor_pin.py si present)"
     done_action "~/.xinitrc cree ; start.sh/xelauncher.sh du depot rendus executables"
 }
 
@@ -627,9 +782,26 @@ EOF
 }
 
 configure_sudoers() {
-    echo "$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/tailscale up" \
-        | sudo tee "$SUDOERS_FILE" > /dev/null
-    sudo chmod 440 "$SUDOERS_FILE"
+    # Commandes lancees par l'interface (src/JSs/*.js) sans terminal :
+    #   ipc-system.js  : systemctl reboot/poweroff, apt update / apt-get update+upgrade
+    #   ipc-jellyfin.js: systemctl start tailscaled, tailscale up
+    #   main-window.js : plymouth --update=fade, plymouth quit
+    # SETENV est necessaire car le JS ecrit "sudo DEBIAN_FRONTEND=noninteractive apt-get ...".
+    local tmp
+    tmp=$(mktemp) || { warn "mktemp a echoue : sudoers non configure"; return 0; }
+    cat > "$tmp" <<EOF
+# XeLauncher : commandes lancees par l'interface sans mot de passe
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl start tailscaled, /usr/bin/tailscale up, /usr/bin/plymouth --update=fade, /usr/bin/plymouth quit, SETENV: /usr/bin/apt-get update -qq, /usr/bin/apt-get upgrade -y -qq, /usr/bin/apt update -qq
+EOF
+    # Un sudoers invalide peut casser sudo : on valide avant d'installer.
+    if command -v visudo >/dev/null 2>&1 && ! sudo visudo -cf "$tmp" >/dev/null 2>&1; then
+        rm -f "$tmp"
+        warn "Regles sudoers invalides (visudo) : non installees"
+        fail_action "sudoers : regles rejetees par visudo, non installees"
+        return 0
+    fi
+    sudo install -m 440 -o root -g root "$tmp" "$SUDOERS_FILE"
+    rm -f "$tmp"
     ok "Regles sudoers configurees"
     done_action "Regles sudoers configurees ($SUDOERS_FILE)"
 }
@@ -687,7 +859,7 @@ create_required_dirs() {
         "$INSTALL_DIR/src/JSs" \
         "$INSTALL_DIR/src/CSSs" \
         "$INSTALL_DIR/src/FONTs" \
-        "$INSTALL_DIR/src/PLYMOUTHs" \
+        "$INSTALL_DIR/src/plymouth" \
         "$INSTALL_DIR/logs"
     ok "Dossiers src/ et logs/ crees"
     done_action "Dossiers src/ et logs/ crees/verifies"
@@ -744,25 +916,37 @@ uninstall_all() {
     fi
 
     log "Desinstallation de Jellyfin Media Player"
-    sudo flatpak uninstall -y com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
+    sudo flatpak uninstall -y "$JELLYFIN_APP_ID" 2>/dev/null || true
+    sudo flatpak uninstall -y "$JELLYFIN_OLD_APP_ID" 2>/dev/null || true
     sudo flatpak uninstall -y --unused 2>/dev/null || true
     ok "Jellyfin desinstalle"
     done_action "Jellyfin Media Player desinstalle"
     anything_done=1
 
-    log "Desinstallation de RetroPie"
-    if [[ -d "$HOME/RetroPie-Setup" ]]; then
-        cd "$HOME/RetroPie-Setup"
-        sudo __nodialog=1 ./retropie_packages.sh setup remove_all 2>/dev/null || true
+    if [[ $REMOVE_RETROPIE -eq 1 ]]; then
+        log "Desinstallation de RetroPie"
+        if [[ -d "$HOME/RetroPie-Setup" ]]; then
+            cd "$HOME/RetroPie-Setup" \
+                && sudo __nodialog=1 ./retropie_packages.sh setup remove_all 2>/dev/null || true
+            cd "$HOME" || true
+        fi
+        sudo rm -rf "$HOME/RetroPie-Setup"
+        sudo rm -rf /opt/retropie
+        sudo rm -f /usr/bin/emulationstation
+        sudo apt-get remove -y emulationstation 2>/dev/null || true
+        ok "RetroPie desinstalle"
+        done_action "RetroPie desinstalle"
+        if [[ $REMOVE_ROMS -eq 1 ]]; then
+            sudo rm -rf "$HOME/RetroPie"
+            ok "~/RetroPie (ROMs, BIOS, sauvegardes) supprime"
+            done_action "~/RetroPie supprime"
+        elif [[ -d "$HOME/RetroPie" ]]; then
+            ok "~/RetroPie conserve (ROMs, BIOS, sauvegardes)"
+        fi
+        anything_done=1
+    else
+        log "RetroPie conserve"
     fi
-    sudo rm -rf "$HOME/RetroPie-Setup"
-    sudo rm -rf "$HOME/RetroPie"
-    sudo rm -rf /opt/retropie
-    sudo rm -f /usr/bin/emulationstation
-    sudo apt-get remove -y emulationstation 2>/dev/null || true
-    ok "RetroPie desinstalle"
-    done_action "RetroPie desinstalle"
-    anything_done=1
 
     log "Desinstallation de Node.js"
     sudo apt-get remove -y nodejs 2>/dev/null || true
@@ -834,7 +1018,9 @@ uninstall_all() {
 print_summary() {
     echo ""
     echo -e "${WHITE}------------------------------------------------------------${RESET}"
-    if [[ "$MODE" == "install" ]]; then
+    if [[ "$MODE" == "install" && ${#FAILED_STEPS[@]} -gt 0 ]]; then
+        echo -e "${YELLOW}! Installation terminee avec des avertissements${RESET}"
+    elif [[ "$MODE" == "install" ]]; then
         echo -e "${GREEN}✔ Installation terminee avec succes !${RESET}"
     else
         echo -e "${GREEN}✔ Desinstallation terminee !${RESET}"
@@ -851,6 +1037,15 @@ print_summary() {
         done
     fi
 
+    local step
+    if [[ ${#FAILED_STEPS[@]} -gt 0 ]]; then
+        echo ""
+        echo "  A verifier :"
+        for step in "${FAILED_STEPS[@]}"; do
+            echo -e "    ${YELLOW}!${RESET} $step"
+        done
+    fi
+
     echo ""
     if [[ "$MODE" == "install" ]]; then
         echo -e "  ${CYAN}Redemarrez maintenant :${RESET} sudo reboot"
@@ -863,9 +1058,12 @@ main() {
         case "$arg" in
             --i) AUTO_MODE="install" ;;
             --u) AUTO_MODE="uninstall" ;;
+            --no-retropie|--skip-retropie) RETROPIE_CHOICE="no" ;;
+            --retropie) RETROPIE_CHOICE="yes" ;;
+            -h|--help) usage; exit 0 ;;
             *)
                 echo -e "${RED}✖${RESET} Argument inconnu : $arg" >&2
-                echo "  Usage : $0 [--i | --u]" >&2
+                usage >&2
                 exit 1
                 ;;
         esac
@@ -888,7 +1086,7 @@ main() {
 
     interactive_menu
 
-    exec > >(sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\[[0-9;]*[Rr]//g' | tee -a "$LOG_FILE") 2>&1
+    exec > >(trap '' INT; sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\[[0-9;]*[Rr]//g' | tee -a "$LOG_FILE") 2>&1
 
     if [[ "$MODE" == "uninstall" ]]; then
         uninstall_all
@@ -912,7 +1110,8 @@ main() {
         fbi \
         psmisc \
         plymouth plymouth-themes \
-        python3 python3-evdev python3-xlib \
+        python3 python3-evdev python3-xlib python3-plyvel python3-websocket \
+        x11-xserver-utils xterm alsa-utils \
         pulseaudio-utils \
         libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
         libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 \
@@ -934,7 +1133,7 @@ main() {
     section "7/10 — Dependances Node"
     install_npm_deps
 
-    section "8/10 — RetroPie"
+    section "8/10 — RetroPie (optionnel)"
     install_retropie
 
     section "9/10 — Configuration entrees (evdev/Wiimote)"
