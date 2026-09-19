@@ -10,6 +10,10 @@
 
 set -uo pipefail
 
+# Sur Debian, /usr/sbin et /sbin ne sont pas dans le PATH d'un utilisateur normal :
+# update-initramfs, update-grub, plymouth-set-default-theme... semblaient "absents".
+export PATH="$PATH:/usr/local/sbin:/usr/sbin:/sbin"
+
 readonly REPO_URL="https://github.com/Xelopteryx/Xelauncher.git"
 readonly INSTALL_DIR="$HOME/xelauncher"
 readonly LOCK_FILE="/var/tmp/xelauncher_install.lock"
@@ -20,6 +24,7 @@ readonly JELLYFIN_APP_ID="org.jellyfin.JellyfinDesktop"
 readonly JELLYFIN_OLD_APP_ID="com.github.iwalton3.jellyfin-media-player"
 readonly BOOT_MARK_BEGIN="# >>> XeLauncher boot >>>"
 readonly BOOT_MARK_END="# <<< XeLauncher boot <<<"
+readonly GRUB_DEFAULT_FILE="/etc/default/grub"
 readonly GETTY_OVERRIDE="/etc/systemd/system/getty@tty1.service.d/override.conf"
 
 readonly RED='\033[1;31m'
@@ -598,10 +603,9 @@ configure_retropie_menu() {
 #  - console=tty1 -> console=tty3 : le texte du noyau va sur un AUTRE terminal (Ctrl+Alt+F3)
 # $1 = cmdline.txt. Sauvegarde <fichier>.xelauncher.bak au premier passage.
 # Code retour : 0 = modifie, 1 = deja a jour.
-cmdline_apply() {
-    local file=$1 line tok new cur
+cmdline_transform() {
+    local line=$1 tok has_tty=0
     local -a old out
-    line=$(head -n1 "$file")
     read -ra old <<<"$line"
     out=()
     for tok in "${old[@]}"; do
@@ -611,14 +615,61 @@ cmdline_apply() {
             *) out+=("$tok") ;;
         esac
     done
+    # Pas de console=ttyN : le noyau ecrit sur le terminal courant (tty1) -> on le detourne vers tty3
+    for tok in "${out[@]}"; do [[ "$tok" == console=tty[0-9]* ]] && has_tty=1; done
+    [[ $has_tty -eq 1 ]] || out+=("console=tty3")
     for tok in quiet splash plymouth.ignore-serial-consoles logo.nologo loglevel=3 vt.global_cursor_default=0; do
         [[ " ${out[*]} " == *" $tok "* ]] || out+=("$tok")
     done
-    new="${out[*]}"
+    echo "${out[*]}"
+}
+
+# Raspberry Pi : $1 = cmdline.txt. Sauvegarde <fichier>.xelauncher.bak au premier passage.
+# Code retour : 0 = modifie, 1 = deja a jour.
+cmdline_apply() {
+    local file=$1 line cur new
+    local -a old
+    line=$(head -n1 "$file")
+    read -ra old <<<"$line"
     cur="${old[*]}"
+    new=$(cmdline_transform "$line")
     [[ "$new" == "$cur" ]] && return 1
     [[ -f "$file.xelauncher.bak" ]] || sudo cp -a "$file" "$file.xelauncher.bak"
     echo "$new" | sudo tee "$file" >/dev/null
+    return 0
+}
+
+# PC / Debian avec GRUB : meme chose dans GRUB_CMDLINE_LINUX_DEFAULT, puis update-grub.
+# Code retour : 0 = modifie, 1 = deja a jour, 2 = pas de GRUB, 3 = echec update-grub.
+grub_apply() {
+    local f="$GRUB_DEFAULT_FILE" line cur new tmp
+    local -a old
+    [[ -f "$f" ]] || return 2
+    line=$(grep -E '^GRUB_CMDLINE_LINUX_DEFAULT=' "$f" | tail -n1)
+    cur=${line#GRUB_CMDLINE_LINUX_DEFAULT=}
+    cur=${cur#[\"\']}
+    cur=${cur%[\"\']}
+    read -ra old <<<"$cur"
+    cur="${old[*]}"
+    new=$(cmdline_transform "$cur")
+    [[ "$new" == "$cur" ]] && return 1
+    [[ -f "$f.xelauncher.bak" ]] || sudo cp -a "$f" "$f.xelauncher.bak"
+    tmp=$(mktemp)
+    if [[ -n "$line" ]]; then
+        NEWLINE="GRUB_CMDLINE_LINUX_DEFAULT=\"$new\"" \
+            awk '/^GRUB_CMDLINE_LINUX_DEFAULT=/{print ENVIRON["NEWLINE"]; next} {print}' "$f" > "$tmp"
+    else
+        { cat "$f"; echo "GRUB_CMDLINE_LINUX_DEFAULT=\"$new\""; } > "$tmp"
+    fi
+    sudo install -m 644 -o root -g root "$tmp" "$f"
+    rm -f "$tmp"
+    if command -v update-grub >/dev/null 2>&1; then
+        sudo update-grub >/dev/null 2>&1 || return 3
+    elif command -v grub-mkconfig >/dev/null 2>&1; then
+        sudo grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 || return 3
+    else
+        return 3
+    fi
     return 0
 }
 
@@ -691,7 +742,7 @@ configure_boot_splash() {
         ok "Theme Plymouth xe_theme deja actif (fichiers resynchronises)"
     fi
 
-    # -- Boot silencieux : parametres noyau --
+    # -- Boot silencieux : parametres noyau (Raspberry Pi = cmdline.txt, PC/Debian = GRUB) --
     local cmdline="/boot/firmware/cmdline.txt"
     [[ -f "$cmdline" ]] || cmdline="/boot/cmdline.txt"
     if [[ -f "$cmdline" ]]; then
@@ -702,8 +753,17 @@ configure_boot_splash() {
             ok "$cmdline deja a jour"
         fi
     else
-        warn "cmdline.txt introuvable : boot silencieux non configure (parametres noyau a ajouter a la main)"
-        fail_action "cmdline.txt introuvable : ajouter 'quiet splash console=tty3' a la main"
+        grub_apply
+        case $? in
+            0) ok "GRUB mis a jour (boot silencieux, texte noyau sur tty3)"
+               done_action "$GRUB_DEFAULT_FILE : quiet splash logo.nologo loglevel=3 console=tty3 + update-grub (sauvegarde .xelauncher.bak)" ;;
+            1) ok "GRUB deja a jour" ;;
+            3) warn "update-grub a echoue : verifier $GRUB_DEFAULT_FILE puis lancer 'sudo update-grub'"
+               fail_action "GRUB : update-grub a echoue (relancer a la main)" ;;
+            *) warn "Ni cmdline.txt (Raspberry Pi) ni $GRUB_DEFAULT_FILE (GRUB) : chargeur de demarrage non gere"
+               warn "  Ajoutez a la main aux parametres noyau : quiet splash console=tty3 loglevel=3 logo.nologo"
+               fail_action "Boot silencieux non configure (chargeur de demarrage inconnu) : ajouter 'quiet splash console=tty3' a la main" ;;
+        esac
     fi
 
     case "$PLATFORM" in
@@ -713,6 +773,10 @@ configure_boot_splash() {
     # -- Plymouth reste affiche jusqu'a ce qu'Electron appelle 'plymouth quit' (main-window.js) --
     # Sans ca, systemd le coupe des le demarrage du getty et le texte de login apparait.
     # Le .bash_profile fait 'plymouth deactivate' avant startx pour liberer le DRM.
+    if [[ ! -x /usr/bin/plymouth ]]; then
+        warn "/usr/bin/plymouth introuvable : sudoers, .bash_profile et le JS l'utilisent tel quel"
+        fail_action "Plymouth : /usr/bin/plymouth introuvable"
+    fi
     if command -v plymouth >/dev/null 2>&1; then
         sudo systemctl mask plymouth-quit.service plymouth-quit-wait.service >/dev/null 2>&1 || true
         ok "plymouth-quit masque : le splash reste jusqu'a l'affichage d'Electron"
@@ -1090,10 +1154,11 @@ uninstall_all() {
         done_action "plymouth-quit demasque"
         anything_done=1
     fi
-    for f in /boot/firmware/cmdline.txt /boot/cmdline.txt /boot/firmware/config.txt /boot/config.txt; do
+    for f in /boot/firmware/cmdline.txt /boot/cmdline.txt /boot/firmware/config.txt /boot/config.txt "$GRUB_DEFAULT_FILE"; do
         if [[ -f "$f.xelauncher.bak" ]]; then
             case "$f" in
                 */cmdline.txt) sudo cp -a "$f.xelauncher.bak" "$f" ;;
+                "$GRUB_DEFAULT_FILE") sudo cp -a "$f.xelauncher.bak" "$f"; sudo update-grub >/dev/null 2>&1 || true ;;
                 */config.txt)  sudo sed -i "/^# >>> XeLauncher boot >>>\$/,/^# <<< XeLauncher boot <<<\$/d" "$f" ;;
             esac
             sudo rm -f "$f.xelauncher.bak"
