@@ -147,28 +147,26 @@
   box-shadow: 0 0 16px rgba(165,214,167,0.2);
 }
 
-/* ── 3. Rotation inline ────────────────────────────────────── */
-.rot-option {
-  display: inline-flex;
+/* ── 3. Rotation inline — une seule valeur affichée à la fois,
+   l'image d'aperçu ci-dessous tourne avec une transition fluide
+   plutôt que d'empiler les 4 options. ─────────────────────────── */
+.rot-image-wrap {
+  display: none;
+  justify-content: center;
   align-items: center;
-  gap: 8px;
-  padding: 4px 14px;
-  margin-right: 6px;
-  font-size: var(--fs-small);
-  letter-spacing: 1.5px;
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  transition: all 0.12s;
+  padding: clamp(10px,1.5vh,18px) clamp(16px,2.5vw,28px) clamp(16px,2.2vh,22px);
+  border-top: 1px solid var(--border);
 }
-.rot-option.rot-option-active {
-  border-color: var(--blue);
-  color: var(--blue);
-  background: var(--blue-bg);
-}
-.rot-icon {
-  font-family: monospace;
-  font-size: 1.1em;
-  opacity: 0.8;
+.rot-image-wrap.visible { display: flex; }
+.rot-image {
+  /* Le fichier source est en 3440×1440 : on le contraint à une
+     petite vignette carrée, quel que soit le ratio d'origine, pour
+     que la rotation ne provoque jamais de débordement de layout. */
+  width: clamp(90px, 10vw, 160px);
+  height: clamp(90px, 10vw, 160px);
+  object-fit: contain;
+  transition: transform 0.35s ease;
+  will-change: transform;
 }
 
 /* ── 4. Hint "bandes noires" ───────────────────────────────── */

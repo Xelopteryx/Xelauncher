@@ -12,6 +12,9 @@ var profiles      = [];
 var focusZone     = 1;
 var currentScreen = 'loading';
 
+/* Mémorise la zone quittée pour revenir dessus en remontant depuis le bloc Serveur */
+var lastFocusBeforeServer = 1;
+
 var editingProfile    = null;
 var editorFocusIdx    = 0;
 var editorBtnIdx      = 0;
@@ -41,19 +44,11 @@ var _kb = null;
 
 function openKb(label, initial, callback, type) {
   if (_kb) {
-    _kb.value    = initial || '';
-    _kb.type     = (type === 'url') ? 'url' : 'normal';
-    _kb.mode     = 'letters';
-    _kb.caps     = false;
-    _kb.section  = 'kb';
-    _kb.row      = 0;
-    _kb.col      = 0;
-    _kb.topFocus = 0;
+    _kb.type      = (type === 'url') ? 'url' : 'normal';
     _kb.onConfirm = function(val) { closeKb(); if (callback) callback(val); };
     _kb.onCancel  = function() { closeKb(); };
-    document.getElementById('kbLabel').textContent   = label;
-    document.getElementById('kbDisplay').textContent = (initial || '') + '|';
-    _kb._render();
+    document.getElementById('kbLabel').textContent = label;
+    _kb.open(initial);
   }
   document.getElementById('kbOverlay').classList.add('visible');
   currentScreen = 'kb';
@@ -87,13 +82,8 @@ function initProfiles() {
   _kb = new XeInput.VirtualKeyboard(
     document.getElementById('kbRows'),
     document.getElementById('kbDisplay'),
-    document.getElementById('kbOverlay'),
     'normal'
   );
-
-  document.getElementById('kbModeLetters').addEventListener('click', function() { _kb.setMode('letters'); });
-  document.getElementById('kbModeNums').addEventListener('click',    function() { _kb.setMode('nums'); });
-  document.getElementById('kbModeSpecials').addEventListener('click',function() { _kb.setMode('specials'); });
 
   document.getElementById('backBtn').addEventListener('click',    goBack);
   document.getElementById('serverBtn').addEventListener('click',  openServerSetup);
@@ -476,14 +466,38 @@ function handleKey(key) {
   }
 
   if (currentScreen === 'profiles') {
-    var total = profiles.length + 2;
-    if      (key === 'ArrowLeft')  { focusZone = focusZone > 0     ? focusZone - 1 : total; renderProfiles(); }
-    else if (key === 'ArrowRight') { focusZone = focusZone < total ? focusZone + 1 : 0;     renderProfiles(); }
-    else if (key === 'ArrowUp')    { focusZone = 0; renderProfiles(); }
-    else if (key === 'ArrowDown')  { if (focusZone === 0) { focusZone = 1; renderProfiles(); } }
-    else if (key === 'Enter')      confirmProfile();
-    else if (key === 'Triangle')   { if (focusZone > 0 && focusZone <= profiles.length) openEditor(profiles[focusZone - 1]); }
-    else if (key === 'Escape')     goBack();
+    var addZone    = profiles.length + 1;
+    var serverZone = profiles.length + 2;
+
+    if (key === 'ArrowLeft') {
+      /* Rien sur Retour ni sur le bloc Serveur */
+      if (focusZone > 0 && focusZone !== serverZone) { focusZone = focusZone - 1; renderProfiles(); }
+    }
+    else if (key === 'ArrowRight') {
+      /* Rien sur "Ajouter" ni sur le bloc Serveur */
+      if (focusZone !== addZone && focusZone !== serverZone) { focusZone = focusZone + 1; renderProfiles(); }
+    }
+    else if (key === 'ArrowUp') {
+      /* Depuis le bloc Serveur, remonter ramène sur la zone quittée juste avant */
+      focusZone = (focusZone === serverZone) ? lastFocusBeforeServer : 0;
+      renderProfiles();
+    }
+    else if (key === 'ArrowDown') {
+      if (focusZone === 0) {
+        /* Depuis Retour, descendre va sur le profil le plus à gauche — jamais sur Serveur */
+        focusZone = 1;
+        renderProfiles();
+      } else if (focusZone !== serverZone) {
+        /* Depuis un profil/+, descendre va sur le bloc Serveur */
+        lastFocusBeforeServer = focusZone;
+        focusZone = serverZone;
+        renderProfiles();
+      }
+      /* Depuis le bloc Serveur, ça ne fait plus rien */
+    }
+    else if (key === 'Enter')    confirmProfile();
+    else if (key === 'Triangle') { if (focusZone > 0 && focusZone <= profiles.length) openEditor(profiles[focusZone - 1]); }
+    else if (key === 'Escape')   goBack();
     return;
   }
 }

@@ -39,7 +39,11 @@
     confirm: 'Enter', back: 'Escape', menu: 'Start', action: 'Triangle',
   };
 
-  /* ── Accents ── */
+  /* ── Accents ET variantes de symboles ──
+   * Même mécanisme, même menu (flèches + Entrée) : sert à la fois pour
+   * les lettres accentuées et pour les symboles rares qui ne sont plus
+   * sur un clavier "!@#" séparé. La touche de base (ex: '-') est tapée
+   * immédiatement ; le menu propose ensuite les variantes (ex: '_','~'...). */
   var ACCENTS = {
     'a': ['\u00e0','\u00e2','\u00e4','\u00e1','\u00e3','\u00e5','\u00e6'],
     'e': ['\u00e9','\u00e8','\u00ea','\u00eb','\u011b','\u0119'],
@@ -51,6 +55,16 @@
     'y': ['\u00ff','\u00fd'],
     's': ['\u0161','\u015b'],
     'z': ['\u017e','\u017a','\u017c'],
+
+    /* Symboles rares — plus besoin d'un clavier séparé pour ceux-là */
+    '\'': ['\u2019','`'],           /* apostrophe -> '’' et '`' */
+    '-':  ['_','~','^','+','='],
+    '(':  ['[','{'],
+    ')':  [']','}'],
+    '/':  ['\\','|'],
+    '@':  ['#','&'],
+    '?':  ['!','\u00bf'],           /* '¿' */
+    '.':  ['\u2026'],               /* '…' */
   };
 
   /* ── prettyRaw ── */

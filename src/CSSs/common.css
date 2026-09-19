@@ -64,14 +64,6 @@
   --border:    rgba(255,255,255,0.1);
   --radius:    0px;
 
-  /* ── Safe area (calibration écran) ──
-     Définies par calibration.js au démarrage.
-     Valeur par défaut = 0 (pas de marge si non calibré). */
-  --safe-top:    0px;
-  --safe-left:   0px;
-  --safe-right:  0px;
-  --safe-bottom: 0px;
-
   /* Échelle texte globale (calibration) */
   --calib-text-scale: 1;
 

@@ -136,6 +136,13 @@ KEY_MAP = {
     0x8b:'menu', 0x66:'confirm', 0x9e:'back', 0xa4:'confirm',
     0x160:'confirm', 0x161:'select', 0x166:'menu', 0xe3:'back',
     0x110:'confirm', 0x111:'back', 0x112:'menu',
+    # -- Clavier physique standard --
+    # Aucun code manette/télécommande ci-dessus n'existe sur un clavier PC :
+    # sans ces deux lignes, 'menu' et 'action' sont totalement inatteignables
+    # au clavier, même en essayant de les mapper (le démon ne relaie jamais
+    # l'appui, il n'y a donc rien à capturer côté renderer).
+    15:'menu',    # KEY_TAB
+    42:'action',  # KEY_LEFTSHIFT
 }
 ABS_MAP = {
     0:('left','right'), 1:('up','down'), 2:('left','right'), 5:('up','down'),

@@ -69,6 +69,7 @@ XeSettings.Audio = (() => {
         _updateSinkLabel();
         _updateJfAudioLabel();
         XeSettings.Display.saveSettingsAuto();
+        applyAudio();
       });
       c.appendChild(btn);
     });
@@ -103,6 +104,7 @@ XeSettings.Audio = (() => {
         if (el) el.textContent = v + '%';
         renderVolumeOptions();
         XeSettings.Display.saveSettingsAuto();
+        applyAudio();
       });
       c.appendChild(btn);
     });
@@ -127,6 +129,7 @@ XeSettings.Audio = (() => {
           _updateSinkLabel();
           _updateJfAudioLabel();
           XeSettings.Display.saveSettingsAuto();
+          applyAudio();
           closeDropdown();
         },
         () => {
@@ -153,6 +156,7 @@ XeSettings.Audio = (() => {
           if (el) el.textContent = AUDIO_VOLS[i] + '%';
           renderVolumeOptions();
           XeSettings.Display.saveSettingsAuto();
+          applyAudio();
           closeDropdown();
         },
         () => {

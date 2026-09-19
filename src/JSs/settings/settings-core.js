@@ -242,12 +242,13 @@ function activateRow(el) {
   else if (action === 'jf-configure')  window.location.href = 'JMPmapper.html';
   else if (action === 'apply-display') XeSettings.Display.applyDisplay();
   else if (action === 'apply-audio')   XeSettings.Audio.applyAudio();
+  else if (action === 'refresh-sinks') XeSettings.Audio.refreshSinks();
   else if (el.id === 'row-bt-power')   XeSettings.Bluetooth.togglePower(el);
-  else if (el.id === 'row-resolution') XeSettings.Display.toggleResDropdown();
-  else if (el.id === 'row-refresh')    XeSettings.Display.toggleRefDropdown();
-  else if (el.id === 'row-rotation')   XeSettings.Display.toggleRotDropdown();
+  else if (el.id === 'row-resolution') XeSettings.Display.toggleResPanel();
   else if (el.id === 'row-audio-out')  XeSettings.Audio.toggleOutDropdown();
   else if (el.id === 'row-volume')     XeSettings.Audio.toggleVolDropdown();
+  /* row-rotation : pas de toggle — l'édition inline est gérée par le
+     dispatcher clavier (handleRotKey), voir onKey() plus bas. */
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -490,6 +491,22 @@ function onKey(raw, deviceId) {
     else if (key === 'Enter')                                            { dd.select(dd.selIdx); }
     else if (key === 'Escape' || key === 'Backspace' || key === 'Back') { closeDropdown(); updateContentFocus(); }
     return;
+  }
+
+  /* Affichage : panneau résolution ouvert, ou ligne rotation en édition —
+     priorité totale sur la navigation normale et sur le retour global,
+     pour que Retour/Échap annule au lieu de quitter la page. */
+  if (activeTab === 'display') {
+    if (XeSettings.Display.isResOpen()) {
+      XeSettings.Display.handleResKey(key);
+      return;
+    }
+    const _rows = getContentRows();
+    const _cur  = _rows[rowFocusMap[activeTab]];
+    if (_cur && _cur.id === 'row-rotation' &&
+        (key === 'Enter' || XeSettings.Display.isRotEditing())) {
+      if (XeSettings.Display.handleRotKey(key)) return;
+    }
   }
 
   /* Retour global */

@@ -1,19 +1,19 @@
 /**
  * evdev-poller.js
- * EvdevPoller â€” Ã©coute les events IPC de xe_input.py,
- * rÃ©sout les actions en touches logiques XeLauncher.
+ * EvdevPoller — écoute les events IPC de xe_input.py,
+ * résout les actions en touches logiques XeLauncher.
  *
  * Protocole xe_input.py v2 :
  *   { device: '/dev/input/event4', name: 'Xbox Wireless Controller',
  *     action: 'confirm', raw: 'KEY_304' }
  *
- * L'identifiant utilisÃ© pour le mapping est le NAME (nom lisible),
- * stable quelque soit le numÃ©ro d'event.
+ * L'identifiant utilisé pour le mapping est le NAME (nom lisible),
+ * stable quelque soit le numéro d'event.
  * Si name est absent (ancienne version), on utilise device comme fallback.
  *
  * Mode rawCapture (rawCapture=true) :
- *   Bypass ACCEPTED_ACTIONS, envoie tout Ã  onRawEvent(raw, name).
- *   UtilisÃ© par mapper.js pour capturer toutes les touches.
+ *   Bypass ACCEPTED_ACTIONS, envoie tout à onRawEvent(raw, name).
+ *   Utilisé par mapper.js pour capturer toutes les touches.
  */
 
 ;(function(root) {
@@ -28,7 +28,7 @@
   function EvdevPoller(onKey) {
     this.onKey        = onKey;
     this._customMaps  = null;   // ref vers InputMapper._maps
-    this.onRawEvent   = null;   // (raw, deviceName) avant rÃ©solution
+    this.onRawEvent   = null;   // (raw, deviceName) avant résolution
     this.debugMode    = false;
     this.onDebug      = null;   // ({ raw, gpId })
     this.rawCapture   = false;  // si true : bypass filtre, envoie tout
@@ -60,27 +60,38 @@
 
   /**
    * Retourner le nom stable de l'appareil.
-   * PrioritÃ© : data.name (lisible, stable) > data.device (chemin, change)
+   * Priorité : data.name (lisible, stable) > data.device (chemin, change)
    */
   EvdevPoller.prototype._deviceName = function(data) {
     if (data.name && data.name !== data.device) return data.name;
     return data.device || '__unknown__';
   };
 
-  EvdevPoller.prototype._resolve = function(action, deviceName) {
+  /**
+   * Résout la touche logique à utiliser pour cet event.
+   *
+   * IMPORTANT : le mapping custom stocké par InputMapper est
+   * { actionId: rawPhysique }. Pour savoir si CET event correspond à un
+   * actionId custom, il faut comparer le RAW physique reçu (raw) à
+   * cm[aid] — PAS l'action sémantique déjà résolue par xe_input.py.
+   * Comparer à `action` ne matche quasiment jamais (on compare par
+   * exemple 'KEY_103' à 'up'), ce qui fait qu'on retombe toujours sur
+   * le fallback par défaut et que le mapping custom est ignoré.
+   */
+  EvdevPoller.prototype._resolve = function(action, raw, deviceName) {
     var ACTION_TO_KEY = root._XeUtils.ACTION_TO_KEY;
     var ACTION_KEYS   = root._XeUtils.ACTION_KEYS;
     var cm = this._customMaps && this._customMaps[deviceName];
     if (cm) {
       /* Le map contient { actionId: rawPhysique }, ex: { up: 'KEY_103' }
-         On cherche si 'action' correspond au rawPhysique stockÃ© */
+         On cherche si le RAW reçu correspond au rawPhysique stocké */
       for (var aid in cm) {
-        if (cm[aid] === action) {
+        if (cm[aid] === raw) {
           var a = ACTION_KEYS.find(function(k) { return k.id === aid; });
           return a ? a.default : null;
         }
       }
-      /* Action connue mais pas dans le custom map â†’ utiliser table par dÃ©faut */
+      /* Raw non trouvé dans le custom map ? utiliser table par défaut */
       return ACTION_TO_KEY[action] || null;
     }
     return ACTION_TO_KEY[action] || null;
@@ -92,11 +103,11 @@
     var raw        = data.raw || action;
     var deviceName = this._deviceName(data);
 
-    /* MÃ©moriser l'identitÃ© */
+    /* Mémoriser l'identité */
     this._lastGpId   = deviceName;
     this._lastGpName = deviceName;
 
-    /* â”€â”€ Mode rawCapture : bypass tout, envoie le raw brut â”€â”€ */
+    /* -- Mode rawCapture : bypass tout, envoie le raw brut -- */
     if (this.rawCapture) {
       if (this.onRawEvent && raw) this.onRawEvent(raw, deviceName);
       return;
@@ -114,7 +125,7 @@
     /* Filtrer les actions non reconnues */
     if (!ACCEPTED_ACTIONS[action]) return;
 
-    var key = this._resolve(action, deviceName);
+    var key = this._resolve(action, raw, deviceName);
     if (key) this.onKey(key);
   };
 

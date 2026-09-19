@@ -102,8 +102,12 @@
       <div class="section-title">Système</div>
       <div class="settings-group">
         <div class="settings-row" data-action="update">
-          <span class="settings-row-label">Mise à jour système</span>
+          <span class="settings-row-label">Mise à jour</span>
           <span class="settings-row-value" id="updateStatus">—</span>
+        </div>
+        <div class="update-progress-wrap" id="updateProgressWrap" style="display:none">
+          <div class="update-progress-track"><div class="update-progress-bar" id="updateProgressBar"></div></div>
+          <div class="update-progress-label" id="updateProgressLabel">0%</div>
         </div>
         <div class="settings-row" data-action="reboot">
           <span class="settings-row-label">Redémarrer</span>
@@ -118,10 +122,22 @@
         </div>
       </div>
       <div class="settings-group">
-        <div class="section-title" style="margin:12px 0 8px">Version</div>
+        <div class="section-title" style="margin:12px 0 8px">À propos</div>
         <div class="settings-row">
-          <span class="settings-row-label">XeLauncher</span>
-          <span class="settings-row-value" id="versionVal">—</span>
+          <span class="settings-row-label">Processeur</span>
+          <span class="settings-row-value" id="specCpu">—</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-row-label">Mémoire (RAM)</span>
+          <span class="settings-row-value" id="specRam">—</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-row-label">Stockage</span>
+          <span class="settings-row-value" id="specDisk">—</span>
+        </div>
+        <div class="settings-row">
+          <span class="settings-row-label">Système</span>
+          <span class="settings-row-value" id="specOs">—</span>
         </div>
       </div>
     </div>
@@ -152,6 +168,9 @@
         <div class="settings-row" id="row-rotation">
           <span class="settings-row-label">Rotation</span>
           <span class="settings-row-value" id="rotValue">Paysage</span>
+        </div>
+        <div class="rot-image-wrap" id="rotImageWrap">
+          <img class="rot-image" id="rotImage" src="../LOGOs/Chuck-Norris-Approuved.jpg" alt="Aperçu de la rotation">
         </div>
 
       </div>
