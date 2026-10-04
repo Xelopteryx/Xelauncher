@@ -6,12 +6,24 @@
 
 set -uo pipefail
 
+# Sur Debian, /usr/sbin et /sbin ne sont pas dans le PATH d'un utilisateur normal :
+# update-initramfs, update-grub, plymouth-set-default-theme... semblaient "absents".
+export PATH="$PATH:/usr/local/sbin:/usr/sbin:/sbin"
+
 readonly REPO_URL="https://github.com/Xelopteryx/Xelauncher.git"
 readonly INSTALL_DIR="$HOME/xelauncher"
 readonly LOCK_FILE="/var/tmp/xelauncher_install.lock"
 readonly LOG_FILE="$HOME/xelauncher_install.log"
 readonly SUDOERS_FILE="/etc/sudoers.d/xelauncher"
 readonly PLYMOUTH_THEME_DIR="/usr/share/plymouth/themes/xe_theme"
+readonly JELLYFIN_APP_ID="org.jellyfin.JellyfinDesktop"
+readonly JELLYFIN_OLD_APP_ID="com.github.iwalton3.jellyfin-media-player"
+readonly BOOT_MARK_BEGIN="# >>> XeLauncher boot >>>"
+readonly BOOT_MARK_END="# <<< XeLauncher boot <<<"
+readonly GRUB_DEFAULT_FILE="/etc/default/grub"
+readonly STATE_DIR="$HOME/.local/state/xelauncher"
+readonly MANIFEST="$STATE_DIR/installed.list"   # ce que XeLauncher a reellement installe
+readonly GETTY_OVERRIDE="/etc/systemd/system/getty@tty1.service.d/override.conf"
 
 readonly RED='\033[1;31m'
 readonly GREEN='\033[1;32m'
@@ -23,6 +35,14 @@ readonly RESET='\033[0m'
 AUTO_MODE=""
 MODE=""
 ACTIONS_DONE=()
+
+# Poste avec bureau (GDM, LightDM...) : par defaut on GARDE le bureau. --kiosk / --no-kiosk.
+KIOSK_CHOICE=""
+KIOSK_MODE=1
+DM_AT_BOOT=""
+# Desinstallation : retirer Xorg/Node/Tailscale/Jellyfin par leur nom meme sans inventaire (--purge)
+PURGE_CHOICE=""
+PURGE_BY_NAME=0
 
 log()         { echo -e "${CYAN}→${RESET} $1"; }
 ok()          { echo -e "${GREEN}✔${RESET} $1"; }
@@ -87,6 +107,49 @@ download_with_retry() {
     return 1
 }
 
+manifest_add() {
+    mkdir -p "$STATE_DIR"
+    grep -qxF "$1" "$MANIFEST" 2>/dev/null || echo "$1" >> "$MANIFEST"
+}
+manifest_has() { grep -qxF "$1" "$MANIFEST" 2>/dev/null; }
+
+usage() {
+    cat <<EOF
+Usage : $0 [--i | --u] [--no-retropie | --retropie] [--kiosk | --no-kiosk] [--purge]
+
+  --i             installation sans menu
+  --u             desinstallation sans menu
+  --no-retropie   ne pas installer RetroPie (avec --u : ne pas le desinstaller)
+  --retropie      installer RetroPie sans poser la question (avec --u : le desinstaller)
+  --kiosk         poste avec bureau (GDM, LightDM...) : demarrer XeLauncher A LA PLACE du bureau
+  --no-kiosk      garder le bureau (defaut avec --i) : XeLauncher ne demarre pas seul
+  --purge         desinstallation : retirer aussi Xorg/openbox, Node.js, Tailscale, Jellyfin par
+                  leur nom, meme si XeLauncher ne les a pas installes (a eviter sur un poste de travail)
+  -h, --help      cette aide
+
+Equivalent : XE_RETROPIE=yes|no
+Via curl    : curl -fsSL <url>/install.sh | bash -s -- --i --no-retropie
+Pendant l'installation de RetroPie, Ctrl+C passe cette etape sans arreter le reste.
+EOF
+}
+
+# ask_yn "question" y|n  -> code 0 = oui, 1 = non (defaut si pas de terminal)
+ask_yn() {
+    local prompt=$1 def=${2:-n} ans hint
+    [[ "$def" == "y" ]] && hint="Y/n" || hint="y/N"
+    # Pas de terminal (cron, CI...) : on prend la valeur par defaut sans bruit
+    if ! { true </dev/tty; } 2>/dev/null; then
+        [[ "$def" == "y" ]]; return
+    fi
+    while true; do
+        read -rp "  $prompt ($hint) : " ans </dev/tty || { [[ "$def" == "y" ]]; return; }
+        case "${ans:-$def}" in
+            y|Y|o|O) return 0 ;;
+            n|N)     return 1 ;;
+            *) echo "  Tapez 'y' ou 'n'." ;;
+        esac
+    done
+}
 detect_state() {
     HAS_RETROPIE=0
     HAS_JELLYFIN=0
@@ -128,6 +191,82 @@ print_state() {
     echo ""
 }
 
+# Decide si RetroPie sera installe. Appele AVANT la redirection des logs
+# (sinon la question n'apparait pas a l'ecran).
+decide_retropie() {
+    INSTALL_RETROPIE=1
+    case "$RETROPIE_CHOICE" in
+        no)  INSTALL_RETROPIE=0 ;;
+        yes) INSTALL_RETROPIE=1 ;;
+        *)
+            if [[ -z "$AUTO_MODE" && $HAS_RETROPIE -eq 0 ]]; then
+                ask_yn "Installer RetroPie (20-60 min) ?" y || INSTALL_RETROPIE=0
+            fi
+            ;;
+    esac
+}
+
+# Desinstallation : RetroPie et surtout ~/RetroPie (ROMs) ne partent que si on le demande.
+decide_uninstall_retropie() {
+    REMOVE_RETROPIE=0
+    REMOVE_ROMS=0
+    case "$RETROPIE_CHOICE" in
+        yes) REMOVE_RETROPIE=1 ;;
+        no)  REMOVE_RETROPIE=0 ;;
+        *)
+            if [[ $HAS_RETROPIE -eq 1 || -d "$HOME/RetroPie-Setup" ]]; then
+                ask_yn "Desinstaller aussi RetroPie ?" n && REMOVE_RETROPIE=1
+            fi
+            ;;
+    esac
+    if [[ $REMOVE_RETROPIE -eq 1 && -d "$HOME/RetroPie" ]]; then
+        ask_yn "Supprimer aussi ~/RetroPie (ROMs, BIOS, sauvegardes) ?" n && REMOVE_ROMS=1
+    fi
+}
+
+# Nom du gestionnaire de connexion qui demarre le bureau AU BOOT (vide = poste sans bureau).
+detect_display_manager() {
+    local dm=""
+    if [[ "$(systemctl get-default 2>/dev/null)" == "graphical.target" ]] \
+        && systemctl is-enabled display-manager.service >/dev/null 2>&1; then
+        dm=$(basename "$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null)" .service)
+        [[ -n "$dm" && "$dm" != "display-manager" ]] || dm="display-manager"
+    fi
+    echo "$dm"
+}
+
+# Appele AVANT la redirection des logs. Sans bureau : XeLauncher est l'unique session (kiosque).
+# Avec bureau : on ne touche au demarrage que si --kiosk ou reponse explicite.
+decide_kiosk() {
+    DM_AT_BOOT=$(detect_display_manager)
+    KIOSK_MODE=1
+    [[ -n "$DM_AT_BOOT" ]] || return 0
+    case "$KIOSK_CHOICE" in
+        yes) KIOSK_MODE=1 ;;
+        no)  KIOSK_MODE=0 ;;
+        *)
+            KIOSK_MODE=0
+            if [[ -z "$AUTO_MODE" ]]; then
+                echo -e "  ${YELLOW}Un bureau ($DM_AT_BOOT) demarre au boot.${RESET}"
+                echo    "  Mode kiosque = XeLauncher REMPLACE le bureau au demarrage (annule par la desinstallation)."
+                if ask_yn "Demarrer directement XeLauncher a la place du bureau ?" n; then KIOSK_MODE=1; fi
+            fi
+            ;;
+    esac
+}
+
+# Desinstallation : sans inventaire, on ne retire pas Xorg/Node/Tailscale/Jellyfin sans accord.
+decide_uninstall_packages() {
+    PURGE_BY_NAME=0
+    if [[ "$PURGE_CHOICE" == "yes" ]]; then
+        PURGE_BY_NAME=1
+    elif [[ ! -s "$MANIFEST" ]]; then
+        echo -e "  ${YELLOW}Aucun inventaire d'installation trouve (installe avec une ancienne version ?).${RESET}"
+        if ask_yn "Retirer quand meme Xorg/openbox, Node.js, Tailscale et Jellyfin par leur nom ?" n; then
+            PURGE_BY_NAME=1
+        fi
+    fi
+}
 interactive_menu() {
     if [[ -n "$AUTO_MODE" ]]; then
         MODE="$AUTO_MODE"
@@ -142,8 +281,12 @@ interactive_menu() {
         print_state
 
         if [[ "$MODE" == "install" ]]; then
+            decide_retropie
+            decide_kiosk
             echo -e "${YELLOW}⚠  Mode automatique :${RESET} Installation en cours..."
         else
+            decide_uninstall_retropie
+            decide_uninstall_packages
             echo -e "${RED}⚠  Mode automatique :${RESET} Desinstallation en cours..."
         fi
         echo ""
@@ -194,11 +337,25 @@ interactive_menu() {
     echo ""
 
     if [[ "$MODE" == "install" ]]; then
-        echo -e "${YELLOW}⚠  Attention :${RESET} L'installation peut durer ${WHITE}une heure ou plus${RESET},"
-        echo    "   notamment a cause de RetroPie."
+        decide_retropie
+        decide_kiosk
+        if [[ $INSTALL_RETROPIE -eq 1 ]]; then
+            echo -e "${YELLOW}⚠  Attention :${RESET} L'installation peut durer ${WHITE}une heure ou plus${RESET},"
+            echo    "   notamment a cause de RetroPie (Ctrl+C pendant RetroPie = passer cette etape)."
+        else
+            echo -e "${YELLOW}⚠  Attention :${RESET} L'installation peut prendre un moment. RetroPie sera ignore."
+        fi
         echo    "   Assurez-vous que le systeme reste allume et connecte a Internet."
     else
-        echo -e "${RED}⚠  Desinstallation :${RESET} Tout ce qu'XeLauncher a installe sera supprime."
+        decide_uninstall_retropie
+        decide_uninstall_packages
+        echo -e "${RED}⚠  Desinstallation :${RESET} Tout ce qu'XeLauncher a installe sera supprime"
+        if [[ $REMOVE_RETROPIE -eq 1 ]]; then
+            echo    "   (RetroPie inclus$([[ $REMOVE_ROMS -eq 1 ]] && echo ', ROMs comprises'))."
+        else
+            echo    "   (RetroPie conserve)."
+        fi
+    fi
     fi
 
     echo ""
@@ -221,11 +378,27 @@ check_and_install_packages() {
             to_install+=("$pkg")
         fi
     done
-    if [[ ${#to_install[@]} -gt 0 ]]; then
-        log "Installation des paquets manquants: ${to_install[*]}"
-        sudo apt-get install -y "${to_install[@]}" \
-            || { error "Echec installation paquets: ${to_install[*]}"; exit 1; }
+    [[ ${#to_install[@]} -eq 0 ]] && return 0
+
+    log "Installation des paquets manquants: ${to_install[*]}"
+    if sudo apt-get install -y "${to_install[@]}"; then
+        for pkg in "${to_install[@]}"; do manifest_add "apt:$pkg"; done
         done_action "Paquets systeme installes : ${to_install[*]}"
+
+        done_action "Paquets systeme installes : ${to_install[*]}"
+    fi
+    else
+        warn "Installation groupee echouee, nouvel essai paquet par paquet"
+        local good=() bad=()
+        for pkg in "${to_install[@]}"; do
+            if sudo apt-get install -y "$pkg"; then good+=("$pkg"); manifest_add "apt:$pkg"; else bad+=("$pkg"); fi
+        done
+        [[ ${#good[@]} -gt 0 ]] && done_action "Paquets systeme installes : ${good[*]}"
+        if [[ ${#bad[@]} -gt 0 ]]; then
+            warn "Paquets NON installes : ${bad[*]}"
+            fail_action "Paquets non installes : ${bad[*]}"
+        fi
+        return 0
     fi
 }
 
@@ -242,6 +415,7 @@ install_nodejs() {
     sudo apt-get install -y nodejs \
         || { error "Echec installation nodejs"; exit 1; }
     ok "Node.js installe : $(node -v)"
+    manifest_add "nodejs"
     done_action "Node.js $(node -v) installe"
 }
 
@@ -257,6 +431,7 @@ install_tailscale() {
     rm -f /tmp/tailscale_install.sh
     sudo systemctl enable --now tailscaled 2>/dev/null || true
     ok "Tailscale installe"
+    manifest_add "tailscale"
     done_action "Tailscale installe et demarre"
 }
 
@@ -264,6 +439,7 @@ install_flatpak_jellyfin() {
     if ! command -v flatpak >/dev/null 2>&1; then
         sudo apt-get install -y flatpak \
             || { error "Echec installation flatpak"; exit 1; }
+        manifest_add "apt:flatpak"
         done_action "Flatpak installe"
     fi
 
@@ -275,6 +451,7 @@ install_flatpak_jellyfin() {
             2>&1 | grep -v $'^\033' | tee -a "$LOG_FILE" || \
             { error "Echec installation Jellyfin"; exit 1; }
         ok "Jellyfin Media Player installe"
+        manifest_add "jellyfin"
         done_action "Jellyfin Media Player installe via flatpak"
     else
         log "Mise a jour de Jellyfin Media Player"
@@ -437,6 +614,123 @@ configure_retropie_menu() {
         || warn "Echec modification es_systems.cfg — a faire manuellement"
 }
 
+# Boot silencieux : ligne de commande noyau.
+#  - quiet splash plymouth.ignore-serial-consoles : Plymouth actif, pas de texte
+#  - logo.nologo vt.global_cursor_default=0 loglevel=3 : pas de logos/curseur/messages
+#  - console=tty1 -> console=tty3 : le texte du noyau va sur un AUTRE terminal (Ctrl+Alt+F3)
+# $1 = cmdline.txt. Sauvegarde <fichier>.xelauncher.bak au premier passage.
+# Code retour : 0 = modifie, 1 = deja a jour.
+cmdline_transform() {
+    local line=$1 tok has_tty=0
+    local -a old out
+    read -ra old <<<"$line"
+    out=()
+    for tok in "${old[@]}"; do
+        case "$tok" in
+            plymouth.enable=0|loglevel=*|vt.global_cursor_default=*) ;;   # re-poses ci-dessous
+            console=tty1) out+=("console=tty3") ;;
+            *) out+=("$tok") ;;
+        esac
+    done
+    # Pas de console=ttyN : le noyau ecrit sur le terminal courant (tty1) -> on le detourne vers tty3
+    for tok in "${out[@]}"; do [[ "$tok" == console=tty[0-9]* ]] && has_tty=1; done
+    [[ $has_tty -eq 1 ]] || out+=("console=tty3")
+    for tok in quiet splash plymouth.ignore-serial-consoles logo.nologo loglevel=3 vt.global_cursor_default=0; do
+        [[ " ${out[*]} " == *" $tok "* ]] || out+=("$tok")
+    done
+    echo "${out[*]}"
+}
+
+# Raspberry Pi : $1 = cmdline.txt. Sauvegarde <fichier>.xelauncher.bak au premier passage.
+# Code retour : 0 = modifie, 1 = deja a jour.
+cmdline_apply() {
+    local file=$1 line cur new
+    local -a old
+    line=$(head -n1 "$file")
+    read -ra old <<<"$line"
+    cur="${old[*]}"
+    new=$(cmdline_transform "$line")
+    [[ "$new" == "$cur" ]] && return 1
+    [[ -f "$file.xelauncher.bak" ]] || sudo cp -a "$file" "$file.xelauncher.bak"
+    echo "$new" | sudo tee "$file" >/dev/null
+    return 0
+}
+
+# PC / Debian avec GRUB : meme chose dans GRUB_CMDLINE_LINUX_DEFAULT, puis update-grub.
+# Code retour : 0 = modifie, 1 = deja a jour, 2 = pas de GRUB, 3 = echec update-grub.
+grub_apply() {
+    local f="$GRUB_DEFAULT_FILE" line cur new tmp
+    local -a old
+    [[ -f "$f" ]] || return 2
+    line=$(grep -E '^GRUB_CMDLINE_LINUX_DEFAULT=' "$f" | tail -n1)
+    cur=${line#GRUB_CMDLINE_LINUX_DEFAULT=}
+    cur=${cur#[\"\']}
+    cur=${cur%[\"\']}
+    read -ra old <<<"$cur"
+    cur="${old[*]}"
+    new=$(cmdline_transform "$cur")
+    [[ "$new" == "$cur" ]] && return 1
+    [[ -f "$f.xelauncher.bak" ]] || sudo cp -a "$f" "$f.xelauncher.bak"
+    tmp=$(mktemp)
+    if [[ -n "$line" ]]; then
+        NEWLINE="GRUB_CMDLINE_LINUX_DEFAULT=\"$new\"" \
+            awk '/^GRUB_CMDLINE_LINUX_DEFAULT=/{print ENVIRON["NEWLINE"]; next} {print}' "$f" > "$tmp"
+    else
+        { cat "$f"; echo "GRUB_CMDLINE_LINUX_DEFAULT=\"$new\""; } > "$tmp"
+    fi
+    sudo install -m 644 -o root -g root "$tmp" "$f"
+    rm -f "$tmp"
+    if command -v update-grub >/dev/null 2>&1; then
+        sudo update-grub >/dev/null 2>&1 || return 3
+    elif command -v grub-mkconfig >/dev/null 2>&1; then
+        sudo grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 || return 3
+    else
+        return 3
+    fi
+    return 0
+}
+
+# config.txt (Raspberry Pi) : pas d'ecran arc-en-ciel, initramfs charge par le firmware
+# (necessaire pour que Plymouth demarre tot). Bloc delimite => retirable proprement.
+apply_boot_config_txt() {
+    local cfg="" c block
+    for c in /boot/firmware/config.txt /boot/config.txt; do
+        [[ -f "$c" ]] && { cfg="$c"; break; }
+    done
+    [[ -n "$cfg" ]] || return 0
+    grep -qF "$BOOT_MARK_BEGIN" "$cfg" && return 0
+    block="$BOOT_MARK_BEGIN"$'\n'"[all]"$'\n'"disable_splash=1"
+    if ! grep -qE '^[[:space:]]*(auto_initramfs=1|initramfs[[:space:]])' "$cfg"; then
+        block+=$'\n'"auto_initramfs=1"
+    fi
+    block+=$'\n'"$BOOT_MARK_END"
+    [[ -f "$cfg.xelauncher.bak" ]] || sudo cp -a "$cfg" "$cfg.xelauncher.bak"
+    printf '\n%s\n' "$block" | sudo tee -a "$cfg" >/dev/null
+    ok "$cfg : disable_splash=1 (+ auto_initramfs si absent)"
+    done_action "$cfg mis a jour (bloc XeLauncher boot)"
+}
+
+# Verifie que le theme est bien dans l'initramfs (sinon pas de logo au boot).
+verify_plymouth_initramfs() {
+    command -v lsinitramfs >/dev/null 2>&1 || return 0
+    local img n checked=0
+    for img in "/boot/initrd.img-$(uname -r)" /boot/firmware/initramfs_2712 /boot/firmware/initramfs8; do
+        [[ -f "$img" ]] || continue
+        checked=1
+        n=$(lsinitramfs "$img" 2>/dev/null | grep -c 'xe_theme' || true)
+        if [[ "${n:-0}" -gt 0 ]]; then
+            ok "Theme xe_theme present dans $(basename "$img")"
+        else
+            warn "Theme xe_theme ABSENT de $img : pas de logo au boot"
+            fail_action "Plymouth : theme absent de l'initramfs ($img)"
+        fi
+    done
+    if [[ $checked -eq 0 ]]; then
+        warn "Aucun initramfs trouve (update-initramfs a-t-il echoue ?) : le logo risque de ne pas apparaitre"
+        fail_action "Plymouth : aucun initramfs trouve"
+    fi
+}
+
 configure_boot_splash() {
     local logo="$INSTALL_DIR/src/LOGOs/prometheus.png"
     local theme_src="$INSTALL_DIR/src/PLYMOUTHs/xe_theme"
@@ -459,30 +753,64 @@ configure_boot_splash() {
     current_theme=$(plymouth-set-default-theme 2>/dev/null || true)
     if [[ "$current_theme" != "xe_theme" ]]; then
         sudo plymouth-set-default-theme xe_theme
-        if command -v update-initramfs >/dev/null 2>&1; then
-            sudo update-initramfs -u || warn "update-initramfs a echoue — le theme peut necessiter un redemarrage supplementaire"
-        fi
-        ok "Theme Plymouth xe_theme installe et active"
+        ok "Theme Plymouth xe_theme active"
         done_action "Theme Plymouth xe_theme installe et defini par defaut"
     else
-        sudo cp -f "$theme_src/xe_theme.plymouth" "$theme_src/xe_theme.script" "$PLYMOUTH_THEME_DIR/" 2>/dev/null || true
         ok "Theme Plymouth xe_theme deja actif (fichiers resynchronises)"
     fi
 
-    # -- S'assurer que Plymouth est actif au boot (quiet splash) --
+    # -- Boot silencieux : parametres noyau (Raspberry Pi = cmdline.txt, PC/Debian = GRUB) --
     local cmdline="/boot/firmware/cmdline.txt"
     [[ -f "$cmdline" ]] || cmdline="/boot/cmdline.txt"
     if [[ -f "$cmdline" ]]; then
-        local changed=0
-        grep -q '\bsplash\b' "$cmdline" || { sudo sed -i '1 s/$/ splash/' "$cmdline"; changed=1; }
-        grep -q '\bquiet\b' "$cmdline" || { sudo sed -i '1 s/$/ quiet/' "$cmdline"; changed=1; }
-        # Au cas ou une precedente config RetroPie l'aurait desactive
-        if grep -q 'plymouth.enable=0' "$cmdline"; then
-            sudo sed -i 's/ *plymouth\.enable=0//' "$cmdline"
-            changed=1
+        if cmdline_apply "$cmdline"; then
+            ok "$cmdline mis a jour (boot silencieux, texte noyau sur tty3)"
+            done_action "$cmdline : quiet splash logo.nologo loglevel=3 console=tty3 (sauvegarde .xelauncher.bak)"
+        else
+            ok "$cmdline deja a jour"
         fi
-        [[ $changed -eq 1 ]] && done_action "$cmdline mis a jour (quiet splash, plymouth.enable=0 retire si present)"
+    else
+        grub_apply
+        case $? in
+            0) ok "GRUB mis a jour (boot silencieux, texte noyau sur tty3)"
+               done_action "$GRUB_DEFAULT_FILE : quiet splash logo.nologo loglevel=3 console=tty3 + update-grub (sauvegarde .xelauncher.bak)" ;;
+            1) ok "GRUB deja a jour" ;;
+            3) warn "update-grub a echoue : verifier $GRUB_DEFAULT_FILE puis lancer 'sudo update-grub'"
+               fail_action "GRUB : update-grub a echoue (relancer a la main)" ;;
+            *) warn "Ni cmdline.txt (Raspberry Pi) ni $GRUB_DEFAULT_FILE (GRUB) : chargeur de demarrage non gere"
+               warn "  Ajoutez a la main aux parametres noyau : quiet splash console=tty3 loglevel=3 logo.nologo"
+               fail_action "Boot silencieux non configure (chargeur de demarrage inconnu) : ajouter 'quiet splash console=tty3' a la main" ;;
+        esac
     fi
+
+    case "$PLATFORM" in
+        rpi*) apply_boot_config_txt ;;
+    esac
+
+    # -- Plymouth reste affiche jusqu'a ce qu'Electron appelle 'plymouth quit' (main-window.js) --
+    # Sans ca, systemd le coupe des le demarrage du getty et le texte de login apparait.
+    # Le .bash_profile fait 'plymouth deactivate' avant startx pour liberer le DRM.
+    if [[ ! -x /usr/bin/plymouth ]]; then
+        warn "/usr/bin/plymouth introuvable : sudoers, .bash_profile et le JS l'utilisent tel quel"
+        fail_action "Plymouth : /usr/bin/plymouth introuvable"
+    fi
+    if [[ $KIOSK_MODE -eq 1 ]] && command -v plymouth >/dev/null 2>&1; then
+        sudo systemctl mask plymouth-quit.service plymouth-quit-wait.service >/dev/null 2>&1 || true
+        ok "plymouth-quit masque : le splash reste jusqu'a l'affichage d'Electron"
+        done_action "plymouth-quit(.service/-wait.service) masques"
+    fi
+
+    # -- Reconstruire l'initramfs APRES tout le reste (theme + plymouth-label) --
+    if command -v update-initramfs >/dev/null 2>&1; then
+        log "Regeneration de l'initramfs (embarque le theme Plymouth)..."
+        if sudo update-initramfs -u; then
+            done_action "initramfs regenere (theme Plymouth embarque)"
+        else
+            warn "update-initramfs a echoue : le theme ne sera pas dans l'initramfs"
+            fail_action "Plymouth : update-initramfs a echoue"
+        fi
+    fi
+    verify_plymouth_initramfs
 
     # -- Desactiver le splashscreen propre a RetroPie (asplashscreen) --
     # pour eviter qu'il ne s'affiche par-dessus / apres celui de Plymouth.
@@ -496,6 +824,114 @@ configure_boot_splash() {
         fi
     fi
     sudo rm -f /etc/splashscreen.list
+}
+
+# xe_cursor_pin.py : ecrit par l'installateur seulement s'il n'existe pas deja
+# (le depot pousse ne le genere pas ; si le JS le genere, on ne l'ecrase pas).
+ensure_cursor_pin_script() {
+    local f="$INSTALL_DIR/scripts/xe_cursor_pin.py"
+    mkdir -p "$INSTALL_DIR/scripts"
+    if [[ -f "$f" ]]; then
+        ok "xe_cursor_pin.py deja present (conserve)"
+        return 0
+    fi
+    cat > "$f" <<'XE_CURSOR_PIN_EOF'
+#!/usr/bin/env python3
+"""
+xe_cursor_pin.py -- Neutralise le curseur souris de façon permanente.
+
+Combine deux mécanismes pour une garantie peu importe le contenu
+affiché à l'écran :
+  1. Masquage visuel réel via XFixesHideCursor (le curseur n'est
+     jamais peint, quel que soit l'endroit où il se trouve).
+  2. Piège de position en (0,0), pour rester cohérent avec les clics
+     CDP simulés sur les <select> Jellyfin et neutraliser le hover
+     résiduel de certaines apps.
+
+XFixesHideCursor n'est PAS permanent : la plupart des applications
+(QtWebEngine notamment) réinvoquent XFixesShowCursor à chaque
+changement de fenêtre/focus, ce qui annule le masquage précédent.
+D'où la boucle : on le réimpose en continu plutôt qu'une seule fois.
+
+Contrairement à une boucle bash relançant `python3 -c` à chaque
+itération (~80ms de coût de démarrage d'interpréteur par passage),
+ce daemon reste résident en mémoire : un seul import au lancement,
+puis des appels quasi gratuits en boucle.
+
+Respecte le verrou /tmp/xe_cdp_click.lock posé par
+cdp_click_active_select() (dans xe_jmp_input.py) pendant la durée
+d'un clic CDP simulé, pour ne jamais interférer avec le
+positionnement intentionnel du curseur sur l'élément à cliquer.
+
+Usage : lancé en arrière-plan depuis ~/.xinitrc, avant
+"exec xelauncher.sh", pour survivre à tous les cycles de vie
+Electron/Jellyfin/RetroPie.
+"""
+import os
+import subprocess
+import sys
+import time
+
+try:
+    from Xlib import display
+    from Xlib.ext import xfixes  # noqa: F401 -- l'import enregistre
+    # dynamiquement la méthode root.xfixes_hide_cursor() (effet de
+    # bord du module au chargement, voir Xlib.ext.xfixes.init()).
+except ImportError:
+    sys.stderr.write("[xe_cursor_pin] pip install python-xlib --break-system-packages\n")
+    sys.exit(1)
+
+INTERVAL = 0.15
+LOCK_FILE = '/tmp/xe_cdp_click.lock'
+
+def main():
+    os.environ.setdefault('DISPLAY', ':0')
+    dpy = display.Display()
+    if not dpy.has_extension('XFIXES'):
+        sys.stderr.write("[xe_cursor_pin] Extension XFixes indisponible\n")
+        sys.exit(1)
+    root = dpy.screen().root
+
+    # Le protocole XFixes exige une négociation de version avant
+    # d'accepter d'autres requêtes de l'extension (HideCursor inclus).
+    # Sans cet appel, le serveur X peut accepter la requête HideCursor
+    # sans erreur mais l'ignorer silencieusement.
+    try:
+        dpy.xfixes_query_version()
+        dpy.flush()
+    except Exception as e:
+        sys.stderr.write(f"[xe_cursor_pin] xfixes_query_version a échoué: {e}\n")
+
+    env = os.environ.copy()
+    env['DISPLAY'] = ':0'
+
+    while True:
+        if not os.path.exists(LOCK_FILE):
+            try:
+                root.xfixes_hide_cursor()
+                dpy.flush()
+            except Exception:
+                pass
+            try:
+                out = subprocess.run(
+                    ['xdotool', 'getmouselocation', '--shell'],
+                    capture_output=True, text=True, timeout=0.3, env=env
+                ).stdout
+                x = next((l.split('=')[1] for l in out.splitlines() if l.startswith('X=')), None)
+                y = next((l.split('=')[1] for l in out.splitlines() if l.startswith('Y=')), None)
+                if x != '0' or y != '0':
+                    subprocess.run(['xdotool', 'mousemove', '0', '0'],
+                                    timeout=0.3, env=env, capture_output=True)
+            except Exception:
+                pass
+        time.sleep(INTERVAL)
+
+if __name__ == '__main__':
+    main()
+XE_CURSOR_PIN_EOF
+    chmod +x "$f"
+    ok "xe_cursor_pin.py ecrit (absent du depot)"
+    done_action "scripts/xe_cursor_pin.py fourni par l'installateur"
 }
 
 create_start_script() {
@@ -513,6 +949,15 @@ create_start_script() {
         fi
     done
 
+    # Un .xinitrc existant qui n'est pas le notre est sauvegarde (restaure a la desinstallation)
+    if [[ -f "$HOME/.xinitrc" ]] && ! grep -q 'xelauncher\.sh' "$HOME/.xinitrc" \
+        && [[ ! -f "$HOME/.xinitrc.avant-xelauncher" ]]; then
+        cp -a "$HOME/.xinitrc" "$HOME/.xinitrc.avant-xelauncher"
+        warn "Ancien ~/.xinitrc sauvegarde dans ~/.xinitrc.avant-xelauncher"
+    fi
+
+    ensure_cursor_pin_script
+
     cat > "$HOME/.xinitrc" <<EOF
 #!/bin/bash
 xset s off
@@ -521,7 +966,10 @@ xset s noblank
 openbox &
 
 # Neutralise le curseur souris de façon permanente (XFixesHideCursor).
-python3 "$INSTALL_DIR/scripts/xe_cursor_pin.py" &
+# (le fichier est fourni par l'installateur s'il est absent ; le JS peut le regenerer)
+if [ -f "$INSTALL_DIR/scripts/xe_cursor_pin.py" ]; then
+    python3 "$INSTALL_DIR/scripts/xe_cursor_pin.py" &
+fi
 
 exec "$INSTALL_DIR/xelauncher.sh"
 EOF
@@ -530,24 +978,55 @@ EOF
     done_action "~/.xinitrc cree ; start.sh/xelauncher.sh du depot rendus executables"
 }
 
+xe_profile_block() {
+    cat <<'EOF'
+# Lancement de XeLauncher (Prometheus Entertainment System)
+if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+    # Libere le DRM pour X en gardant le splash a l'ecran (Electron fera 'plymouth quit')
+    sudo -n /usr/bin/plymouth deactivate >/dev/null 2>&1 || sudo -n /usr/bin/plymouth quit >/dev/null 2>&1
+    exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp >"$HOME/.xelauncher-startx.log" 2>&1
+fi
+EOF
+}
+
 configure_autologin() {
+    if [[ -n "$DM_AT_BOOT" && $KIOSK_MODE -eq 0 ]]; then
+        warn "Bureau detecte ($DM_AT_BOOT) : autologin console NON configure (il entrerait en conflit)"
+        warn "  XeLauncher ne demarrera pas seul. Pour remplacer le bureau au demarrage :"
+        warn "  relancer l'installateur avec --kiosk (annule par la desinstallation)"
+        fail_action "Bureau ($DM_AT_BOOT) conserve : XeLauncher ne demarre pas seul au boot (--kiosk pour le remplacer)"
+        return 0
+    fi
+    if [[ -n "$DM_AT_BOOT" ]]; then
+        local prev_target
+        prev_target=$(systemctl get-default 2>/dev/null)
+        grep -q '^default-target:' "$MANIFEST" 2>/dev/null || manifest_add "default-target:${prev_target:-graphical.target}"
+        sudo systemctl set-default multi-user.target >/dev/null 2>&1
+        ok "Mode kiosque : le bureau ($DM_AT_BOOT) ne demarre plus au boot (etat precedent memorise)"
+        done_action "Demarrage par defaut : multi-user.target (bureau $DM_AT_BOOT desactive au boot)"
+    fi
     if command -v raspi-config >/dev/null 2>&1; then
         log "Configuration de l'autologin console via raspi-config"
         sudo raspi-config nonint do_boot_behaviour B2
         ok "Autologin console configure"
         done_action "Autologin TTY1 configure via raspi-config"
-    else
-        log "Configuration manuelle de l'autologin sur TTY1"
-        sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
-        cat <<EOF | sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf
+    fi
+
+    # Autologin silencieux (pas de /etc/issue, pas d'effacement d'ecran). Ecrit dans tous les cas :
+    # override.conf passe apres l'autologin.conf de raspi-config et prend le dessus.
+    log "Autologin silencieux sur TTY1"
+    sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
+    cat <<EOF | sudo tee "$GETTY_OVERRIDE" >/dev/null
 [Service]
 ExecStart=
-ExecStart=-/sbin/agetty --autologin $REAL_USER --noclear %I \$TERM
+ExecStart=-/sbin/agetty --autologin $REAL_USER --noclear --noissue %I \$TERM
 EOF
-        sudo systemctl daemon-reload
-        ok "Autologin configure manuellement"
-        done_action "Autologin TTY1 configure manuellement (systemd)"
-    fi
+    sudo systemctl daemon-reload
+    ok "Autologin TTY1 silencieux configure"
+    done_action "Autologin TTY1 silencieux (systemd, $GETTY_OVERRIDE)"
+
+    # Supprime "Last login" / motd a l'ouverture de session
+    touch "$HOME/.hushlogin"
 
     local BASH_PROFILE="$HOME/.bash_profile"
 
@@ -555,32 +1034,17 @@ EOF
         if ! grep -q '\.bashrc' "$BASH_PROFILE" 2>/dev/null; then
             echo '[ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"' >> "$BASH_PROFILE"
         fi
-        cat >> "$BASH_PROFILE" <<'EOF'
-
-# Lancement de XeLauncher (Prometheus Entertainment System)
-if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    echo "Demarrage de XeLauncher..."
-    exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
-fi
-EOF
+        { echo ""; xe_profile_block; } >> "$BASH_PROFILE"
         ok "XeLauncher ajoute au demarrage dans .bash_profile"
-        done_action "~/.bash_profile configure (startx sur TTY1)"
+        done_action "~/.bash_profile configure (startx sur TTY1, sans texte)"
+    elif grep -q "plymouth deactivate" "$BASH_PROFILE" 2>/dev/null; then
+        ok "XeLauncher deja correctement configure dans .bash_profile"
     else
-        if grep -q "exec startx ./start.sh\|cd.*xelauncher" "$BASH_PROFILE" 2>/dev/null; then
-            sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$BASH_PROFILE"
-            cat >> "$BASH_PROFILE" <<'EOF'
-
-# Lancement de XeLauncher (Prometheus Entertainment System)
-if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    echo "Demarrage de XeLauncher..."
-    exec startx "$HOME/.xinitrc" -- :0 vt1 -nolisten tcp
-fi
-EOF
-            ok ".bash_profile mis a jour (ancienne entree corrigee)"
-            done_action "~/.bash_profile corrige"
-        else
-            ok "XeLauncher deja correctement configure dans .bash_profile"
-        fi
+        # Ancien bloc (avec echo "Demarrage..." et sans handoff Plymouth) : on le remplace
+        sed -i '/# Lancement de XeLauncher/,/^fi$/d' "$BASH_PROFILE"
+        { echo ""; xe_profile_block; } >> "$BASH_PROFILE"
+        ok ".bash_profile mis a jour (demarrage silencieux + handoff Plymouth)"
+        done_action "~/.bash_profile corrige (silencieux + plymouth deactivate)"
     fi
 
     if grep -q "XeLauncher" "$HOME/.profile" 2>/dev/null; then
@@ -627,9 +1091,30 @@ EOF
 }
 
 configure_sudoers() {
-    echo "$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/tailscale up" \
-        | sudo tee "$SUDOERS_FILE" > /dev/null
-    sudo chmod 440 "$SUDOERS_FILE"
+    # Commandes lancees par l'interface (src/JSs/*.js) sans terminal :
+    #   ipc-system.js  : systemctl reboot/poweroff, apt update / apt-get update+upgrade
+    #   ipc-jellyfin.js: systemctl start tailscaled, tailscale up
+    #   main-window.js : plymouth --update=fade, plymouth quit
+    #   .bash_profile  : plymouth deactivate (avant startx)
+    # Le JS ecrit "sudo DEBIAN_FRONTEND=noninteractive apt-get ...". On n'utilise PAS le tag SETENV
+    # (il laisserait l'utilisateur injecter LD_PRELOAD/PATH dans une commande root) : seule la
+    # variable DEBIAN_FRONTEND est autorisee, et uniquement pour /usr/bin/apt-get.
+    local tmp
+    tmp=$(mktemp) || { warn "mktemp a echoue : sudoers non configure"; return 0; }
+    cat > "$tmp" <<EOF
+# XeLauncher : commandes lancees par l'interface sans mot de passe
+$REAL_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl start tailscaled, /usr/bin/tailscale up, /usr/bin/plymouth --update=fade, /usr/bin/plymouth quit, /usr/bin/plymouth deactivate, /usr/bin/apt-get update -qq, /usr/bin/apt-get upgrade -y -qq, /usr/bin/apt update -qq
+Defaults!/usr/bin/apt-get env_keep += "DEBIAN_FRONTEND"
+EOF
+    # Un sudoers invalide peut casser sudo : on valide avant d'installer.
+    if command -v visudo >/dev/null 2>&1 && ! sudo visudo -cf "$tmp" >/dev/null 2>&1; then
+        rm -f "$tmp"
+        warn "Regles sudoers invalides (visudo) : non installees"
+        fail_action "sudoers : regles rejetees par visudo, non installees"
+        return 0
+    fi
+    sudo install -m 440 -o root -g root "$tmp" "$SUDOERS_FILE"
+    rm -f "$tmp"
     ok "Regles sudoers configurees"
     done_action "Regles sudoers configurees ($SUDOERS_FILE)"
 }
@@ -697,6 +1182,17 @@ uninstall_all() {
     section "Desinstallation de XeLauncher"
 
     local anything_done=0
+    cd "$HOME" || true    # si le script tourne depuis ~/xelauncher, on quitte le dossier avant de le supprimer
+
+    # Arreter le launcher en cours AVANT de supprimer le depot : sinon Electron (logDebug dans
+    # helpers.js) recree ~/xelauncher/logs des la suppression. Le motif exclut install.sh.
+    if pgrep -f "$INSTALL_DIR/(xelauncher\.sh|node_modules/|scripts/xe_)" >/dev/null 2>&1; then
+        log "Arret du launcher XeLauncher en cours d'execution"
+        pkill -f "$INSTALL_DIR/(xelauncher\.sh|node_modules/|scripts/xe_)" 2>/dev/null || true
+        sleep 2
+        pkill -9 -f "$INSTALL_DIR/(xelauncher\.sh|node_modules/|scripts/xe_)" 2>/dev/null || true
+        done_action "Launcher XeLauncher arrete"
+    fi
 
     if [[ -d "$INSTALL_DIR" ]]; then
         log "Suppression du depot $INSTALL_DIR"
@@ -706,11 +1202,16 @@ uninstall_all() {
         anything_done=1
     fi
 
-    if [[ -f "$HOME/.xinitrc" ]]; then
+    if [[ -f "$HOME/.xinitrc" ]] && grep -q 'xelauncher\.sh' "$HOME/.xinitrc"; then
         rm -f "$HOME/.xinitrc"
         ok "~/.xinitrc supprime"
         done_action "~/.xinitrc supprime"
         anything_done=1
+        if [[ -f "$HOME/.xinitrc.avant-xelauncher" ]]; then
+            mv "$HOME/.xinitrc.avant-xelauncher" "$HOME/.xinitrc"
+            ok "Ancien ~/.xinitrc restaure"
+            done_action "Ancien ~/.xinitrc restaure"
+        fi
     fi
 
     if grep -q "XeLauncher" "$HOME/.bash_profile" 2>/dev/null; then
@@ -743,12 +1244,18 @@ uninstall_all() {
         anything_done=1
     fi
 
-    log "Desinstallation de Jellyfin Media Player"
-    sudo flatpak uninstall -y com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
-    sudo flatpak uninstall -y --unused 2>/dev/null || true
-    ok "Jellyfin desinstalle"
-    done_action "Jellyfin Media Player desinstalle"
-    anything_done=1
+    if [[ $PURGE_BY_NAME -eq 1 ]] || manifest_has "jellyfin"; then
+        log "Desinstallation de Jellyfin Desktop"
+        sudo flatpak uninstall -y "$JELLYFIN_APP_ID" 2>/dev/null || true
+        sudo flatpak uninstall -y "$JELLYFIN_OLD_APP_ID" 2>/dev/null || true
+        sudo flatpak uninstall -y --unused 2>/dev/null || true
+        rm -rf "$HOME/.var/app/$JELLYFIN_APP_ID" "$HOME/.var/app/$JELLYFIN_OLD_APP_ID"
+        ok "Jellyfin desinstalle (donnees ~/.var/app comprises)"
+        done_action "Jellyfin Desktop desinstalle"
+        anything_done=1
+    else
+        log "Jellyfin conserve (non installe par XeLauncher)"
+    fi
 
     log "Desinstallation de RetroPie"
     if [[ -d "$HOME/RetroPie-Setup" ]]; then
@@ -764,29 +1271,46 @@ uninstall_all() {
     done_action "RetroPie desinstalle"
     anything_done=1
 
-    log "Desinstallation de Node.js"
-    sudo apt-get remove -y nodejs 2>/dev/null || true
-    sudo rm -f /etc/apt/sources.list.d/nodesource.list
-    sudo rm -f /etc/apt/sources.list.d/nodesource.list.distUpgrade
-    ok "Node.js desinstalle"
-    done_action "Node.js desinstalle"
-    anything_done=1
+    if [[ $PURGE_BY_NAME -eq 1 ]] || manifest_has "nodejs"; then
+        log "Desinstallation de Node.js"
+        sudo apt-get remove -y nodejs 2>/dev/null || true
+        sudo rm -f /etc/apt/sources.list.d/nodesource.list
+        sudo rm -f /etc/apt/sources.list.d/nodesource.list.distUpgrade
+        ok "Node.js desinstalle"
+        done_action "Node.js desinstalle"
+        anything_done=1
+    else
+        log "Node.js conserve (non installe par XeLauncher)"
+    fi
 
-    log "Desinstallation de Tailscale"
-    sudo systemctl stop tailscaled 2>/dev/null || true
-    sudo systemctl disable tailscaled 2>/dev/null || true
-    sudo apt-get remove -y tailscale 2>/dev/null || true
-    sudo rm -f /etc/apt/sources.list.d/tailscale.list
-    ok "Tailscale desinstalle"
-    done_action "Tailscale desinstalle"
-    anything_done=1
+    if [[ $PURGE_BY_NAME -eq 1 ]] || manifest_has "tailscale"; then
+        log "Desinstallation de Tailscale"
+        sudo systemctl stop tailscaled 2>/dev/null || true
+        sudo systemctl disable tailscaled 2>/dev/null || true
+        sudo apt-get remove -y tailscale 2>/dev/null || true
+        sudo rm -f /etc/apt/sources.list.d/tailscale.list
+        ok "Tailscale desinstalle"
+        done_action "Tailscale desinstalle"
+        anything_done=1
+    else
+        log "Tailscale conserve (non installe par XeLauncher)"
+    fi
 
-    log "Desinstallation de Xorg / xinit"
-    sudo apt-get remove -y xserver-xorg xinit openbox xdotool 2>/dev/null || true
-    sudo apt-get autoremove -y 2>/dev/null || true
-    ok "Xorg desinstalle"
-    done_action "Xorg / xinit / openbox desinstalle"
-    anything_done=1
+    # Xorg / xinit / openbox / xdotool : seulement ceux que XeLauncher a installes.
+    # JAMAIS d'autoremove automatique : sur un poste avec bureau il pourrait retirer le bureau.
+    local x_pkgs=() xp
+    for xp in xserver-xorg xinit openbox xdotool; do
+        if [[ $PURGE_BY_NAME -eq 1 ]] || manifest_has "apt:$xp"; then x_pkgs+=("$xp"); fi
+    done
+    if [[ ${#x_pkgs[@]} -gt 0 ]]; then
+        log "Desinstallation de : ${x_pkgs[*]}"
+        sudo apt-get remove -y "${x_pkgs[@]}" 2>/dev/null || true
+        ok "${x_pkgs[*]} desinstalle(s)"
+        done_action "Paquets retires : ${x_pkgs[*]} (verifier ensuite 'sudo apt autoremove' a la main)"
+        anything_done=1
+    else
+        log "Xorg / openbox conserves (non installes par XeLauncher)"
+    fi
 
     if [[ -f "/etc/udev/rules.d/99-xelauncher-input.rules" ]]; then
         sudo rm -f "/etc/udev/rules.d/99-xelauncher-input.rules"
@@ -802,6 +1326,32 @@ uninstall_all() {
         done_action "/etc/modules-load.d/xelauncher.conf supprime"
         anything_done=1
     fi
+
+    # -- Boot silencieux : retour a l'etat d'avant --
+    if systemctl is-enabled plymouth-quit.service 2>/dev/null | grep -q masked; then
+        sudo systemctl unmask plymouth-quit.service plymouth-quit-wait.service 2>/dev/null || true
+        done_action "plymouth-quit demasque"
+        anything_done=1
+    fi
+    for f in /boot/firmware/cmdline.txt /boot/cmdline.txt /boot/firmware/config.txt /boot/config.txt "$GRUB_DEFAULT_FILE"; do
+        if [[ -f "$f.xelauncher.bak" ]]; then
+            case "$f" in
+                */cmdline.txt) sudo cp -a "$f.xelauncher.bak" "$f" ;;
+                "$GRUB_DEFAULT_FILE") sudo cp -a "$f.xelauncher.bak" "$f"; sudo update-grub >/dev/null 2>&1 || true ;;
+                */config.txt)  sudo sed -i "/^# >>> XeLauncher boot >>>\$/,/^# <<< XeLauncher boot <<<\$/d" "$f" ;;
+            esac
+            sudo rm -f "$f.xelauncher.bak"
+            done_action "$f remis comme avant XeLauncher"
+            anything_done=1
+        fi
+    done
+    if [[ -f "$GETTY_OVERRIDE" ]]; then
+        sudo rm -f "$GETTY_OVERRIDE"
+        sudo systemctl daemon-reload
+        done_action "Autologin silencieux (getty override) supprime"
+        anything_done=1
+    fi
+    rm -f "$HOME/.xelauncher-startx.log"
 
     if [[ -d "$PLYMOUTH_THEME_DIR" ]]; then
         current_theme=$(plymouth-set-default-theme 2>/dev/null || true)
@@ -819,6 +1369,16 @@ uninstall_all() {
         done_action "Theme Plymouth xe_theme supprime"
         anything_done=1
     fi
+
+    local prev_target
+    prev_target=$(grep -m1 '^default-target:' "$MANIFEST" 2>/dev/null | cut -d: -f2)
+    if [[ -n "$prev_target" ]]; then
+        sudo systemctl set-default "$prev_target" >/dev/null 2>&1
+        ok "Demarrage par defaut restaure : $prev_target (le bureau revient au prochain boot)"
+        done_action "Demarrage par defaut restaure : $prev_target"
+        anything_done=1
+    fi
+    rm -rf "$STATE_DIR"
 
     rm -f "$LOCK_FILE"
 
@@ -863,6 +1423,12 @@ main() {
         case "$arg" in
             --i) AUTO_MODE="install" ;;
             --u) AUTO_MODE="uninstall" ;;
+            --no-retropie|--skip-retropie) RETROPIE_CHOICE="no" ;;
+            --retropie) RETROPIE_CHOICE="yes" ;;
+            --kiosk) KIOSK_CHOICE="yes" ;;
+            --no-kiosk) KIOSK_CHOICE="no" ;;
+            --purge) PURGE_CHOICE="yes" ;;
+            -h|--help) usage; exit 0 ;;
             *)
                 echo -e "${RED}✖${RESET} Argument inconnu : $arg" >&2
                 echo "  Usage : $0 [--i | --u]" >&2
@@ -881,8 +1447,10 @@ main() {
 
     sudo -v || { echo "Droits sudo requis" >&2; exit 1; }
 
-    curl -sSf --max-time 10 https://github.com > /dev/null 2>&1 \
-        || { echo "Connexion Internet requise (github.com injoignable)" >&2; exit 1; }
+    if [[ "$AUTO_MODE" != "uninstall" ]]; then
+        curl -sSf --max-time 10 https://github.com > /dev/null 2>&1 \
+            || { echo "Connexion Internet requise (github.com injoignable)" >&2; exit 1; }
+    fi
 
     check_disk_space
 
@@ -893,6 +1461,7 @@ main() {
     if [[ "$MODE" == "uninstall" ]]; then
         uninstall_all
         print_summary
+        rm -f "$LOG_FILE"    # le journal d'installation part aussi (ce script vient d'y ecrire)
         exit 0
     fi
 
@@ -911,8 +1480,9 @@ main() {
         unzip jq dialog xmlstarlet \
         fbi \
         psmisc \
-        plymouth plymouth-themes \
-        python3 python3-evdev python3-xlib \
+        plymouth plymouth-themes plymouth-label \
+        python3 python3-evdev python3-xlib python3-plyvel python3-websocket \
+        x11-xserver-utils xterm alsa-utils \
         pulseaudio-utils \
         libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
         libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 \
