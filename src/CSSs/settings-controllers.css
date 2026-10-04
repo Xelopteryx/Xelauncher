@@ -1,0 +1,149 @@
+/* ═══════════════════════════════════════════════════════════════
+   settings-controllers.css
+   À inclure APRÈS settings-bluetooth.css dans settings.html
+   Onglet Manettes : icône manette.png, sous-titre, badge, panneau d'infos
+═══════════════════════════════════════════════════════════════ */
+
+.ctl-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(28px, 3vw, 42px);
+  height: clamp(28px, 3vw, 42px);
+  margin-right: clamp(10px, 1.4vw, 16px);
+  flex-shrink: 0;
+  font-size: clamp(18px, 2vw, 26px);
+}
+.ctl-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0.8;
+  pointer-events: none;
+  transition: opacity 0.15s, filter 0.15s;
+}
+.device-item.active .ctl-icon img {
+  opacity: 1;
+  filter: drop-shadow(0 0 6px rgba(0, 164, 220, 0.55));
+}
+
+.ctl-mid { flex: 1; min-width: 0; }
+.ctl-mid .device-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ctl-sub {
+  font-size: var(--fs-hint);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-hint);
+  margin-top: 4px;
+}
+.device-item.active .ctl-sub { color: rgba(0, 164, 220, 0.65); }
+
+.ctl-badge {
+  flex-shrink: 0;
+  margin-left: 12px;
+  font-size: var(--fs-hint);
+  letter-spacing: 1px;
+  color: rgba(0, 164, 220, 0.6);
+}
+
+.ctl-empty {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-hint);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: clamp(10px, 1.5vh, 16px) clamp(20px, 3vw, 40px);
+}
+
+/* ── Panneau Informations / Test ── */
+.ctl-info {
+  width: clamp(320px, 62vw, 760px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: clamp(8px, 1.2vh, 14px);
+}
+.ctl-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: clamp(8px, 1.2vh, 13px) clamp(14px, 2vw, 22px);
+  border: 1px solid var(--border);
+  background: rgba(13, 13, 24, 0.7);
+  font-family: var(--font-admin);
+  font-size: var(--fs-small);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.ctl-info-label { color: rgba(0, 164, 220, 0.6); flex-shrink: 0; }
+.ctl-info-value { color: var(--text); text-align: right; overflow-wrap: anywhere; }
+
+.ctl-info-title {
+  font-family: var(--font-admin);
+  font-size: var(--fs-hint);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: rgba(0, 164, 220, 0.55);
+  padding: clamp(8px, 1.2vh, 14px) 4px 2px;
+  border-bottom: 1px solid var(--border);
+}
+.ctl-info-note {
+  font-family: var(--font-admin);
+  font-size: var(--fs-small);
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  text-align: center;
+  text-transform: uppercase;
+  padding: clamp(8px, 1.2vh, 14px);
+}
+
+.ctl-keys {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 4px;
+}
+.ctl-key {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: clamp(6px, 0.9vh, 10px) clamp(10px, 1.4vw, 16px);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  font-family: var(--font-admin);
+  font-size: var(--fs-hint);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.ctl-key-act { color: var(--text-dim); }
+.ctl-key-raw { color: rgba(0, 164, 220, 0.85); text-align: right; }
+.ctl-key.hit {
+  border-color: var(--blue);
+  background: rgba(0, 164, 220, 0.2);
+}
+.ctl-key.hit .ctl-key-act { color: #fff; }
+
+.ctl-test-live {
+  min-height: 2.4em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--blue-dim);
+  background: var(--blue-bg);
+  color: var(--blue);
+  font-family: var(--font-admin);
+  font-size: var(--fs-body);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  text-align: center;
+}
+.ctl-test-live.miss {
+  border-color: rgba(255, 200, 0, 0.45);
+  background: rgba(255, 200, 0, 0.06);
+  color: rgba(255, 200, 0, 0.9);
+}

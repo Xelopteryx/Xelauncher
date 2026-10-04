@@ -86,9 +86,11 @@ XeSettings.Jellyfin = (() => {
       const devMap = allMaps[deviceName];
       const el = document.createElement('div');
       el.className = 'device-item';
+      const alias = deviceName === '__keyboard__' ? null
+        : (XeSettings.Bluetooth && XeSettings.Bluetooth.aliasFor ? XeSettings.Bluetooth.aliasFor(deviceName) : null);
       const label = deviceName === '__keyboard__'
         ? '⌨ Clavier'
-        : (deviceName.length > 44 ? deviceName.slice(0, 44) + '…' : deviceName);
+        : (alias || (deviceName.length > 44 ? deviceName.slice(0, 44) + '…' : deviceName));
       const summary = JF_ACTIONS.filter(a => devMap[a.id]).map(a =>
         a.label + ': ' + (XeInput.prettyRaw(devMap[a.id]) || devMap[a.id])
       ).join(' · ');

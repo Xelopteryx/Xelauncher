@@ -1,6 +1,6 @@
 /**
  * ipc-network.js
- * IPC : interfaces rÃ©seau, WiFi (scan, connect, forget, known, priority, static IP).
+ * IPC : interfaces réseau, WiFi (scan, connect, forget, known, priority, static IP).
  */
 
 'use strict'
@@ -8,7 +8,7 @@
 const { ipcMain } = require('electron')
 const { exec }    = require('child_process')
 
-/* â”€â”€ Interfaces â”€â”€ */
+/* -- Interfaces -- */
 ipcMain.handle('get-interfaces', async () => new Promise(resolve => {
   exec("ip -o link show | awk -F': ' '{print $2}' | grep -v lo", (err, out) => {
     if (err || !out.trim()) return resolve([])
@@ -17,30 +17,59 @@ ipcMain.handle('get-interfaces', async () => new Promise(resolve => {
       iface = iface.trim()
       exec(`ip link show ${iface}`, (e1, lo) => {
         const up = /LOWER_UP/.test(lo || '') || (/[<,]UP[,>]/.test(lo || '') && !/NO-CARRIER/.test(lo || ''))
+        const mac = ((lo || '').match(/link\/ether\s+([0-9a-f:]{17})/i) || [])[1] || null
         exec(`ip -4 addr show ${iface}`, (e2, ao) => {
           const m    = ao && ao.match(/inet (\d+\.\d+\.\d+\.\d+)\/(\d+)/)
           const ip   = m ? m[1] : null
           const cidr = m ? m[2] : null
           if (!ip) {
-            res({ name: iface, ip: null, cidr: null, gateway: null, dns: null, state: up ? 'up' : 'down' })
+            res({ name: iface, mac, ip: null, cidr: null, gateway: null, dns: null, state: up ? 'up' : 'down' })
             return
           }
-          exec(`ip route show table all dev ${iface} 2>/dev/null | grep "^default via"`, (e3, rto) => {
-            const gwm     = (rto || '').match(/default via (\d+\.\d+\.\d+\.\d+)/)
-            let gateway   = gwm ? gwm[1] : null
-            const finalize = (gw) => {
-              exec(`nmcli dev show ${iface} 2>/dev/null`, (e4, nmo) => {
-                const dnsMatches = nmo
-                  ? [...nmo.matchAll(/IP4\.DNS\[\d+\]:\s+(\S+)/g)].map(x => x[1]).filter(x => x !== '--')
-                  : []
-                res({ name: iface, ip, cidr, gateway: gw, dns: dnsMatches.length ? dnsMatches : null, state: up ? 'up' : 'down' })
+          exec(`nmcli dev show ${iface} 2>/dev/null`, (e3, nmo) => {
+            /* nmcli expose DIRECTEMENT la passerelle d'une interface via
+               IP4.GATEWAY — bien plus fiable que reconstruire depuis
+               "ip route" (table/format qui varie selon les configs, et
+               qui ne remontait rien ici). On garde "ip route" + netplan
+               en repli uniquement pour les interfaces que NetworkManager
+               ne gère pas du tout (ex. tailscale0, où nmcli ne reporte
+               souvent rien d'utile). */
+            const gwMatch  = nmo && nmo.match(/IP4\.GATEWAY:\s+(\S+)/)
+            const gateway  = (gwMatch && gwMatch[1] !== '--') ? gwMatch[1] : null
+            const dnsMatches = nmo
+              ? [...nmo.matchAll(/IP4\.DNS\[\d+\]:\s+(\S+)/g)].map(x => x[1]).filter(x => x !== '--')
+              : []
+            /* Méthode d'adressage (DHCP "auto" vs Statique "manual") —
+               absente jusqu'ici, ce qui faisait toujours partir le
+               panneau en mode Statique par défaut, même pour une
+               interface en DHCP. */
+            const connMatch = nmo && nmo.match(/GENERAL\.CONNECTION:\s+(.+)/)
+            const connName  = connMatch ? connMatch[1].trim() : null
+
+            const finalize = (gw, method) => {
+              res({
+                name: iface, mac, ip, cidr, gateway: gw,
+                dns: dnsMatches.length ? dnsMatches : null,
+                state: up ? 'up' : 'down',
+                dhcp: method !== 'manual',
               })
             }
-            if (gateway) return finalize(gateway)
-            exec(`sudo grep -r "via\\|gateway4" /etc/netplan/ 2>/dev/null`, (e5, npo) => {
-              const vim  = (npo || '').match(/via:\s*["']?(\d+\.\d+\.\d+\.\d+)["']?/)
-              const gw4m = (npo || '').match(/gateway4:\s*["']?(\d+\.\d+\.\d+\.\d+)["']?/)
-              finalize((vim || gw4m) ? (vim ? vim[1] : gw4m[1]) : null)
+            const withMethod = (gw) => {
+              if (!connName || connName === '--') return finalize(gw, null)
+              exec(`nmcli -g ipv4.method connection show "${connName.replace(/"/g, '\\"')}" 2>/dev/null`, (e6, mo) => {
+                finalize(gw, (mo || '').trim())
+              })
+            }
+            if (gateway) return withMethod(gateway)
+            exec('ip route show default 2>/dev/null', (e4, rto) => {
+              const line = (rto || '').split('\n').find(l => l.includes(`dev ${iface}`))
+              const gwm  = line && line.match(/default via (\d+\.\d+\.\d+\.\d+)/)
+              if (gwm) return withMethod(gwm[1])
+              exec(`sudo grep -r "via\\|gateway4" /etc/netplan/ 2>/dev/null`, (e5, npo) => {
+                const vim  = (npo || '').match(/via:\s*["']?(\d+\.\d+\.\d+\.\d+)["']?/)
+                const gw4m = (npo || '').match(/gateway4:\s*["']?(\d+\.\d+\.\d+\.\d+)["']?/)
+                withMethod((vim || gw4m) ? (vim ? vim[1] : gw4m[1]) : null)
+              })
             })
           })
         })
@@ -60,7 +89,7 @@ ipcMain.handle('get-ip-addresses', async () => {
   return { wifi, eth }
 })
 
-/* â”€â”€ WiFi â”€â”€ */
+/* -- WiFi -- */
 ipcMain.handle('wifi-scan', async () => new Promise(resolve => {
   exec('nmcli --fields SSID,SIGNAL,SECURITY --terse dev wifi list 2>/dev/null', (err, out) => {
     if (err || !out) return resolve([])
@@ -148,10 +177,16 @@ ipcMain.handle('wifi-disconnect', async () => new Promise(resolve => {
 }))
 
 ipcMain.handle('set-static-ip', async (_, opts) => {
-  const { iface, dhcp, ip, mask, gw, dns } = opts
+  const { iface, dhcp, ip, mask, dns } = opts
+  /* Le renderer (settings-network.js ? applyIfaceConfig) envoie la
+     passerelle sous le nom "gateway", alors que ce handler lisait "gw"
+     (toujours undefined) : la passerelle était donc écrasée par une
+     chaîne vide à chaque application. On accepte les deux noms. */
+  const gw = opts.gateway ?? opts.gw
   if (!iface) return false
   const cidr   = (mask || '255.255.255.0').split('.').reduce((a, o) => a + (parseInt(o) >>> 0).toString(2).split('1').length - 1, 0)
-  const dnsVal = dns || '1.1.1.1 1.0.0.1'
+  const dnsList = (Array.isArray(dns) ? dns : String(dns || '').split(/[\s,]+/)).filter(Boolean)
+  const dnsVal  = dnsList.length ? dnsList.join(' ') : '1.1.1.1 1.0.0.1'
   const useNM  = await new Promise(r => exec('systemctl is-active NetworkManager', (e, o) => r(!e && o.trim() === 'active')))
   if (!useNM) return false
   return new Promise(resolve => {

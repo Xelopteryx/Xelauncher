@@ -39,7 +39,7 @@ function startXeInput() {
       try {
         const ev  = JSON.parse(line)
         const win = getMainWindow()
-        if (win && !win.isDestroyed()) win.webContents.send('xe-input-event', ev)
+        if (win && !win.isDestroyed()) win.webContents.send(ev.state === 'up' ? 'xe-input-release' : 'xe-input-event', ev)
       } catch (e) {}
     }
   })

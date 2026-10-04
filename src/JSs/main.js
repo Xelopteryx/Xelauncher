@@ -19,7 +19,7 @@ console.log('argv1:', process.argv[1])
 
 /* ── Modules (ordre obligatoire : helpers en premier) ── */
 const {
-  ensureDirs, getOrCreateSecretKey, LAUNCH_NEXT_FILE,
+  ensureDirs, ensureAudioRouting, getOrCreateSecretKey, LAUNCH_NEXT_FILE,
 } = require('./helpers')
 
 const { createWindow, setPowerBlockerId } = require('./main-window')
@@ -43,6 +43,7 @@ app.whenReady().then(() => {
   createWindow()
 
   ensureDirs()
+  ensureAudioRouting()
   getOrCreateSecretKey()
 
   try { fs.unlinkSync(LAUNCH_NEXT_FILE) } catch (e) {}

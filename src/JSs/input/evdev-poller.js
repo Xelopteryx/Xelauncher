@@ -1,19 +1,21 @@
 /**
  * evdev-poller.js
- * EvdevPoller — écoute les events IPC de xe_input.py,
- * résout les actions en touches logiques XeLauncher.
+ * EvdevPoller â€” Ã©coute les events IPC de xe_input.py (v3) et les rÃ©sout en
+ * touches logiques XeLauncher.
  *
- * Protocole xe_input.py v2 :
- *   { device: '/dev/input/event4', name: 'Xbox Wireless Controller',
- *     action: 'confirm', raw: 'KEY_304' }
+ * Protocole xe_input.py v3 :
+ *   { device, name, kind, action, raw, state }   state: 'down' (canal
+ *   'xe-input-event') ou 'up' (canal 'xe-input-release').
  *
- * L'identifiant utilisé pour le mapping est le NAME (nom lisible),
- * stable quelque soit le numéro d'event.
- * Si name est absent (ancienne version), on utilise device comme fallback.
+ * RÃ©solution STRICTE :
+ *   - appareil avec un mappage personnalisÃ© -> seules les touches mappÃ©es
+ *     fonctionnent, tout le reste est ignorÃ© (clavier compris) ;
+ *   - appareil sans mappage (ou "valeurs par dÃ©faut") -> table intÃ©grÃ©e.
  *
- * Mode rawCapture (rawCapture=true) :
- *   Bypass ACCEPTED_ACTIONS, envoie tout à onRawEvent(raw, name).
- *   Utilisé par mapper.js pour capturer toutes les touches.
+ * RÃ©pÃ©tition sur appui maintenu (directions uniquement) : gÃ©rÃ©e ici, donc
+ * valable pour toutes les pages ET pour les touches mappÃ©es librement.
+ *
+ * Mode rawCapture : bypass de tout, envoie le raw Ã  onRawEvent(raw, name, data).
  */
 
 ;(function(root) {
@@ -25,15 +27,22 @@
     'action':true,'l1':true,'r1':true,'l2':true,'r2':true,'l3':true,'r3':true,
   };
 
+  var REPEAT_KEYS     = { ArrowUp:1, ArrowDown:1, ArrowLeft:1, ArrowRight:1 };
+  var REPEAT_DELAY    = 500;    /* ms avant le dÃ©but de la rÃ©pÃ©tition */
+  var REPEAT_INTERVAL = 90;     /* ms entre deux rÃ©pÃ©titions */
+  var REPEAT_MAX      = 8000;   /* garde-fou : entrÃ©e coincÃ©e */
+
   function EvdevPoller(onKey) {
     this.onKey        = onKey;
     this._customMaps  = null;   // ref vers InputMapper._maps
-    this.onRawEvent   = null;   // (raw, deviceName) avant résolution
+    this.onRawEvent   = null;   // (raw, deviceName, data) avant rÃ©solution
     this.debugMode    = false;
-    this.onDebug      = null;   // ({ raw, gpId })
-    this.rawCapture   = false;  // si true : bypass filtre, envoie tout
+    this.onDebug      = null;
+    this.rawCapture   = false;
     this._bound       = null;
+    this._boundUp     = null;
     this._running     = false;
+    this._repeats     = {};
     this._lastGpId    = '__keyboard__';
     this._lastGpName  = '__keyboard__';
   }
@@ -44,89 +53,115 @@
       console.warn('EvdevPoller: onXeInputEvent non disponible');
       return;
     }
-    if (window.xeLauncher.offXeInputEvent) window.xeLauncher.offXeInputEvent();
+    if (window.xeLauncher.offXeInputEvent)   window.xeLauncher.offXeInputEvent();
+    if (window.xeLauncher.offXeInputRelease) window.xeLauncher.offXeInputRelease();
     this._running = true;
     var self = this;
     this._bound = function(data) { self._onEvent(data); };
     window.xeLauncher.onXeInputEvent(this._bound);
+    if (window.xeLauncher.onXeInputRelease) {
+      this._boundUp = function(data) { self._onRelease(data); };
+      window.xeLauncher.onXeInputRelease(this._boundUp);
+    }
   };
 
   EvdevPoller.prototype.stop = function() {
     if (!this._running) return;
     this._running = false;
-    if (window.xeLauncher && window.xeLauncher.offXeInputEvent)
-      window.xeLauncher.offXeInputEvent();
+    this._stopAllRepeats();
+    if (window.xeLauncher) {
+      if (window.xeLauncher.offXeInputEvent)   window.xeLauncher.offXeInputEvent();
+      if (window.xeLauncher.offXeInputRelease) window.xeLauncher.offXeInputRelease();
+    }
   };
 
-  /**
-   * Retourner le nom stable de l'appareil.
-   * Priorité : data.name (lisible, stable) > data.device (chemin, change)
-   */
+  /** Nom stable de l'appareil (data.name) plutÃ´t que le chemin (data.device). */
   EvdevPoller.prototype._deviceName = function(data) {
     if (data.name && data.name !== data.device) return data.name;
     return data.device || '__unknown__';
   };
 
   /**
-   * Résout la touche logique à utiliser pour cet event.
-   *
-   * IMPORTANT : le mapping custom stocké par InputMapper est
-   * { actionId: rawPhysique }. Pour savoir si CET event correspond à un
-   * actionId custom, il faut comparer le RAW physique reçu (raw) à
-   * cm[aid] — PAS l'action sémantique déjà résolue par xe_input.py.
-   * Comparer à `action` ne matche quasiment jamais (on compare par
-   * exemple 'KEY_103' à 'up'), ce qui fait qu'on retombe toujours sur
-   * le fallback par défaut et que le mapping custom est ignoré.
+   * RÃ©sout la touche logique d'un event.
+   * Mappage personnalisÃ© : on cherche le RAW physique reÃ§u parmi les boutons
+   * enregistrÃ©s pour chaque action ; aucune correspondance = null (touche ignorÃ©e).
    */
   EvdevPoller.prototype._resolve = function(action, raw, deviceName) {
-    var ACTION_TO_KEY = root._XeUtils.ACTION_TO_KEY;
-    var ACTION_KEYS   = root._XeUtils.ACTION_KEYS;
+    var U  = root._XeUtils;
     var cm = this._customMaps && this._customMaps[deviceName];
-    if (cm) {
-      /* Le map contient { actionId: rawPhysique }, ex: { up: 'KEY_103' }
-         On cherche si le RAW reçu correspond au rawPhysique stocké */
+    if (cm && !cm.__default) {
+      var custom = false;
       for (var aid in cm) {
-        if (cm[aid] === raw) {
-          var a = ACTION_KEYS.find(function(k) { return k.id === aid; });
+        if (aid.charAt(0) === '_' || !cm[aid]) continue;
+        var raws = [].concat(cm[aid]);          /* une action = un ou plusieurs boutons */
+        if (!raws.length) continue;
+        custom = true;
+        if (raws.indexOf(raw) >= 0) {
+          var a = U.ALL_ACTION_KEYS.find(function(k) { return k.id === aid; });
           return a ? a.default : null;
         }
       }
-      /* Raw non trouvé dans le custom map ? utiliser table par défaut */
-      return ACTION_TO_KEY[action] || null;
+      if (custom) return null;
     }
-    return ACTION_TO_KEY[action] || null;
+    if (!action || !ACCEPTED_ACTIONS[action]) return null;
+    return U.ACTION_TO_KEY[action] || null;
+  };
+
+  /* â”€â”€ RÃ©pÃ©tition â”€â”€ */
+  EvdevPoller.prototype._startRepeat = function(id, key) {
+    this._stopRepeat(id);
+    var self = this, rep = { key: key, interval: null, t0: 0 };
+    rep.delay = setTimeout(function() {
+      rep.t0 = Date.now();
+      rep.interval = setInterval(function() {
+        if (Date.now() - rep.t0 > REPEAT_MAX) { self._stopRepeat(id); return; }
+        self.onKey(key);
+      }, REPEAT_INTERVAL);
+    }, REPEAT_DELAY);
+    this._repeats[id] = rep;
+  };
+
+  EvdevPoller.prototype._stopRepeat = function(id) {
+    var rep = this._repeats[id];
+    if (!rep) return;
+    clearTimeout(rep.delay);
+    if (rep.interval) clearInterval(rep.interval);
+    delete this._repeats[id];
+  };
+
+  EvdevPoller.prototype._stopAllRepeats = function() {
+    for (var id in this._repeats) this._stopRepeat(id);
+  };
+
+  EvdevPoller.prototype._onRelease = function(data) {
+    if (!data || !data.device) return;
+    this._stopRepeat(this._deviceName(data) + '|' + (data.raw || ''));
   };
 
   EvdevPoller.prototype._onEvent = function(data) {
     if (!data || !data.device) return;
-    var action     = data.action;
+    var action     = data.action || null;
     var raw        = data.raw || action;
     var deviceName = this._deviceName(data);
 
-    /* Mémoriser l'identité */
     this._lastGpId   = deviceName;
     this._lastGpName = deviceName;
 
-    /* -- Mode rawCapture : bypass tout, envoie le raw brut -- */
+    /* Mode rawCapture : envoie le raw brut, sans rien rÃ©soudre */
     if (this.rawCapture) {
-      if (this.onRawEvent && raw) this.onRawEvent(raw, deviceName);
+      if (this.onRawEvent && raw) this.onRawEvent(raw, deviceName, data);
       return;
     }
 
-    if (!action) return;
+    if (this.debugMode && this.onDebug) this.onDebug({ raw: raw, gpId: deviceName });
 
-    /* Debug */
-    if (this.debugMode && this.onDebug)
-      this.onDebug({ raw: raw, gpId: deviceName });
-
-    /* Callback brut (pour mapper inline, jf-mapping...) */
-    if (this.onRawEvent) this.onRawEvent(raw, deviceName);
-
-    /* Filtrer les actions non reconnues */
-    if (!ACCEPTED_ACTIONS[action]) return;
+    /* Callback brut (mapper inline, jf-mapping, test des touches...) */
+    if (this.onRawEvent && raw) this.onRawEvent(raw, deviceName, data);
 
     var key = this._resolve(action, raw, deviceName);
-    if (key) this.onKey(key);
+    if (!key) return;
+    this.onKey(key);
+    if (REPEAT_KEYS[key]) this._startRepeat(deviceName + '|' + raw, key);
   };
 
   root._XeEvdevPoller = { EvdevPoller };

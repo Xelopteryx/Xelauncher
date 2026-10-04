@@ -80,7 +80,12 @@ function openKbNum(label, initial, callback, contextData) {
   kbPrevScreen = screen;
   document.getElementById('kbNumLabel').textContent = label;
   kbNum.open(initial || '');
-  kbNum.setMode('nums');
+  /* kbNum.setMode('nums') supprimé : keyboard.js ne sépare plus les modes
+     lettres/chiffres depuis sa réécriture (grille unique, chiffres déjà
+     sur la 1ère rangée) — cette méthode n'existe plus et faisait planter
+     toute la fonction avant même que l'overlay ne devienne visible.
+     C'est la cause du "impossible de modifier les champs en mode
+     Statique" : le clavier ne s'ouvrait tout simplement jamais. */
   kbCallback    = callback;
   kbContextData = contextData || null;
   kbNum.onConfirm = (val) => { closeKbNum(); if (kbCallback) kbCallback(val, kbContextData); };
@@ -99,6 +104,12 @@ function closeKbNum() {
    GESTION DES ONGLETS
 ═══════════════════════════════════════════════════════════════ */
 function selectTab(tabId) {
+  /* Ne jamais laisser l'édition rotation ouverte au changement d'onglet
+     (clic direct sur la sidebar par ex., qui ne passe pas par onKey) —
+     sinon rotEditing reste bloqué à true et réapparaît au retour. */
+  if (typeof XeSettings !== 'undefined' && XeSettings.Display?.closeRotEditing) {
+    XeSettings.Display.closeRotEditing();
+  }
   activeTab = tabId;
   document.querySelectorAll('.tab-content').forEach(el => { el.style.display = 'none'; });
   const t = document.getElementById('tab-' + tabId);
@@ -140,7 +151,7 @@ function getContentRows() {
   return Array.from(t.querySelectorAll(
     '.settings-row, .wifi-network, .wifi-hidden-header, .iface-item, ' +
     '.iface-field-value, .iface-apply-btn, .bt-item, .device-item, ' +
-    '.option-item, .toggle, .jf-key-btn'
+    '.option-item, .jf-key-btn'
   )).filter(el => {
     if (el.classList.contains('option-item')) {
       const parent = el.closest('[id$="-options"], [id$="OptionList"]')?.parentElement;
@@ -151,8 +162,6 @@ function getContentRows() {
       return panel ? panel.style.display !== 'none' : true;
     }
     if (el.classList.contains('wifi-network')) {
-      const hiddenNetList = el.closest('#hiddenNetList');
-      if (hiddenNetList) return hiddenNetList.style.display !== 'none';
       const hiddenBtList  = el.closest('#hiddenBtList');
       if (hiddenBtList)  return hiddenBtList.style.display !== 'none';
     }
@@ -160,8 +169,16 @@ function getContentRows() {
   });
 }
 
+const BT_MODAL_SCREENS = ['btScan', 'btBusy', 'btAction'];
+
 function updateContentFocus() {
   updateSidebarFocus();
+  /* Tant qu'un overlay Bluetooth est ouvert, plus aucune ligne de la page
+     située derrière ne garde le focus. */
+  if (BT_MODAL_SCREENS.includes(screen)) {
+    document.querySelectorAll('#tab-bluetooth .active').forEach(el => el.classList.remove('active'));
+    return;
+  }
   const rows = getContentRows();
   rows.forEach((el, i) => {
     el.classList.toggle('active', !sidebarFocused && i === rowFocusMap[activeTab]);
@@ -218,7 +235,17 @@ function activateRow(el) {
     if (idx >= 0) XeSettings.Network.openIfaceOverlay(idx);
     return;
   }
+  /* Appareils (onglets Manettes et Jellyfin) : Entrée / Triangle doivent faire
+     la même chose qu'un clic — leur écouteur 'click' ouvre le panneau d'actions
+     (Manettes) ou le mapper JMP (Jellyfin). Sans cette branche, seul le clic
+     souris fonctionnait : la navigation clavier/manette tombait dans le vide. */
+  if (el.classList.contains('device-item')) {
+    el.click();
+    return;
+  }
   if (el.classList.contains('bt-item')) {
+    /* Ligne de la liste « Appareils masqués » : Entrée / clic = démasquer. */
+    if (el.dataset.btHidden) { XeSettings.Bluetooth.unhideDevice(el.dataset.mac); return; }
     const mac      = el.dataset.mac;
     const isPaired = el.dataset.bttype === 'paired';
     const dev      = isPaired
@@ -234,21 +261,22 @@ function activateRow(el) {
   else if (action === 'shutdown')      { if (window.xeLauncher) window.xeLauncher.systemShutdown(); }
   else if (action === 'wifi-scan')     XeSettings.Network.doWifiScan();
   else if (action === 'wifi-known')    XeSettings.Network.openKnownOverlay();
-  else if (action === 'wifi-hide')     XeSettings.Network.toggleHiddenList();
+  else if (action === 'wifi-hide')     XeSettings.Network.openHiddenOverlay();
   else if (action === 'bt-scan')       XeSettings.Bluetooth.doScan();
   else if (action === 'bt-hide')       XeSettings.Bluetooth.toggleHiddenList();
   else if (action === 'map-remote')    { sessionStorage.removeItem('mapper_deviceId'); window.location.href = 'mapper.html'; }
-  else if (action === 'clear-maps')    { mapper.clearAll(); toast.show('Mappages supprimés', false); XeSettings.Controllers.renderDeviceMaps(); }
+  else if (action === 'clear-maps')    { mapper.clearAll(); toast.show('Mappages supprim\u00e9s', false); XeSettings.Controllers.renderDeviceMaps(); }
   else if (action === 'jf-configure')  window.location.href = 'JMPmapper.html';
   else if (action === 'apply-display') XeSettings.Display.applyDisplay();
-  else if (action === 'apply-audio')   XeSettings.Audio.applyAudio();
-  else if (action === 'refresh-sinks') XeSettings.Audio.refreshSinks();
+  else if (action === 'refresh-sinks') XeSettings.Audio.manualRefresh();
   else if (el.id === 'row-bt-power')   XeSettings.Bluetooth.togglePower(el);
   else if (el.id === 'row-resolution') XeSettings.Display.toggleResPanel();
+  else if (el.id === 'row-rotation')   XeSettings.Display.toggleRotEditing();
   else if (el.id === 'row-audio-out')  XeSettings.Audio.toggleOutDropdown();
-  else if (el.id === 'row-volume')     XeSettings.Audio.toggleVolDropdown();
-  /* row-rotation : pas de toggle — l'édition inline est gérée par le
-     dispatcher clavier (handleRotKey), voir onKey() plus bas. */
+  else if (el.id === 'row-volume')     XeSettings.Audio.toggleVolumeOpen();
+  /* Rotation tactile : taper la ligne ouvre, retaper applique (voir
+     toggleRotEditing) — les flèches < > sont câblées séparément dans
+     settings-display.js (init/_initButtons), pas ici. */
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -268,12 +296,12 @@ function openMapperUI(deviceId) {
 
   const title = document.createElement('div');
   title.className = 'mapper-title';
-  title.textContent = 'Configuration du périphérique';
+  title.textContent = 'Configuration du p\u00e9riph\u00e9rique';
   el.appendChild(title);
 
   const dev = document.createElement('div');
   dev.className   = 'mapper-device';
-  dev.textContent = deviceId === REMOTE_DEVICE_ID ? 'Télécommande / nouvel appareil' : deviceId.substring(0, 55);
+  dev.textContent = deviceId === REMOTE_DEVICE_ID ? 'T\u00e9l\u00e9commande / nouvel appareil' : deviceId.substring(0, 55);
   el.appendChild(dev);
 
   const act = document.createElement('div');
@@ -288,13 +316,13 @@ function openMapperUI(deviceId) {
 
   const hint = document.createElement('div');
   hint.className   = 'mapper-hint';
-  hint.textContent = 'Appuyez le bouton ou la direction correspondant à chaque action. ✕ = passer';
+  hint.textContent = 'Appuyez le bouton ou la direction correspondant \u00e0 chaque action. \u2715 = passer';
   el.appendChild(hint);
 
   const skip = document.createElement('button');
   skip.className   = 'btn';
   skip.style.marginTop = '12px';
-  skip.textContent = 'Utiliser les valeurs par défaut';
+  skip.textContent = 'Utiliser les valeurs par d\u00e9faut';
   skip.addEventListener('click', () => { mapper.save(deviceId, mapper.getDefault()); closeMapperUI(); });
   el.appendChild(skip);
 
@@ -328,7 +356,7 @@ function nextMapperStep() {
   if (mapperCurrentIdx >= XeInput.ACTION_KEYS.length) {
     mapper.save(mapperDeviceId, mapperResult);
     closeMapperUI();
-    toast.show('Mappage enregistré !', false);
+    toast.show('Mappage enregistr\u00e9 !', false);
     if (activeTab === 'controllers') XeSettings.Controllers.renderDeviceMaps();
     return;
   }
@@ -395,11 +423,18 @@ function initSettings() {
     document.getElementById('kbOverlay')
   );
 
-  kbNum = new XeInput.VirtualKeyboard(
-    document.getElementById('kbNumRows'),
-    document.getElementById('kbNumDisplay'),
-    null
-  );
+  /* Pavé numérique dédié (chiffres, point, effacer, entrée) ; repli sur le
+     clavier complet si numpad.js n'est pas chargé. */
+  kbNum = XeInput.NumericKeyboard
+    ? new XeInput.NumericKeyboard(
+        document.getElementById('kbNumRows'),
+        document.getElementById('kbNumDisplay')
+      )
+    : new XeInput.VirtualKeyboard(
+        document.getElementById('kbNumRows'),
+        document.getElementById('kbNumDisplay'),
+        null
+      );
 
   XeInput.requestWakeLock();
   gpPoller.start();
@@ -419,14 +454,19 @@ function initSettings() {
     });
   });
 
-  document.getElementById('kbModeLetters')?.addEventListener('click', () => kb.setMode('letters'));
-  document.getElementById('kbModeNums')?.addEventListener('click',    () => kb.setMode('nums'));
+  /* kbModeLetters/kbModeNums retirés : keyboard.js n'a plus de setMode()
+     depuis sa réécriture (grille unique lettres+chiffres+symboles) — ces
+     handlers plantaient au clic pour la même raison que openKbNum(). */
 
   XeSettings.System.loadVersion();
+  XeSettings.System.loadSpecs();
   XeSettings.Display.loadDisplayModes();
   XeSettings.Network.loadInterfaces();
   XeSettings.Display.loadSavedSettings();
   XeSettings.Display.loadCurrentDisplay();
+  XeSettings.Audio.init();
+  XeSettings.Audio.loadSavedSettings();
+  XeSettings.Audio.refreshSinks();
   XeSettings.Jellyfin.loadMapping();
   XeSettings.Jellyfin.updateConfigStatus();
 
@@ -477,11 +517,14 @@ function onKey(raw, deviceId) {
   /* Écrans modaux */
   if (screen === 'kb')           { kb.handleKey(key);    return; }
   if (screen === 'kbNum')        { kbNum.handleKey(key); return; }
+  if (screen === 'btScan')       { XeSettings.Bluetooth.scanKey(key);             return; }
+  if (screen === 'btBusy')       { return; }   /* appairage / connexion en cours : on ignore tout */
   if (screen === 'btAction')     { XeSettings.Bluetooth.actionKey(key);           return; }
   if (screen === 'deviceAction') { XeSettings.Controllers.deviceActionKey(key);   return; }
   if (screen === 'gpDebug')      { if (key === 'Escape' || key === 'Backspace' || key === 'Back' || key === 'Start') XeSettings.Controllers.closeGpDebug(); return; }
   if (screen === 'iface')        { XeSettings.Network.ifaceOverlayKey(key);       return; }
-  if (screen === 'knownOverlay') { XeSettings.Network.knownOverlayKey(key);       return; }
+  if (screen === 'knownOverlay')  { XeSettings.Network.knownOverlayKey(key);       return; }
+  if (screen === 'hiddenOverlay') { XeSettings.Network.hiddenOverlayKey(key);      return; }
 
   /* Dropdown ouvert */
   if (activeDropdown) {
@@ -495,8 +538,13 @@ function onKey(raw, deviceId) {
 
   /* Affichage : panneau résolution ouvert, ou ligne rotation en édition —
      priorité totale sur la navigation normale et sur le retour global,
-     pour que Retour/Échap annule au lieu de quitter la page. */
-  if (activeTab === 'display') {
+     pour que Retour/Échap annule au lieu de quitter la page.
+     IMPORTANT : uniquement quand le focus est réellement dans le contenu
+     (!sidebarFocused). rowFocusMap[activeTab] continue de "se souvenir"
+     de la ligne rotation même une fois le focus passé dans la sidebar —
+     sans cette garde, Entrée sur un onglet de la sidebar rouvrait la
+     rotation au lieu d'appeler selectTab(). */
+  if (activeTab === 'display' && !sidebarFocused) {
     if (XeSettings.Display.isResOpen()) {
       XeSettings.Display.handleResKey(key);
       return;
@@ -506,6 +554,23 @@ function onKey(raw, deviceId) {
     if (_cur && _cur.id === 'row-rotation' &&
         (key === 'Enter' || XeSettings.Display.isRotEditing())) {
       if (XeSettings.Display.handleRotKey(key)) return;
+    }
+  }
+
+  /* Audio : liste "Sortie audio" ouverte → Haut/Bas y naviguent (pas
+     Gauche/Droite, ça n'a pas de sens pour une colonne). Ligne "Volume" →
+     Entrée fait apparaître la barre et y déplace le focus (comme
+     Rotation/Sortie audio) ; Gauche/Droite n'agissent sur le volume
+     qu'une fois la barre ouverte, plus directement depuis la ligne.
+     Même garde !sidebarFocused que pour Affichage, pour la même raison. */
+  if (activeTab === 'audio' && !sidebarFocused) {
+    if (XeSettings.Audio.isOutOpen()) {
+      XeSettings.Audio.handleAudioOutKey(key);
+      return;
+    }
+    if (XeSettings.Audio.isVolumeOpen()) {
+      XeSettings.Audio.handleVolumeKey(key);
+      return;
     }
   }
 
@@ -551,7 +616,8 @@ function onKey(raw, deviceId) {
   } else if (key === 'ArrowRight' && currentRow?.classList.contains('wifi-network')) {
     XeSettings.Network.toggleNetworkVisibility(currentRow, idx);
   } else if (key === 'ArrowRight' && currentRow?.classList.contains('bt-item')) {
-    XeSettings.Bluetooth.hideDevice(currentRow, idx);
+    if (currentRow.dataset.btHidden) XeSettings.Bluetooth.unhideDevice(currentRow.dataset.mac);
+    else                             XeSettings.Bluetooth.hideDevice(currentRow, idx);
   } else if (key === 'Enter') {
     if (currentRow) activateRow(currentRow);
   }

@@ -7,6 +7,8 @@
 <link rel="stylesheet" href="../CSSs/common.css">
 <link rel="stylesheet" href="../CSSs/settings.css">
 <link rel="stylesheet" href="../CSSs/settings-display-patch.css">
+<link rel="stylesheet" href="../CSSs/settings-bluetooth.css">
+<link rel="stylesheet" href="../CSSs/settings-controllers.css">
 </head>
 <body>
 <div class="grid-bg"></div>
@@ -170,6 +172,11 @@
           <span class="settings-row-value" id="rotValue">Paysage</span>
         </div>
         <div class="rot-image-wrap" id="rotImageWrap">
+          <div class="rot-tablet-row" id="rotTabletRow">
+            <button type="button" class="rot-arrow" id="rotArrowLeft" tabindex="-1" aria-hidden="true">&lt;</button>
+            <div class="rot-word-track" id="rotWordTrack"><span class="rot-word rot-word-current">Paysage</span></div>
+            <button type="button" class="rot-arrow" id="rotArrowRight" tabindex="-1" aria-hidden="true">&gt;</button>
+          </div>
           <img class="rot-image" id="rotImage" src="../LOGOs/Chuck-Norris-Approuved.jpg" alt="Aperçu de la rotation">
         </div>
 
@@ -184,30 +191,20 @@
           <span class="settings-row-label">Sortie audio</span>
           <span class="settings-row-value" id="audioOutVal">—</span>
         </div>
-        <div id="audio-out-options" style="display:none;padding:0 0 8px 0">
+        <div id="audio-out-options" style="display:none">
           <div id="audioOutOptionList" class="audio-sink-list"></div>
+          <div class="res-nav-hint">↑ ↓ naviguer · Entrée sélectionner · Retour annuler</div>
         </div>
         <div class="settings-row" id="row-volume">
           <span class="settings-row-label">Volume</span>
           <span class="settings-row-value" id="volumeVal">80%</span>
         </div>
-        <div id="volume-options" style="display:none;padding:0 0 8px 0">
-          <div class="option-list" id="volumeOptionList"></div>
-        </div>
-        <div class="settings-row" data-action="apply-audio">
-          <span class="settings-row-label">Appliquer</span>
-          <span class="settings-row-value">✓</span>
+        <div class="volume-slider-wrap" id="volumeSliderWrap" style="display:none">
+          <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" step="1" value="80">
+          <div class="res-nav-hint">◀ ▶ ajuster · Entrée / Retour fermer</div>
         </div>
         <div class="settings-row" data-action="refresh-sinks">
           <span class="settings-row-label">↻ Actualiser les sorties audio</span>
-        </div>
-      </div>
-      <div class="settings-group" style="margin-top:16px">
-        <div class="section-title" style="margin:12px 0 8px">Sortie Jellyfin</div>
-        <div class="hint" style="padding:8px clamp(20px,3vw,40px)">La sortie sélectionnée ci-dessus sera utilisée pour Jellyfin Media Player.</div>
-        <div class="settings-row">
-          <span class="settings-row-label">Sortie active</span>
-          <span class="settings-row-value" id="jfAudioSinkVal">—</span>
         </div>
       </div>
     </div>
@@ -221,15 +218,12 @@
           <span class="settings-row-value" id="wifiScanStatus">↻</span>
         </div>
         <div class="wifi-list" id="wifiList"></div>
-        <div class="wifi-hidden-section">
-          <div class="wifi-hidden-header" data-action="wifi-hide" id="wifiHideHeader">
-            <span>⊘ Réseaux masqués</span>
-            <span id="hiddenNetCount" style="opacity:0.6">0</span>
-          </div>
-          <div id="hiddenNetList" style="display:none"></div>
-        </div>
       </div>
       <div class="settings-group" style="margin-top:16px">
+        <div class="settings-row" id="row-wifi-hidden" data-action="wifi-hide">
+          <span class="settings-row-label">⊘ Réseaux masqués</span>
+          <span class="settings-row-value" id="hiddenNetCount">0</span>
+        </div>
         <div class="settings-row" id="row-wifi-known" data-action="wifi-known">
           <span class="settings-row-label">★ Réseaux connus</span>
           <span class="settings-row-value" id="knownNetCount">—</span>
@@ -331,6 +325,10 @@
 
 <!-- Known networks overlay -->
 <div class="iface-overlay" id="knownOverlay"></div>
+<div class="iface-overlay" id="hiddenOverlay"></div>
+
+<!-- Bluetooth : ajout d'un appareil (choix du type + recherche) -->
+<div class="iface-overlay" id="btScanOverlay"></div>
 
 <!-- Numeric keyboard (IP/mask/gateway/DNS) -->
 <div class="kb-overlay" id="kbNumOverlay">
@@ -346,10 +344,6 @@
   <div class="kb-label" id="kbLabel">Mot de passe WiFi</div>
   <div class="kb-display" id="kbDisplay">|</div>
   <div class="kb-panel">
-    <div class="kb-modes">
-      <button class="kb-mode-btn on" id="kbModeLetters">A-Z</button>
-      <button class="kb-mode-btn" id="kbModeNums">0-9</button>
-    </div>
     <div id="kbRows"></div>
   </div>
 </div>

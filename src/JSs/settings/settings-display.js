@@ -1,23 +1,23 @@
 /**
  * settings-display.js
- * Onglet Affichage : r�solution (3 colonnes), rotation inline.
+ * Onglet Affichage : résolution (3 colonnes), rotation inline.
  *
- * Comportement r�solution :
- *   - Appuyer Entr�e sur "R�solution" ouvre le panneau 3 colonnes
+ * Comportement résolution :
+ *   - Appuyer Entrée sur "Résolution" ouvre le panneau 3 colonnes
  *   - Gauche/Droite navigue entre les colonnes (4:3 / 16:9 / Autres)
  *   - Haut/Bas navigue dans la colonne active
- *   - S�lectionner une r�solution l'applique imm�diatement + timer 15s
- *   - Deux boutons "Confirmer" / "Annuler" apparaissent au centre (focus Annuler par d�faut)
- *   - Retour ou Annuler = revenir � la r�solution pr�c�dente
- *   - Confirmer = valider d�finitivement
+ *   - Sélectionner une résolution l'applique immédiatement + timer 15s
+ *   - Deux boutons "Confirmer" / "Annuler" apparaissent au centre (focus Annuler par défaut)
+ *   - Retour ou Annuler = revenir à la résolution précédente
+ *   - Confirmer = valider définitivement
  *
  * Comportement rotation :
  *   - Focus sur la ligne Rotation + Gauche/Droite = changer le sens
- *   - Entr�e = appliquer (avec confirmation comme r�solution)
+ *   - Entrée = appliquer (avec confirmation comme résolution)
  *   - Retour = annuler
  *
- * Les r�solutions sont appliqu�es avec xrandr --scale pour conserver
- * les proportions (bandes noires si ratio diff�rent de l'�cran physique).
+ * Les résolutions sont appliquées avec xrandr --scale pour conserver
+ * les proportions (bandes noires si ratio différent de l'écran physique).
  */
 
 'use strict';
@@ -26,89 +26,94 @@ window.XeSettings = window.XeSettings || {};
 
 XeSettings.Display = (() => {
 
-  /* --------------------------------------------------------------
-     �TAT
-  -------------------------------------------------------------- */
-  let dispRes = '1920�1080';
-  let dispRot = 0;            // 0 | 1 | 2 | 3  (sens horaire � 90�)
+  /* ══════════════════════════════════════════════════════════════
+     ÉTAT
+  ══════════════════════════════════════════════════════════════ */
+  let dispRes = '1920×1080';
+  let dispRot = 0;            // 0 | 1 | 2 | 3  (sens horaire × 90°)
 
-  /* R�solution active avant toute modification � pour revenir en arri�re */
-  let _prevRes = '1920�1080';
+  /* Résolution active avant toute modification — pour revenir en arrière */
+  let _prevRes = '1920×1080';
   let _prevRot = 0;
 
-  /* R�solutions disponibles depuis xrandr */
+  /* Résolutions disponibles depuis xrandr */
   let RES_OPTS = [];
 
-  /* Panneau r�solution ouvert ? */
+  /* Panneau résolution ouvert ? */
   let resOpen = false;
 
   /* 3 colonnes : 4:3 / 16:9 / Autres */
   let _cols = [[], [], []];
-  let _colIdx  = 1;   // colonne focalis�e
-  let _rowIdxs = [0, 0, 0]; // ligne focalis�e par colonne
+  let _colIdx  = 1;   // colonne focalisée
+  let _rowIdxs = [0, 0, 0]; // ligne focalisée par colonne
 
   /* Timer revert */
   let _revertTimer   = null;
   let _revertSeconds = 15;
 
-  /* Rotation : est-on en mode �dition inline ? */
+  /* Rotation : est-on en mode édition inline ? */
   let rotEditing  = false;
 
-  /* Confirmation r�solution/rotation : focus (0=Confirmer, 1=Annuler) */
+  /* Rotation VISUELLE de l'image (en degrés, non bornée à 0-270) — accumule
+     à chaque pas au lieu de repartir de 0 après 270°, pour un vrai tour
+     complet visuel quand on enchaîne 4x la même flèche. */
+  let _rotVisualDeg = 0;
+
+  /* Confirmation résolution/rotation : focus (0=Confirmer, 1=Annuler) */
   /* 'res' | 'rot' | null */
   let confirmMode  = null;
-  let confirmFocus = 1;  // d�faut sur Annuler
+  let confirmFocus = 1;  // défaut sur Annuler
 
-  /* --------------------------------------------------------------
-     CLASSIFICATION DES R�SOLUTIONS
-  -------------------------------------------------------------- */
+  /* ══════════════════════════════════════════════════════════════
+     CLASSIFICATION DES RÉSOLUTIONS
+  ══════════════════════════════════════════════════════════════ */
   function _classifyRes(r) {
-    const s = r.replace(/[�x�]/g, 'x');
+    const s = r.replace(/[×x×]/g, 'x');
     const m = s.match(/^(\d+)x(\d+)$/);
     if (!m) return 2;
     const w = parseInt(m[1]), h = parseInt(m[2]);
     const ratio = w / h;
     if (Math.abs(ratio - 4/3)  < 0.05) return 0;
     if (Math.abs(ratio - 16/9) < 0.05) return 1;
-    if (Math.abs(ratio - 16/10) < 0.05) return 1; // 16:10 ? colonne 16:9
+    if (Math.abs(ratio - 16/10) < 0.05) return 1; // 16:10 → colonne 16:9
     return 2;
   }
 
   function _buildCols() {
     _cols = [[], [], []];
     RES_OPTS.forEach(r => _cols[_classifyRes(r)].push(r));
-    // Mettre des listes par d�faut si vides
-    if (!_cols[0].length) _cols[0] = ['640�480','800�600','1024�768','1280�960'];
-    if (!_cols[1].length) _cols[1] = ['1280�720','1920�1080','2560�1440','3840�2160'];
-    if (!_cols[2].length) _cols[2] = ['1280�800','1920�1200','2560�1080','3440�1440'];
+    // Mettre des listes par défaut si vides
+    if (!_cols[0].length) _cols[0] = ['640×480','800×600','1024×768','1280×960'];
+    if (!_cols[1].length) _cols[1] = ['1280×720','1920×1080','2560×1440','3840×2160'];
+    if (!_cols[2].length) _cols[2] = ['1280×800','1920×1200','2560×1080','3440×1440'];
   }
 
-  /* --------------------------------------------------------------
+  /* ══════════════════════════════════════════════════════════════
      LABELS ROTATION
-  -------------------------------------------------------------- */
+  ══════════════════════════════════════════════════════════════ */
   const ROT_LABELS = [
-    { label: 'Paysage',         icon: '? A' },
-    { label: 'Portrait ?',      icon: '? ?A' },
-    { label: 'Paysage retourn�',icon: '? ?' },
-    { label: 'Portrait ?',      icon: '? ?A' },
+    { label: 'Paysage',         icon: '▭ A' },
+    { label: 'Portrait ↷',      icon: '▯ ⟳A' },
+    { label: 'Paysage retourné',icon: '▭ ∀' },
+    { label: 'Portrait ↶',      icon: '▯ ⟲A' },
   ];
   const ROT_XRANDR = ['normal', 'right', 'inverted', 'left'];
 
-  /* --------------------------------------------------------------
+  /* ══════════════════════════════════════════════════════════════
      CHARGEMENT
-  -------------------------------------------------------------- */
+  ══════════════════════════════════════════════════════════════ */
   function loadDisplayModes() {
     if (!window.xeLauncher) { _buildCols(); return; }
     window.xeLauncher.getDisplayModes().then(modes => {
       if (modes && modes.resolutions && modes.resolutions.length) {
         RES_OPTS = modes.resolutions;
       } else {
-        RES_OPTS = ['640�480','800�600','1024�768',
-                    '1280�720','1920�1080','2560�1440','3840�2160',
-                    '1280�800','2560�1080'];
+        RES_OPTS = ['640×480','800×600','1024×768',
+                    '1280×720','1920×1080','2560×1440','3840×2160',
+                    '1280×800','2560×1080'];
       }
       _buildCols();
-      // Retrouver la colonne de la r�solution active
+      // Retrouver la colonne de la résolution active
       const cat = _classifyRes(dispRes);
       _colIdx = cat;
       const idx = _cols[cat].indexOf(dispRes);
@@ -118,17 +123,17 @@ XeSettings.Display = (() => {
   }
 
   /**
-   * Interroge le syst�me (xrandr) pour conna�tre la r�solution et la
-   * rotation R�ELLEMENT actives, et les impose comme valeurs de r�f�rence.
-   * � appeler en DERNIER dans l'init (apr�s loadSavedSettings), pour que
-   * la r�alit� �crase toujours ce qui �tait simplement sauvegard�.
+   * Interroge le système (xrandr) pour connaître la résolution et la
+   * rotation RÉELLEMENT actives, et les impose comme valeurs de référence.
+   * À appeler en DERNIER dans l'init (après loadSavedSettings), pour que
+   * la réalité écrase toujours ce qui était simplement sauvegardé.
    */
   function loadCurrentDisplay() {
     if (!window.xeLauncher?.getCurrentDisplay) return;
     window.xeLauncher.getCurrentDisplay().then(state => {
       if (!state) return;
       if (state.resolution) {
-        dispRes  = state.resolution.replace('x', '�');
+        dispRes  = state.resolution.replace('x', '×');
         _prevRes = dispRes;
       }
       if (state.rotation) {
@@ -137,7 +142,7 @@ XeSettings.Display = (() => {
       }
       _updateResLabel();
       _updateRotLabel();
-      // Si le panneau r�solution a d�j� construit ses colonnes, repositionner le focus
+      // Si le panneau résolution a déjà construit ses colonnes, repositionner le focus
       if (RES_OPTS.length) {
         const cat = _classifyRes(dispRes);
         _colIdx = cat;
@@ -179,9 +184,9 @@ XeSettings.Display = (() => {
     return { resolution: dispRes, rotIdx: dispRot };
   }
 
-  /* --------------------------------------------------------------
-     MISES � JOUR LABELS
-  -------------------------------------------------------------- */
+  /* ══════════════════════════════════════════════════════════════
+     MISES À JOUR LABELS
+  ══════════════════════════════════════════════════════════════ */
   function _updateResLabel() {
     const el = document.getElementById('resValue');
     if (el) el.textContent = dispRes;
@@ -195,9 +200,9 @@ XeSettings.Display = (() => {
     }
   }
 
-  /* --------------------------------------------------------------
-     PANNEAU R�SOLUTION � RENDU
-  -------------------------------------------------------------- */
+  /* ══════════════════════════════════════════════════════════════
+     PANNEAU RÉSOLUTION — RENDU
+  ══════════════════════════════════════════════════════════════ */
   const COL_TITLES = ['4 : 3', '16 : 9', 'Autres'];
 
   function renderResPanel() {
@@ -256,9 +261,9 @@ XeSettings.Display = (() => {
     if (el) el.textContent = _revertSeconds;
   }
 
-  /* --------------------------------------------------------------
-     S�LECTION + APPLICATION D'UNE R�SOLUTION
-  -------------------------------------------------------------- */
+  /* ══════════════════════════════════════════════════════════════
+     SÉLECTION + APPLICATION D'UNE RÉSOLUTION
+  ══════════════════════════════════════════════════════════════ */
   function _selectRes(r) {
     _clearRevertTimer();
     const prev = dispRes;
@@ -269,10 +274,10 @@ XeSettings.Display = (() => {
     const optionsEl = document.getElementById('res-options');
     if (optionsEl) optionsEl.style.display = 'none';
 
-    // Appliquer imm�diatement
+    // Appliquer immédiatement
     if (window.xeLauncher) {
       window.xeLauncher.setDisplay({
-        resolution: r.replace('�', 'x'),
+        resolution: r.replace('×', 'x'),
         rotation:   ROT_XRANDR[dispRot],
         keepAspect: true,
       });
@@ -280,7 +285,7 @@ XeSettings.Display = (() => {
 
     // Passer en mode confirmation
     confirmMode  = 'res';
-    confirmFocus = 1; // Annuler par d�faut
+    confirmFocus = 1; // Annuler par défaut
     _revertSeconds = 15;
 
     // Timer revert
@@ -306,7 +311,7 @@ XeSettings.Display = (() => {
     resOpen     = false;
     saveSettingsAuto();
     renderResPanel();
-    toast.show('R�solution confirm�e : ' + dispRes, false);
+    toast.show('Résolution confirmée : ' + dispRes, false);
     _focusResolutionRow();
   }
 
@@ -317,7 +322,7 @@ XeSettings.Display = (() => {
     _updateResLabel();
     if (window.xeLauncher) {
       window.xeLauncher.setDisplay({
-        resolution: target.replace('�', 'x'),
+        resolution: target.replace('×', 'x'),
         rotation:   ROT_XRANDR[dispRot],
         keepAspect: true,
       });
@@ -325,16 +330,16 @@ XeSettings.Display = (() => {
     confirmMode = null;
     resOpen     = false;
     renderResPanel();
-    toast.show('R�solution annul�e', false);
+    toast.show('Résolution annulée', false);
     _focusResolutionRow();
   }
 
   /**
-   * Apr�s confirmation/annulation, on quitte le panneau : le focus
-   * clavier/manette doit revenir sur la ligne "R�solution" elle-m�me,
-   * pas rester coinc� dans les colonnes qui viennent de se fermer.
+   * Après confirmation/annulation, on quitte le panneau : le focus
+   * clavier/manette doit revenir sur la ligne "Résolution" elle-même,
+   * pas rester coincé dans les colonnes qui viennent de se fermer.
    * rowFocusMap / getContentRows / updateContentFocus / activeTab sont
-   * des globales de settings-core.js, d�j� utilis�es de la m�me fa�on
+   * des globales de settings-core.js, déjà utilisées de la même façon
    * par les autres modules XeSettings.*.
    */
   function _focusResolutionRow() {
@@ -345,9 +350,9 @@ XeSettings.Display = (() => {
     if (typeof updateContentFocus === 'function') updateContentFocus();
   }
 
-  /* --------------------------------------------------------------
-     ROTATION � RENDU INLINE
-  -------------------------------------------------------------- */
+  /* ══════════════════════════════════════════════════════════════
+     ROTATION — RENDU INLINE
+  ══════════════════════════════════════════════════════════════ */
   function renderRotRow() {
     const el      = document.getElementById('rotValue');
     const imgWrap = document.getElementById('rotImageWrap');
@@ -356,24 +361,73 @@ XeSettings.Display = (() => {
       const r = ROT_LABELS[dispRot];
       el.textContent = r ? r.label : 'Paysage';
     }
-    /* Une seule valeur affich�e � la fois � l'image sous le texte
-       tourne avec la transition CSS d�finie sur .rot-image plut�t
-       que d'empiler les 4 orientations. */
+    /* Une seule valeur affichée à la fois — l'image sous le texte
+       tourne avec la transition CSS définie sur .rot-image plutôt
+       que d'empiler les 4 orientations. On utilise _rotVisualDeg
+       (non borné) plutôt que dispRot*90 pour que 4 pas dans le même
+       sens fassent un vrai tour complet au lieu de revenir d'un coup
+       sec à 0°. */
     if (imgWrap) imgWrap.classList.toggle('visible', rotEditing);
-    if (img)     img.style.transform = 'rotate(' + (dispRot * 90) + 'deg)';
+    if (img)     img.style.transform = 'rotate(' + _rotVisualDeg + 'deg)';
   }
 
-  /* --------------------------------------------------------------
-     API PUBLIQUE � appel�e par settings-core
-  -------------------------------------------------------------- */
+  /* ── Ligne "tablette" ( <  Paysage  > ) — mot qui glisse ── */
+  function _initRotWord() {
+    const track = document.getElementById('rotWordTrack');
+    if (!track) return;
+    const label = ROT_LABELS[dispRot] ? ROT_LABELS[dispRot].label : 'Paysage';
+    track.innerHTML = '<span class="rot-word rot-word-current">' + label + '</span>';
+  }
+
+  function _setRotWord(label, direction) {
+    const track = document.getElementById('rotWordTrack');
+    if (!track) return;
+    const current = track.querySelector('.rot-word-current');
+    if (current && current.textContent === label) return;
+
+    /* Nettoyer une transition précédente encore en vol (appuis rapides) */
+    track.querySelectorAll('.rot-word-outgoing').forEach(n => n.remove());
+
+    const outClass = direction > 0 ? 'rot-word-out-left'  : 'rot-word-out-right';
+    const inClass  = direction > 0 ? 'rot-word-in-right'  : 'rot-word-in-left';
+
+    if (current) {
+      current.classList.remove('rot-word-current');
+      current.classList.add('rot-word-outgoing', outClass);
+      current.addEventListener('transitionend', () => current.remove(), { once: true });
+    }
+
+    const next = document.createElement('span');
+    next.className   = 'rot-word rot-word-current ' + inClass;
+    next.textContent = label;
+    track.appendChild(next);
+    void next.offsetWidth; /* forcer le reflow avant de retirer la classe de départ */
+    next.classList.remove(inClass);
+  }
 
   /**
-   * Ouvre / ferme le panneau r�solution.
-   * Appel� quand l'utilisateur appuie Entr�e sur la ligne r�solution.
+   * Un "pas" de rotation (direction : -1 = gauche, +1 = droite), utilisé
+   * à la fois par le clavier/manette (ArrowLeft/ArrowRight en édition) et
+   * par les flèches tactiles de la ligne tablette — même logique partout.
+   */
+  function _stepRotation(direction) {
+    dispRot        = (dispRot + (direction > 0 ? 1 : 3)) & 3;
+    _rotVisualDeg += direction * 90;
+    _setRotWord(ROT_LABELS[dispRot].label, direction);
+    renderRotRow();
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     API PUBLIQUE — appelée par settings-core
+  ══════════════════════════════════════════════════════════════ */
+
+  /**
+   * Ouvre / ferme le panneau résolution.
+   * Appelé quand l'utilisateur appuie Entrée sur la ligne résolution.
    */
   function toggleResPanel() {
     if (resOpen) {
-      // Fermeture : si confirmation en cours ? annuler
+      // Fermeture : si confirmation en cours → annuler
       if (confirmMode === 'res') _cancelRes();
       resOpen = false;
       document.getElementById('res-options').style.display = 'none';
@@ -381,7 +435,7 @@ XeSettings.Display = (() => {
     } else {
       resOpen = true;
       document.getElementById('res-options').style.display = 'block';
-      // Positionner le focus sur la colonne de la r�solution active
+      // Positionner le focus sur la colonne de la résolution active
       const cat = _classifyRes(dispRes);
       _colIdx = cat;
       const idx = _cols[cat].indexOf(dispRes);
@@ -392,8 +446,8 @@ XeSettings.Display = (() => {
   }
 
   /**
-   * Navigation clavier dans le panneau r�solution.
-   * Retourne true si la touche a �t� consomm�e.
+   * Navigation clavier dans le panneau résolution.
+   * Retourne true si la touche a été consommée.
    */
   function handleResKey(key) {
     if (!resOpen) return false;
@@ -453,64 +507,93 @@ XeSettings.Display = (() => {
   }
 
   /**
-   * Navigation clavier sur la ligne rotation (uniquement quand cette ligne est focalis�e).
-   * Retourne true si consomm�.
+   * Navigation clavier sur la ligne rotation (uniquement quand cette ligne est focalisée).
+   * Retourne true si consommé.
    */
   function handleRotKey(key) {
     if (!rotEditing) {
-      /* Gauche/Droite ne doivent plus ouvrir le mode �dition � seul
-         Entr�e le fait d�sormais. Sans quoi elles retombent sur le
-         comportement global (Gauche ? focus sidebar, Droite ? rien). */
+      /* Gauche/Droite ne doivent plus ouvrir le mode édition — seul
+         Entrée le fait désormais. Sans quoi elles retombent sur le
+         comportement global (Gauche → focus sidebar, Droite → rien). */
       if (key === 'Enter') {
-        rotEditing = true;
-        renderRotRow();
+        _openRotEditing();
         return true;
       }
       return false;
     }
 
-    // En mode �dition inline
-    if (key === 'ArrowLeft') {
-      dispRot = (dispRot + 3) & 3;
-      renderRotRow();
-      return true;
-    }
-    if (key === 'ArrowRight') {
-      dispRot = (dispRot + 1) & 3;
-      renderRotRow();
-      return true;
-    }
+    // En mode édition inline
+    if (key === 'ArrowLeft')  { _stepRotation(-1); return true; }
+    if (key === 'ArrowRight') { _stepRotation(1);  return true; }
     if (key === 'Enter') {
       // Appliquer la rotation
       _applyRotation();
       return true;
     }
     if (key === 'Escape' || key === 'Back' || key === 'Backspace') {
-      // Annuler : remettre la rotation pr�c�dente
-      dispRot    = _prevRot;
-      rotEditing = false;
-      renderRotRow();
+      // Annuler : remettre la rotation précédente
+      _closeRotEditing(true);
       return true;
     }
-    return true;
+    /* Toute autre touche (Haut/Bas notamment) : on ne doit PAS rester
+       coincé dans l'édition — on referme proprement (annule, comme
+       Échap) et on laisse retomber sur la navigation normale au lieu
+       d'avaler la touche. C'est ce qui, avant ce correctif, pouvait
+       laisser rotEditing bloqué à "true" en quittant la ligne d'une
+       autre façon que Entrée/Échap — et faisait ensuite réapparaître
+       le panneau au moindre appui (y compris Gauche) au retour sur
+       cette ligne. */
+    _closeRotEditing(true);
+    return false;
+  }
+
+  function _openRotEditing() {
+    rotEditing    = true;
+    _rotVisualDeg = dispRot * 90;
+    _initRotWord();
+    renderRotRow();
+  }
+
+  /**
+   * Ferme le mode édition rotation. revert=true annule et revient à la
+   * dernière rotation confirmée (comme Échap) ; utilisé aussi bien par
+   * Échap/touches non gérées que par un changement d'onglet, pour ne
+   * jamais laisser rotEditing bloqué à true.
+   */
+  function _closeRotEditing(revert) {
+    if (!rotEditing) return;
+    if (revert) {
+      dispRot       = _prevRot;
+      _rotVisualDeg = _prevRot * 90;
+    }
+    rotEditing = false;
+    renderRotRow();
+  }
+
+  /** Bascule tactile : tape sur la ligne "Rotation" pour ouvrir, retape pour appliquer. */
+  function toggleRotEditing() {
+    if (rotEditing) _applyRotation();
+    else            _openRotEditing();
   }
 
   function _applyRotation() {
     if (!window.xeLauncher) return;
     window.xeLauncher.setDisplay({
-      resolution: dispRes.replace('�', 'x'),
+      resolution: dispRes.replace('×', 'x'),
       rotation:   ROT_XRANDR[dispRot],
       keepAspect: true,
     }).then(ok => {
       if (ok) {
-        _prevRot   = dispRot;
-        rotEditing = false;
+        _prevRot      = dispRot;
+        rotEditing    = false;
+        _rotVisualDeg = dispRot * 90;
         saveSettingsAuto();
         renderRotRow();
-        toast.show('Rotation appliqu�e', false);
+        toast.show('Rotation appliquée', false);
       } else {
-        dispRot    = _prevRot;
-        rotEditing = false;
+        dispRot       = _prevRot;
+        rotEditing    = false;
+        _rotVisualDeg = _prevRot * 90;
         renderRotRow();
         toast.show('Erreur rotation', true);
       }
@@ -518,24 +601,39 @@ XeSettings.Display = (() => {
   }
 
   /**
-   * Vrai si le panneau r�solution est ouvert (pour bloquer la nav globale).
+   * Vrai si le panneau résolution est ouvert (pour bloquer la nav globale).
    */
   function isResOpen() { return resOpen; }
 
   /**
-   * Vrai si la ligne rotation est en mode �dition (pour bloquer la nav globale).
+   * Vrai si la ligne rotation est en mode édition (pour bloquer la nav globale).
    */
   function isRotEditing() { return rotEditing; }
 
-  /* Init des boutons Confirmer / Annuler dans le HTML */
+  /**
+   * Ferme la rotation sans rien appliquer si on quitte l'onglet Affichage
+   * (clic direct sur un autre onglet, etc.) — appelé par settings-core au
+   * changement d'onglet pour ne jamais laisser rotEditing bloqué à true.
+   */
+  function closeRotEditing() { _closeRotEditing(true); }
+
+  /* Init des boutons Confirmer / Annuler + flèches tactiles rotation */
   function _initButtons() {
     const ok  = document.getElementById('resConfirmBtn');
     const can = document.getElementById('resCancelBtn');
     if (ok)  ok.addEventListener('click',  () => confirmRes());
     if (can) can.addEventListener('click', () => _cancelRes());
+
+    /* Flèches de la ligne tablette : interactives (clic/tactile) mais
+       jamais focalisables au clavier/manette — tabindex="-1" dans le
+       HTML suffit pour ça, aucune logique supplémentaire nécessaire ici. */
+    const rotLeft  = document.getElementById('rotArrowLeft');
+    const rotRight = document.getElementById('rotArrowRight');
+    if (rotLeft)  rotLeft.addEventListener('click',  () => { if (rotEditing) _stepRotation(-1); });
+    if (rotRight) rotRight.addEventListener('click', () => { if (rotEditing) _stepRotation(1); });
   }
 
-  /* Appeler apr�s DOMContentLoaded pour brancher les boutons */
+  /* Appeler après DOMContentLoaded pour brancher les boutons */
   function init() {
     _initButtons();
     _updateResLabel();
@@ -546,13 +644,15 @@ XeSettings.Display = (() => {
     loadDisplayModes, loadSavedSettings, loadCurrentDisplay, saveSettingsAuto, getConfig,
     init,
     toggleResPanel,
+    toggleRotEditing,
+    closeRotEditing,
     handleResKey,
     handleRotKey,
     isResOpen,
     isRotEditing,
     renderResPanel,
     renderRotRow,
-    /* R�trocompatibilit� avec l'ancien code core qui appelle applyDisplay */
+    /* Rétrocompatibilité avec l'ancien code core qui appelle applyDisplay */
     applyDisplay: () => {},
   };
 })();

@@ -41,6 +41,7 @@
     'input/evdev-poller.js',
     'input/remote-capture.js',
     'input/keyboard.js',
+    'input/numpad.js',
   ];
 
   function loadSequential(list, done) {
@@ -68,13 +69,20 @@
     var poller  = window._XeEvdevPoller    || {};
     var remote  = window._XeRemoteCapture  || {};
     var kb      = window._XeKeyboard       || {};
+    var numpad  = window._XeNumpad         || {};
 
     window.XeInput = {
       VirtualKeyboard: kb.VirtualKeyboard,
+      NumericKeyboard: numpad.NumericKeyboard,
       InputMapper:     mapper.InputMapper,
       EvdevPoller:     poller.EvdevPoller,
       RemoteCapture:   remote.RemoteCapture,
       ACTION_KEYS:     utils.ACTION_KEYS,
+      EXTRA_ACTION_KEYS: utils.EXTRA_ACTION_KEYS,
+      ALL_ACTION_KEYS:   utils.ALL_ACTION_KEYS,
+      REQUIRED_ACTIONS:  utils.REQUIRED_ACTIONS,
+      keyLabel:        utils.keyLabel,
+      legacyToRaw:     utils.legacyToRaw,
       ACTION_TO_KEY:   utils.ACTION_TO_KEY,
       GP_DEFAULT:      utils.GP_DEFAULT,
       ACCENTS:         utils.ACCENTS,

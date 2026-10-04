@@ -1,5 +1,5 @@
 /**
- * XeLauncher � preload.js
+ * XeLauncher — preload.js
  * Exposes safe IPC bridge to renderer processes.
  */
 
@@ -59,16 +59,28 @@ contextBridge.exposeInMainWorld('xeLauncher', {
   setKnownNetworksPriority:(ssids)                  => ipcRenderer.invoke('wifi-set-priority', ssids),
   setStaticIp:             (opts)                   => ipcRenderer.invoke('set-static-ip', opts),
 
-  /* Bluetooth */
+  /* Bluetooth — commandes */
   btListPaired:            ()                       => ipcRenderer.invoke('bt-list-paired'),
-  btScan:                  ()                       => ipcRenderer.invoke('bt-scan'),
-  btPair:                  (mac)                    => ipcRenderer.invoke('bt-pair', mac),
+  btScanStart:             ()                       => ipcRenderer.invoke('bt-scan-start'),
+  btScanStop:              ()                       => ipcRenderer.invoke('bt-scan-stop'),
+  btPair:                  (mac, type)              => ipcRenderer.invoke('bt-pair', mac, type),
   btConnect:               (mac)                    => ipcRenderer.invoke('bt-connect', mac),
   btDisconnect:            (mac)                    => ipcRenderer.invoke('bt-disconnect', mac),
   btRemove:                (mac)                    => ipcRenderer.invoke('bt-remove', mac),
   btRename:                (mac, name)              => ipcRenderer.invoke('bt-rename', mac, name),
   btStatus:                ()                       => ipcRenderer.invoke('bt-status'),
   btPower:                 (on)                     => ipcRenderer.invoke('bt-power', on),
+  btDiagnose:              (mac, type)              => ipcRenderer.invoke('bt-diagnose', mac, type),
+  btNames:                 ()                       => ipcRenderer.invoke('bt-names'),
+  btInputReady:            (mac, timeoutMs)         => ipcRenderer.invoke('bt-input-ready', mac, timeoutMs),
+  btAudioFix:              (mac)                    => ipcRenderer.invoke('bt-audio-fix', mac),
+
+  /* Bluetooth — événements (un seul écouteur actif par canal) */
+  onBtScanDevice:          (cb) => { ipcRenderer.removeAllListeners('bt-scan-device');    ipcRenderer.on('bt-scan-device',    (_, d) => cb(d)) },
+  onBtScanDone:            (cb) => { ipcRenderer.removeAllListeners('bt-scan-done');      ipcRenderer.on('bt-scan-done',      (_, p) => cb(p)) },
+  offBtScan:               ()   => { ipcRenderer.removeAllListeners('bt-scan-device');    ipcRenderer.removeAllListeners('bt-scan-done') },
+  onBtPairProgress:        (cb) => { ipcRenderer.removeAllListeners('bt-pair-progress');  ipcRenderer.on('bt-pair-progress',  (_, p) => cb(p)) },
+  offBtPairProgress:       ()   => ipcRenderer.removeAllListeners('bt-pair-progress'),
 
   isAvailable:             ()                       => true,
   saveCalibration:         (data)                   => ipcRenderer.invoke('save-calibration', data),
@@ -76,6 +88,8 @@ contextBridge.exposeInMainWorld('xeLauncher', {
   /* xe_input daemon — evdev universel */
   onXeInputEvent: (cb) => { ipcRenderer.removeAllListeners('xe-input-event'); ipcRenderer.on('xe-input-event', (_, data) => cb(data)); },
   offXeInputEvent:         ()                       => ipcRenderer.removeAllListeners('xe-input-event'),
+  onXeInputRelease: (cb) => { ipcRenderer.removeAllListeners('xe-input-release'); ipcRenderer.on('xe-input-release', (_, data) => cb(data)); },
+  offXeInputRelease:       ()                       => ipcRenderer.removeAllListeners('xe-input-release'),
   xeInputStatus:           ()                       => ipcRenderer.invoke('xe-input-status'),
 
   /* Mapping Jellyfin — persisté sur disque pour xe_jmp_input.py */

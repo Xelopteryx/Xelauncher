@@ -53,8 +53,15 @@ ipcMain.handle('system-update', async () => new Promise(resolve => {
 
       if (total === 0) { resolve(true); return }
 
+      /* stdbuf force une sortie ligne par ligne : sans ça, apt-get
+         détecte qu'il n'écrit pas sur un vrai terminal (c'est un pipe
+         Node) et bufferise tout en interne — les lignes "pmstatus:"
+         n'arrivent alors qu'en un seul bloc à la fermeture du process,
+         ce qui donne exactement le symptôme "reste à 0% puis saute à
+         100%". stdbuf est placé APRÈS sudo pour agir sur apt-get
+         lui-même (déjà exécuté en root à ce stade), pas sur sudo. */
       const child = spawn(
-        'sudo DEBIAN_FRONTEND=noninteractive apt-get -o APT::Status-Fd=1 -o Dpkg::Use-Pty=0 upgrade -y',
+        'sudo DEBIAN_FRONTEND=noninteractive stdbuf -oL -eL apt-get -o APT::Status-Fd=1 -o Dpkg::Use-Pty=0 upgrade -y',
         { shell: true, timeout: 600000 }
       )
 

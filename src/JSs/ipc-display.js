@@ -115,7 +115,14 @@ ipcMain.handle('set-audio', async (_, opts) => {
     exec('which pactl', (err, pactlPath) => {
       if (!err && pactlPath.trim()) {
         const cmds = []
-        if (sinkName) cmds.push(`pactl set-default-sink "${sinkName}"`)
+        if (sinkName) {
+          cmds.push(`pactl set-default-sink "${sinkName}"`)
+          /* set-default-sink seul ne s'applique qu'aux FUTURS flux : un
+             média déjà en cours de lecture reste sur l'ancienne sortie
+             tant qu'on ne le déplace pas explicitement. C'est la cause la
+             plus probable d'une sortie "choisie mais pas prise en compte". */
+          cmds.push(`for i in $(pactl list short sink-inputs | awk '{print $1}'); do pactl move-sink-input "$i" "${sinkName}" 2>/dev/null; done`)
+        }
         cmds.push(`pactl set-sink-volume @DEFAULT_SINK@ ${vol}%`)
         exec(cmds.join(' && '), e => resolve(!e))
       } else {
