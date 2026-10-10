@@ -577,6 +577,25 @@ save_player_choice() {
     done_action "Lecteur multimedia du menu : $PLAYER"
 }
 
+# Fichiers non suivis qui existent dans la version a recuperer : deplaces dans
+# ~/.local/state/xelauncher/avant-maj-<date>/ (meme arborescence), pour que git puisse les poser.
+move_blocking_untracked() {
+    local upstream backup n=0 f
+    upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null) || upstream="origin/main"
+    git fetch -q origin || return 1
+    backup="$STATE_DIR/avant-maj-$(date +%Y%m%d-%H%M%S)"
+    while IFS= read -r f; do
+        [[ -n "$f" ]] || continue
+        mkdir -p "$backup/$(dirname "$f")"
+        mv -f -- "$f" "$backup/$f" && n=$((n + 1))
+    done < <(comm -12 <(git ls-files --others | sort) <(git ls-tree -r --name-only "$upstream" | sort))
+    if [[ $n -gt 0 ]]; then
+        warn "$n fichier(s) non suivi(s) genaient la mise a jour : mis de cote dans $backup"
+        done_action "$n fichier(s) non suivi(s) mis de cote avant la mise a jour ($backup)"
+    fi
+    return 0
+}
+
 clone_or_update_repo() {
     if [[ ! -d "$INSTALL_DIR" ]]; then
         log "Clonage du depot XeLauncher"
@@ -588,8 +607,14 @@ clone_or_update_repo() {
         log "Mise a jour du depot"
         cd "$INSTALL_DIR"
         git stash push -m "auto-stash" 2>/dev/null || true
-        git pull --rebase \
-            || { error "Echec de la mise a jour du depot"; exit 1; }
+        if ! git pull --rebase; then
+            git rebase --abort 2>/dev/null || true
+            # Fichiers du depot presents ici sans etre suivis par git (copies a la main, ancienne
+            # installation...) : git refuse de les ecraser. On met de cote SEULEMENT ceux-la (reglages,
+            # profils, journaux, node_modules... non suivis ne sont pas touches), puis on reessaie.
+            move_blocking_untracked || { error "Echec de la mise a jour du depot"; exit 1; }
+            git pull --rebase || { error "Echec de la mise a jour du depot"; exit 1; }
+        fi
         ok "Depot mis a jour"
         done_action "Depot XeLauncher mis a jour"
     fi
