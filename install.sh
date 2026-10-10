@@ -36,6 +36,13 @@ AUTO_MODE=""
 MODE=""
 ACTIONS_DONE=()
 
+# RetroPie : --retropie / --no-retropie, ou XE_RETROPIE=yes|no (vide = on demande)
+RETROPIE_CHOICE="${XE_RETROPIE:-}"
+# Lecteur multimedia : --jellyfin / --turtlefin, ou XE_PLAYER=jellyfin|turtlefin (vide = on demande)
+PLAYER_CHOICE="${XE_PLAYER:-}"
+PLAYER="jellyfin"
+readonly TURTLEFIN_REPO="Xelopteryx/Turtlefin"
+
 # Poste avec bureau (GDM, LightDM...) : par defaut on GARDE le bureau. --kiosk / --no-kiosk.
 KIOSK_CHOICE=""
 KIOSK_MODE=1
@@ -49,6 +56,9 @@ ok()          { echo -e "${GREEN}✔${RESET} $1"; }
 warn()        { echo -e "${YELLOW}!${RESET} $1"; }
 error()       { echo -e "${RED}✖${RESET} $1" >&2; }
 done_action() { ACTIONS_DONE+=("$1"); }
+# Ce qui n'a pas pu etre fait : rappele a la fin (resume), sans arreter l'installation.
+ACTIONS_FAILED=()
+fail_action() { ACTIONS_FAILED+=("$1"); }
 
 section() {
     echo ""
@@ -123,11 +133,13 @@ Usage : $0 [--i | --u] [--no-retropie | --retropie] [--kiosk | --no-kiosk] [--pu
   --retropie      installer RetroPie sans poser la question (avec --u : le desinstaller)
   --kiosk         poste avec bureau (GDM, LightDM...) : demarrer XeLauncher A LA PLACE du bureau
   --no-kiosk      garder le bureau (defaut avec --i) : XeLauncher ne demarre pas seul
+  --jellyfin      lecteur multimedia : Jellyfin Desktop (flatpak)
+  --turtlefin     lecteur multimedia : Turtlefin (client Jellyfin natif, paquet .deb)
   --purge         desinstallation : retirer aussi Xorg/openbox, Node.js, Tailscale, Jellyfin par
                   leur nom, meme si XeLauncher ne les a pas installes (a eviter sur un poste de travail)
   -h, --help      cette aide
 
-Equivalent : XE_RETROPIE=yes|no
+Equivalent : XE_RETROPIE=yes|no  XE_PLAYER=jellyfin|turtlefin
 Via curl    : curl -fsSL <url>/install.sh | bash -s -- --i --no-retropie
 Pendant l'installation de RetroPie, Ctrl+C passe cette etape sans arreter le reste.
 EOF
@@ -158,7 +170,9 @@ detect_state() {
     HAS_TAILSCALE=0
     HAS_REPO=0
     HAS_AUTOLOGIN=0
+    HAS_TURTLEFIN=0
 
+    command -v turtlefin >/dev/null 2>&1 && HAS_TURTLEFIN=1
     command -v emulationstation >/dev/null 2>&1 && HAS_RETROPIE=1
     flatpak info com.github.iwalton3.jellyfin-media-player >/dev/null 2>&1 && HAS_JELLYFIN=1
     command -v startx >/dev/null 2>&1 && HAS_X=1
@@ -184,6 +198,7 @@ print_state() {
     [[ $HAS_NODE -eq 1 ]]      && echo -e "  $check_yes Node.js 20+"        || echo -e "  $check_no Node.js 20+"
     [[ $HAS_TAILSCALE -eq 1 ]] && echo -e "  $check_yes Tailscale"          || echo -e "  $check_no Tailscale"
     [[ $HAS_JELLYFIN -eq 1 ]]  && echo -e "  $check_yes Jellyfin (flatpak)" || echo -e "  $check_no Jellyfin (flatpak)"
+    [[ $HAS_TURTLEFIN -eq 1 ]] && echo -e "  $check_yes Turtlefin"          || echo -e "  $check_no Turtlefin"
     [[ $HAS_X -eq 1 ]]         && echo -e "  $check_yes Serveur X (xinit)"  || echo -e "  $check_no Serveur X (xinit)"
     [[ $HAS_REPO -eq 1 ]]      && echo -e "  $check_yes Depot XeLauncher"   || echo -e "  $check_no Depot XeLauncher"
     [[ $HAS_RETROPIE -eq 1 ]]  && echo -e "  $check_yes RetroPie"           || echo -e "  $check_no RetroPie"
@@ -201,6 +216,39 @@ decide_retropie() {
         *)
             if [[ -z "$AUTO_MODE" && $HAS_RETROPIE -eq 0 ]]; then
                 ask_yn "Installer RetroPie (20-60 min) ?" y || INSTALL_RETROPIE=0
+            fi
+            ;;
+    esac
+}
+
+# Lecteur multimedia du menu (carte bleue) : Jellyfin Desktop ou Turtlefin. Le choix est garde dans
+# config.json ("player") ; une reinstallation propose le choix actuel par defaut, on peut en changer.
+current_player() {
+    local p=""
+    [[ -f "$INSTALL_DIR/config.json" ]] && p=$(jq -r '.player // empty' "$INSTALL_DIR/config.json" 2>/dev/null)
+    [[ "$p" == "turtlefin" ]] && echo "turtlefin" || echo "jellyfin"
+}
+
+decide_player() {
+    local cur; cur=$(current_player)
+    case "$PLAYER_CHOICE" in
+        jellyfin|turtlefin) PLAYER="$PLAYER_CHOICE" ;;
+        *)
+            PLAYER="$cur"
+            if [[ -z "$AUTO_MODE" ]] && { true </dev/tty; } 2>/dev/null; then
+                local def=1 ans
+                [[ "$cur" == "turtlefin" ]] && def=2
+                echo -e "  ${WHITE}Lecteur multimedia${RESET} (actuel : $cur)"
+                echo    "    [1] Jellyfin Desktop (flatpak)"
+                echo    "    [2] Turtlefin (client Jellyfin natif, plus leger)"
+                while true; do
+                    read -rp "  Votre choix (1/2) [$def] : " ans </dev/tty || ans=""
+                    case "${ans:-$def}" in
+                        1) PLAYER="jellyfin"; break ;;
+                        2) PLAYER="turtlefin"; break ;;
+                        *) echo "  Tapez 1 ou 2." ;;
+                    esac
+                done
             fi
             ;;
     esac
@@ -282,8 +330,9 @@ interactive_menu() {
 
         if [[ "$MODE" == "install" ]]; then
             decide_retropie
+            decide_player
             decide_kiosk
-            echo -e "${YELLOW}⚠  Mode automatique :${RESET} Installation en cours..."
+            echo -e "${YELLOW}⚠  Mode automatique :${RESET} Installation en cours (lecteur : $PLAYER)..."
         else
             decide_uninstall_retropie
             decide_uninstall_packages
@@ -338,7 +387,9 @@ interactive_menu() {
 
     if [[ "$MODE" == "install" ]]; then
         decide_retropie
+        decide_player
         decide_kiosk
+        echo -e "  Lecteur multimedia : ${WHITE}$PLAYER${RESET}"
         if [[ $INSTALL_RETROPIE -eq 1 ]]; then
             echo -e "${YELLOW}⚠  Attention :${RESET} L'installation peut durer ${WHITE}une heure ou plus${RESET},"
             echo    "   notamment a cause de RetroPie (Ctrl+C pendant RetroPie = passer cette etape)."
@@ -355,7 +406,6 @@ interactive_menu() {
         else
             echo    "   (RetroPie conserve)."
         fi
-    fi
     fi
 
     echo ""
@@ -384,9 +434,6 @@ check_and_install_packages() {
     if sudo apt-get install -y "${to_install[@]}"; then
         for pkg in "${to_install[@]}"; do manifest_add "apt:$pkg"; done
         done_action "Paquets systeme installes : ${to_install[*]}"
-
-        done_action "Paquets systeme installes : ${to_install[*]}"
-    fi
     else
         warn "Installation groupee echouee, nouvel essai paquet par paquet"
         local good=() bad=()
@@ -470,6 +517,64 @@ install_flatpak_jellyfin() {
     flatpak override --user --socket=x11 --share=network \
         com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
     ok "Flatpak et Jellyfin configures"
+}
+
+# Turtlefin : paquet .deb de la derniere version publiee (arm64 sur Raspberry Pi, amd64 sur PC).
+# apt installe aussi ses dependances (libmpv). Ensuite, Turtlefin se met a jour tout seul.
+install_turtlefin() {
+    local arch api url tmp latest cur
+    arch=$(dpkg --print-architecture 2>/dev/null)
+    case "$arch" in
+        arm64|amd64) ;;
+        *) error "Turtlefin : architecture $arch non prise en charge (arm64 ou amd64)"; return 1 ;;
+    esac
+    api=$(curl -fsSL --max-time 20 "https://api.github.com/repos/$TURTLEFIN_REPO/releases/latest") \
+        || { error "Turtlefin : impossible de lire la derniere version sur GitHub"; return 1; }
+    latest=$(echo "$api" | jq -r '.tag_name // empty' | sed 's/^v//')
+    url=$(echo "$api" | jq -r --arg a "_${arch}.deb" '.assets[] | select(.name | endswith($a)) | .browser_download_url' | head -1)
+    [[ -n "$url" ]] || { error "Turtlefin : paquet .deb ($arch) introuvable dans la derniere version"; return 1; }
+    cur=$(dpkg-query -W -f='${Version}' turtlefin 2>/dev/null || true)
+    if [[ -n "$cur" && "$cur" == "$latest" ]]; then
+        ok "Turtlefin $cur deja a jour"
+    else
+        log "Installation de Turtlefin $latest ($arch)"
+        tmp=$(mktemp -d)
+        if ! download_with_retry "$url" "$tmp/turtlefin.deb" || ! sudo apt-get install -y "$tmp/turtlefin.deb"; then
+            rm -rf "$tmp"
+            error "Echec installation Turtlefin"
+            return 1
+        fi
+        rm -rf "$tmp"
+        if [[ -n "$cur" ]]; then done_action "Turtlefin mis a jour ($cur -> $latest)"; else done_action "Turtlefin $latest installe (.deb)"; fi
+        ok "Turtlefin installe"
+    fi
+    manifest_has "turtlefin" || manifest_add "turtlefin"
+}
+
+install_player() {
+    if [[ "$PLAYER" == "turtlefin" ]]; then
+        if ! install_turtlefin; then
+            warn "Turtlefin non installe : Jellyfin Desktop reste le lecteur"
+            PLAYER="jellyfin"
+            install_flatpak_jellyfin
+        fi
+    else
+        install_flatpak_jellyfin
+    fi
+}
+
+# Choix du lecteur dans config.json (lu par le menu : logo, lancement). Le reste du fichier est garde.
+save_player_choice() {
+    local cfg="$INSTALL_DIR/config.json" tmp
+    tmp=$(mktemp)
+    if [[ -s "$cfg" ]] && jq --arg p "$PLAYER" '.player = $p' "$cfg" >"$tmp" 2>/dev/null; then
+        mv "$tmp" "$cfg"
+    else
+        rm -f "$tmp"
+        printf '{"controllerType": "generic", "player": "%s"}\n' "$PLAYER" >"$cfg"
+    fi
+    ok "Lecteur multimedia : $PLAYER"
+    done_action "Lecteur multimedia du menu : $PLAYER"
 }
 
 clone_or_update_repo() {
@@ -1257,6 +1362,16 @@ uninstall_all() {
         log "Jellyfin conserve (non installe par XeLauncher)"
     fi
 
+    # Turtlefin : le paquet seulement. Ses comptes et reglages (~/.config/turtlefin) restent, comme
+    # pour toute appli installee a part ; on les supprime a la main si besoin.
+    if manifest_has "turtlefin" || { [[ $PURGE_BY_NAME -eq 1 ]] && dpkg -s turtlefin >/dev/null 2>&1; }; then
+        log "Desinstallation de Turtlefin"
+        sudo apt-get remove -y turtlefin 2>/dev/null || true
+        ok "Turtlefin desinstalle (reglages ~/.config/turtlefin conserves)"
+        done_action "Turtlefin desinstalle"
+        anything_done=1
+    fi
+
     log "Desinstallation de RetroPie"
     if [[ -d "$HOME/RetroPie-Setup" ]]; then
         cd "$HOME/RetroPie-Setup"
@@ -1411,6 +1526,14 @@ print_summary() {
         done
     fi
 
+    if [[ ${#ACTIONS_FAILED[@]} -gt 0 ]]; then
+        echo ""
+        echo -e "  ${YELLOW}A verifier (non fait) :${RESET}"
+        for action in "${ACTIONS_FAILED[@]}"; do
+            echo -e "    ${YELLOW}•${RESET} $action"
+        done
+    fi
+
     echo ""
     if [[ "$MODE" == "install" ]]; then
         echo -e "  ${CYAN}Redemarrez maintenant :${RESET} sudo reboot"
@@ -1426,6 +1549,8 @@ main() {
             --no-retropie|--skip-retropie) RETROPIE_CHOICE="no" ;;
             --retropie) RETROPIE_CHOICE="yes" ;;
             --kiosk) KIOSK_CHOICE="yes" ;;
+            --jellyfin) PLAYER_CHOICE="jellyfin" ;;
+            --turtlefin) PLAYER_CHOICE="turtlefin" ;;
             --no-kiosk) KIOSK_CHOICE="no" ;;
             --purge) PURGE_CHOICE="yes" ;;
             -h|--help) usage; exit 0 ;;
@@ -1495,8 +1620,8 @@ main() {
     section "4/10 — Tailscale"
     install_tailscale
 
-    section "5/10 — Flatpak + Jellyfin"
-    install_flatpak_jellyfin
+    section "5/10 — Lecteur multimedia ($PLAYER)"
+    install_player
 
     section "6/10 — Clonage du depot"
     clone_or_update_repo
@@ -1518,6 +1643,7 @@ main() {
     configure_systemd_service
     configure_sudoers
     create_required_dirs
+    save_player_choice
 
     touch "$LOCK_FILE"
     print_summary

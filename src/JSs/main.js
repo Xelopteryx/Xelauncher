@@ -32,6 +32,7 @@ require('./ipc-network')
 require('./ipc-bluetooth')
 require('./ipc-retropie')
 require('./ipc-jellyfin')
+require('./ipc-turtlefin')
 
 /* ── Démarrage ──
    Le splash s'affiche en tout premier (avant ensureDirs/getOrCreateSecretKey)

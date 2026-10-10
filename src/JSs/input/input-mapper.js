@@ -57,6 +57,15 @@
   InputMapper.prototype._persist = function() {
     try { localStorage.setItem(this.storageKey, JSON.stringify(this._maps)); } catch(e) {}
     try { localStorage.setItem(this.metaKey,    JSON.stringify(this._meta)); } catch(e) {}
+    this.exportToDisk();
+  };
+
+  /** Copie sur disque (inputmaps.json) : le relais vers Turtlefin la lit une fois Electron fermé. */
+  InputMapper.prototype.exportToDisk = function() {
+    if (this.storageKey !== STORAGE_KEY) return;
+    try {
+      if (root.xeLauncher && root.xeLauncher.saveInputMaps) root.xeLauncher.saveInputMaps(this._maps);
+    } catch(e) {}
   };
 
   /**
@@ -146,6 +155,7 @@
     Object.keys(this._maps).forEach(function(k) { delete self._maps[k]; });
     Object.keys(this._meta).forEach(function(k) { delete self._meta[k]; });
     try { localStorage.removeItem(this.storageKey); localStorage.removeItem(this.metaKey); } catch(e) {}
+    this.exportToDisk();
   };
 
   /** Valeurs par défaut = table intégrée (pas de raws personnalisés). */

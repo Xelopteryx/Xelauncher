@@ -21,6 +21,9 @@ const LOGS_DIR         = path.join(BASE_DIR, 'logs')
 const LOG_PATH        = path.join(LOGS_DIR, 'jellyfin_debug.log')
 const LAUNCH_NEXT_FILE = '/tmp/xelauncher-launch-next'
 const JF_MAPPING_FILE  = path.join(BASE_DIR, 'jfmapping.json')
+// Mappages des appareils (InputMapper, localStorage du menu) recopiés sur disque : le relais des
+// touches vers Turtlefin (xe_tf_input.py) les lit une fois Electron fermé.
+const INPUT_MAPS_FILE  = path.join(BASE_DIR, 'inputmaps.json')
 const SCRIPTS_DIR      = path.join(BASE_DIR, 'scripts')
 
 /* ── Logging ── */
@@ -128,7 +131,7 @@ function ensureDirs() {
 # touche de clavier, gâchette, clic de stick, axe... C'est le renderer
 # (EvdevPoller + InputMapper) qui décide ensuite de ce qui est utilisé.
 # La répétition sur appui maintenu est désormais gérée côté renderer.
-import sys, json, glob, threading, time, re
+import sys, os, json, glob, threading, time, re
 try:
     from evdev import InputDevice, ecodes
 except ImportError:
@@ -161,6 +164,11 @@ ABS_MAP = {
 }
 REL_MAP = {0:('left','right'), 1:('up','down'), 8:('left','right'), 11:('up','down')}
 REL_THRESHOLD = 8
+
+# XE_INPUT_GRAB=1 (relais vers Turtlefin, voir ipc-jellyfin.js) : manettes et télécommandes prises
+# en exclusivité, pour que X ne reçoive pas en plus leurs touches (sinon chaque flèche d'une
+# télécommande arriverait deux fois). Les vrais claviers et les souris restent à X.
+GRAB = os.environ.get('XE_INPUT_GRAB') == '1'
 
 HAT_CODES = (16, 17, 18, 19)
 STICK_ON, STICK_OFF = 0.45, 0.25   # hystérésis des sticks / croix
@@ -232,6 +240,11 @@ def watch(dev_path, stop_event):
         caps = dev.capabilities()
         kind = classify(caps)
         axes = setup_axes(dev, caps)
+        if GRAB and kind != 'keyboard':
+            try:
+                dev.grab()
+            except Exception as e:
+                print('[xe_input] grab impossible %s: %s' % (dev_name, e), file=sys.stderr, flush=True)
         print('[xe_input] WATCH %s @ %s (%s)' % (dev_name, dev_path, kind), file=sys.stderr, flush=True)
         rel_acc = {}
         t_open = time.monotonic()
@@ -409,7 +422,7 @@ function ensureAudioRouting() {
 
 module.exports = {
   BASE_DIR, PROFILES_PATH, AVATARS_PATH, CONFIG_PATH,
-  LOG_PATH, LAUNCH_NEXT_FILE, JF_MAPPING_FILE, SCRIPTS_DIR,
+  LOG_PATH, LAUNCH_NEXT_FILE, JF_MAPPING_FILE, INPUT_MAPS_FILE, SCRIPTS_DIR,
   logDebug, getOrCreateSecretKey,
   encrypt, decrypt,
   loadJSON, saveJSON,

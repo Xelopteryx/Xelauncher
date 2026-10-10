@@ -18,6 +18,7 @@ const {
   logDebug, loadProfiles, saveProfiles, ensureDirs,
 } = require('./helpers')
 const { resolveHTML, getMainWindow, handoffToExternal } = require('./main-window')
+const { isTurtlefin, launchTurtlefin } = require('./ipc-turtlefin')
 
 /* -- Lancement Jellyfin (profils) -- */
 ipcMain.handle('launch-jellyfin', async () => {
@@ -29,6 +30,11 @@ ipcMain.handle('launch-jellyfin', async () => {
       })
     })
   })
+  // Turtlefin gère lui-même ses comptes : lancement direct, sans la page des profils.
+  if (isTurtlefin()) {
+    if (!launchTurtlefin()) throw new Error('Turtlefin : lancement impossible')
+    return
+  }
   const win = getMainWindow()
   if (win) win.loadFile(resolveHTML('profiles.html'))
 })

@@ -61,12 +61,31 @@ function initMenu() {
   XeInput.requestWakeLock();
   gpPoller.start();
   setTimeout(() => { inputReady = true; }, 300);
+  // Copie des mappages pour le relais vers Turtlefin (mappages faits avant cette version compris).
+  mapper.exportToDisk();
+  applyPlayer();
   renderCards();
   setupCardClicks();
   setupPowerBtns();
   updateTopBarFocus();
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
   document.getElementById('topBarClose').addEventListener('click', closeTopBar);
+}
+
+/* ── Lecteur multimédia : Jellyfin Desktop ou Turtlefin (choisi à l'installation) ── */
+let playerName = 'Jellyfin';
+
+function applyPlayer() {
+  if (!window.xeLauncher || !window.xeLauncher.getConfig) return;
+  window.xeLauncher.getConfig().then(cfg => {
+    if (!cfg || cfg.player !== 'turtlefin') return;
+    playerName = 'Turtlefin';
+    const card = document.getElementById('card1');
+    const logo = card.querySelector('.card-logo');
+    if (logo && logo.tagName === 'IMG') { logo.src = '../LOGOs/turtlefin.png'; logo.alt = 'Turtlefin'; }
+    const label = card.querySelector('.card-label');
+    if (label) label.textContent = 'Turtlefin';
+  }).catch(() => {});
 }
 
 /* ── Rendu ── */
@@ -125,7 +144,7 @@ function launchCurrent() {
       document.getElementById('loadingOverlay').classList.add('visible');
       window.xeLauncher.launchJellyfin()
         .then(() => { document.getElementById('loadingOverlay').classList.remove('visible'); })
-        .catch(() => { document.getElementById('loadingOverlay').classList.remove('visible'); toast.show('Impossible de lancer Jellyfin', true); });
+        .catch(() => { document.getElementById('loadingOverlay').classList.remove('visible'); toast.show('Impossible de lancer ' + playerName, true); });
     }
   }, 350);
 }

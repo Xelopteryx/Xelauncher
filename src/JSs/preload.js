@@ -96,6 +96,9 @@ contextBridge.exposeInMainWorld('xeLauncher', {
   saveJfMapping:           (mapping)                => ipcRenderer.invoke('save-jf-mapping', mapping),
   loadJfMapping:           ()                       => ipcRenderer.invoke('load-jf-mapping'),
 
+  /* Mappages des appareils recopiés sur disque (relais des touches vers Turtlefin) */
+  saveInputMaps:           (maps)                   => ipcRenderer.invoke('save-input-maps', maps),
+
   /* Signale au main process que le renderer est visuellement prêt */
   rendererReady:           ()                       => ipcRenderer.send('renderer-ready'),
 })
