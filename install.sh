@@ -24,6 +24,7 @@ readonly GRUB_DEFAULT_FILE="/etc/default/grub"
 readonly STATE_DIR="$HOME/.local/state/xelauncher"
 readonly MANIFEST="$STATE_DIR/installed.list"   # ce que XeLauncher a reellement installe
 readonly GETTY_OVERRIDE="/etc/systemd/system/getty@tty1.service.d/override.conf"
+readonly NODE_MAJOR=22                           # Node 20 est en fin de vie depuis avril 2026
 
 readonly RED='\033[1;31m'
 readonly GREEN='\033[1;32m'
@@ -32,9 +33,19 @@ readonly CYAN='\033[0;36m'
 readonly WHITE='\033[1;37m'
 readonly RESET='\033[0m'
 
+# Identite git jetable : "git stash" et "git pull --rebase" creent des commits et
+# echouent ("Please tell me who you are") sur une Debian fraiche sans user.name/email.
+readonly GIT_ID=(-c user.name=XeLauncher -c user.email=xelauncher@localhost)
+
 AUTO_MODE=""
 MODE=""
 ACTIONS_DONE=()
+REAL_USER=""
+PLATFORM=""
+LOG_PID=""
+SUDO_KEEPALIVE_PID=""
+RETRO_INTERRUPTED=0
+JELLYFIN_ID="$JELLYFIN_OLD_APP_ID"
 
 # RetroPie : --retropie / --no-retropie, ou XE_RETROPIE=yes|no (vide = on demande)
 RETROPIE_CHOICE="${XE_RETROPIE:-}"
@@ -51,6 +62,10 @@ DM_AT_BOOT=""
 PURGE_CHOICE=""
 PURGE_BY_NAME=0
 
+INSTALL_RETROPIE=1
+REMOVE_RETROPIE=0
+REMOVE_ROMS=0
+
 log()         { echo -e "${CYAN}→${RESET} $1"; }
 ok()          { echo -e "${GREEN}✔${RESET} $1"; }
 warn()        { echo -e "${YELLOW}!${RESET} $1"; }
@@ -60,6 +75,9 @@ done_action() { ACTIONS_DONE+=("$1"); }
 ACTIONS_FAILED=()
 fail_action() { ACTIONS_FAILED+=("$1"); }
 
+# apt sans question (keyboard-configuration & co bloqueraient sur une Debian minimale)
+apt_get() { sudo env DEBIAN_FRONTEND=noninteractive apt-get "$@"; }
+
 section() {
     echo ""
     echo -e "${WHITE}------------------------------------------------------------${RESET}"
@@ -68,30 +86,27 @@ section() {
 }
 
 detect_platform() {
+    local model=""
     if [[ -f /proc/device-tree/model ]]; then
-        local model=$(cat /proc/device-tree/model)
-        if echo "$model" | grep -qi "Raspberry Pi 5"; then
-            echo "rpi5"
-        elif echo "$model" | grep -qi "Raspberry Pi 4"; then
-            echo "rpi4"
-        elif echo "$model" | grep -qi "Raspberry Pi"; then
-            echo "rpi"
-        else
-            echo "other"
-        fi
+        # le fichier se termine par un octet NUL : on le retire (sinon warning bash)
+        model=$(tr -d '\0' </proc/device-tree/model 2>/dev/null)
+        case "$model" in
+            *"Raspberry Pi 5"*) echo "rpi5" ;;
+            *"Raspberry Pi 4"*) echo "rpi4" ;;
+            *"Raspberry Pi"*)   echo "rpi" ;;
+            *)                  echo "other" ;;
+        esac
     else
         echo "pc"
     fi
 }
 
-PLATFORM=$(detect_platform)
-log "Plateforme détectée: $PLATFORM"
-
 check_disk_space() {
-    local required_gb=8
-    local available=$(df --output=avail /home 2>/dev/null | tail -1 || df --output=avail / 2>/dev/null | tail -1)
-    if [[ -n "$available" ]]; then
-        local available_gb=$((available / 1024 / 1024))
+    local required_gb=8 available available_gb
+    available=$(df --output=avail "$HOME" 2>/dev/null | tail -n1 | tr -d ' ')
+    [[ "$available" =~ ^[0-9]+$ ]] || available=$(df --output=avail / 2>/dev/null | tail -n1 | tr -d ' ')
+    if [[ "$available" =~ ^[0-9]+$ ]]; then
+        available_gb=$((available / 1024 / 1024))
         if [[ $available_gb -lt $required_gb ]]; then
             error "Espace disque insuffisant : ${available_gb}GB disponibles, ${required_gb}GB requis"
             exit 1
@@ -100,19 +115,18 @@ check_disk_space() {
     fi
 }
 
+# download_with_retry URL SORTIE [DUREE_MAX_SECONDES]  (30 s par defaut ; mettre plus pour un .deb)
 download_with_retry() {
-    local url=$1
-    local output=$2
-    local max_retries=3
-    local retry=0
-    
+    local url=$1 output=$2 max_time=${3:-30}
+    local max_retries=3 retry=0
+
     while [[ $retry -lt $max_retries ]]; do
-        if curl -fsSL --retry 3 --retry-delay 2 --max-time 30 "$url" -o "$output" 2>/dev/null; then
+        if curl -fsSL --retry 3 --retry-delay 2 --max-time "$max_time" "$url" -o "$output" 2>/dev/null; then
             return 0
         fi
         retry=$((retry + 1))
         warn "Téléchargement échoué, tentative $retry/$max_retries"
-        sleep 5
+        [[ $retry -lt $max_retries ]] && sleep 5
     done
     return 1
 }
@@ -145,12 +159,22 @@ Pendant l'installation de RetroPie, Ctrl+C passe cette etape sans arreter le res
 EOF
 }
 
+# Il faut un vrai terminal pour poser une question.
+have_tty() { { true </dev/tty; } 2>/dev/null; }
+
+# prompt_read VARIABLE "invite" : lit sur le terminal ; sur EOF / Ctrl+D on annule
+# (sinon les boucles "Tapez ..." tournent a l'infini quand il n'y a pas de terminal).
+prompt_read() {
+    local __var=$1 __prompt=$2
+    read -rp "$__prompt" "$__var" </dev/tty || { echo ""; echo "Annule."; exit 1; }
+}
+
 # ask_yn "question" y|n  -> code 0 = oui, 1 = non (defaut si pas de terminal)
 ask_yn() {
     local prompt=$1 def=${2:-n} ans hint
     [[ "$def" == "y" ]] && hint="Y/n" || hint="y/N"
     # Pas de terminal (cron, CI...) : on prend la valeur par defaut sans bruit
-    if ! { true </dev/tty; } 2>/dev/null; then
+    if ! have_tty; then
         [[ "$def" == "y" ]]; return
     fi
     while true; do
@@ -162,6 +186,7 @@ ask_yn() {
         esac
     done
 }
+
 detect_state() {
     HAS_RETROPIE=0
     HAS_JELLYFIN=0
@@ -171,21 +196,30 @@ detect_state() {
     HAS_REPO=0
     HAS_AUTOLOGIN=0
     HAS_TURTLEFIN=0
+    JELLYFIN_ID="$JELLYFIN_OLD_APP_ID"
 
     command -v turtlefin >/dev/null 2>&1 && HAS_TURTLEFIN=1
     command -v emulationstation >/dev/null 2>&1 && HAS_RETROPIE=1
-    flatpak info com.github.iwalton3.jellyfin-media-player >/dev/null 2>&1 && HAS_JELLYFIN=1
+    if command -v flatpak >/dev/null 2>&1; then
+        if flatpak info "$JELLYFIN_OLD_APP_ID" >/dev/null 2>&1; then
+            HAS_JELLYFIN=1
+        elif flatpak info "$JELLYFIN_APP_ID" >/dev/null 2>&1; then
+            HAS_JELLYFIN=1
+            JELLYFIN_ID="$JELLYFIN_APP_ID"
+        fi
+    fi
     command -v startx >/dev/null 2>&1 && HAS_X=1
-    command -v node >/dev/null 2>&1 && {
+    # Il faut node ET npm : le nodejs de Debian est livre sans npm.
+    if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
         local v; v=$(node -v | cut -dv -f2 | cut -d. -f1)
-        [[ $v -ge 20 ]] && HAS_NODE=1
-    }
+        [[ "$v" =~ ^[0-9]+$ && $v -ge 20 ]] && HAS_NODE=1
+    fi
     command -v tailscale >/dev/null 2>&1 && HAS_TAILSCALE=1
     [[ -d "$INSTALL_DIR" ]] && HAS_REPO=1
     grep -q "XeLauncher" "$HOME/.bash_profile" 2>/dev/null && HAS_AUTOLOGIN=1
 
     ANYTHING_INSTALLED=0
-    [[ $HAS_RETROPIE -eq 1 || $HAS_JELLYFIN -eq 1 || $HAS_X -eq 1 \
+    [[ $HAS_RETROPIE -eq 1 || $HAS_JELLYFIN -eq 1 || $HAS_TURTLEFIN -eq 1 || $HAS_X -eq 1 \
        || $HAS_REPO -eq 1 || $HAS_AUTOLOGIN -eq 1 ]] && ANYTHING_INSTALLED=1
 }
 
@@ -195,7 +229,7 @@ print_state() {
     local check_yes="${GREEN}✔${RESET}"
     local check_no="${RED}✖${RESET}"
 
-    [[ $HAS_NODE -eq 1 ]]      && echo -e "  $check_yes Node.js 20+"        || echo -e "  $check_no Node.js 20+"
+    [[ $HAS_NODE -eq 1 ]]      && echo -e "  $check_yes Node.js 20+ (+ npm)" || echo -e "  $check_no Node.js 20+ (+ npm)"
     [[ $HAS_TAILSCALE -eq 1 ]] && echo -e "  $check_yes Tailscale"          || echo -e "  $check_no Tailscale"
     [[ $HAS_JELLYFIN -eq 1 ]]  && echo -e "  $check_yes Jellyfin (flatpak)" || echo -e "  $check_no Jellyfin (flatpak)"
     [[ $HAS_TURTLEFIN -eq 1 ]] && echo -e "  $check_yes Turtlefin"          || echo -e "  $check_no Turtlefin"
@@ -204,6 +238,15 @@ print_state() {
     [[ $HAS_RETROPIE -eq 1 ]]  && echo -e "  $check_yes RetroPie"           || echo -e "  $check_no RetroPie"
     [[ $HAS_AUTOLOGIN -eq 1 ]] && echo -e "  $check_yes Autologin TTY1"     || echo -e "  $check_no Autologin TTY1"
     echo ""
+}
+
+banner() {
+    echo -e "${WHITE}"
+    echo "  +--------------------------------------------------+"
+    echo "  |        XeLauncher — Prometheus Entertainment     |"
+    echo "  |              Script d'installation               |"
+    echo "  +--------------------------------------------------+"
+    echo -e "${RESET}"
 }
 
 # Decide si RetroPie sera installe. Appele AVANT la redirection des logs
@@ -224,8 +267,15 @@ decide_retropie() {
 # Lecteur multimedia du menu (carte bleue) : Jellyfin Desktop ou Turtlefin. Le choix est garde dans
 # config.json ("player") ; une reinstallation propose le choix actuel par defaut, on peut en changer.
 current_player() {
-    local p=""
-    [[ -f "$INSTALL_DIR/config.json" ]] && p=$(jq -r '.player // empty' "$INSTALL_DIR/config.json" 2>/dev/null)
+    local p="" cfg="$INSTALL_DIR/config.json"
+    if [[ -f "$cfg" ]]; then
+        if command -v jq >/dev/null 2>&1; then
+            p=$(jq -r '.player // empty' "$cfg" 2>/dev/null)
+        else
+            # jq n'est pas encore installe a la premiere etape : repli sur grep
+            p=$(grep -o '"player"[[:space:]]*:[[:space:]]*"[a-z]*"' "$cfg" 2>/dev/null | sed 's/.*"\([a-z]*\)"$/\1/')
+        fi
+    fi
     [[ "$p" == "turtlefin" ]] && echo "turtlefin" || echo "jellyfin"
 }
 
@@ -235,7 +285,7 @@ decide_player() {
         jellyfin|turtlefin) PLAYER="$PLAYER_CHOICE" ;;
         *)
             PLAYER="$cur"
-            if [[ -z "$AUTO_MODE" ]] && { true </dev/tty; } 2>/dev/null; then
+            if [[ -z "$AUTO_MODE" ]] && have_tty; then
                 local def=1 ans
                 [[ "$cur" == "turtlefin" ]] && def=2
                 echo -e "  ${WHITE}Lecteur multimedia${RESET} (actuel : $cur)"
@@ -264,10 +314,6 @@ decide_uninstall_retropie() {
         *)
             if [[ $HAS_RETROPIE -eq 1 || -d "$HOME/RetroPie-Setup" ]]; then
                 ask_yn "Desinstaller aussi RetroPie ?" n && REMOVE_RETROPIE=1
-            fi
-            if [[ "${INSTALL_RETROPIE:-1}" -eq 0 ]]; then
-                ok "RetroPie ignore (--no-retropie)"
-                return 0
             fi
             ;;
     esac
@@ -319,17 +365,13 @@ decide_uninstall_packages() {
         fi
     fi
 }
+
 interactive_menu() {
     if [[ -n "$AUTO_MODE" ]]; then
         MODE="$AUTO_MODE"
         detect_state
 
-        echo -e "${WHITE}"
-        echo "  +--------------------------------------------------+"
-        echo "  |        XeLauncher — Prometheus Entertainment     |"
-        echo "  |              Script d'installation               |"
-        echo "  +--------------------------------------------------+"
-        echo -e "${RESET}"
+        banner
         print_state
 
         if [[ "$MODE" == "install" ]]; then
@@ -346,13 +388,13 @@ interactive_menu() {
         return 0
     fi
 
+    if ! have_tty; then
+        error "Pas de terminal interactif : utilisez --i (installer) ou --u (desinstaller)"
+        exit 1
+    fi
+
     clear
-    echo -e "${WHITE}"
-    echo "  +--------------------------------------------------+"
-    echo "  |        XeLauncher — Prometheus Entertainment     |"
-    echo "  |              Script d'installation               |"
-    echo "  +--------------------------------------------------+"
-    echo -e "${RESET}"
+    banner
 
     detect_state
     print_state
@@ -364,7 +406,7 @@ interactive_menu() {
         echo -e "  ${RED}[q]${RESET} Quitter"
         echo ""
         while true; do
-            read -rp "  Votre choix : " choice </dev/tty
+            prompt_read choice "  Votre choix : "
             case "$choice" in
                 i|I) MODE="install"; break ;;
                 q|Q) echo "Annule."; exit 0 ;;
@@ -377,7 +419,7 @@ interactive_menu() {
         echo -e "  ${YELLOW}[q]${RESET} Quitter"
         echo ""
         while true; do
-            read -rp "  Votre choix : " choice </dev/tty
+            prompt_read choice "  Votre choix : "
             case "$choice" in
                 i|I) MODE="install"; break ;;
                 u|U) MODE="uninstall"; break ;;
@@ -415,7 +457,7 @@ interactive_menu() {
     echo ""
     local confirm=""
     while true; do
-        read -rp "  Confirmer ? (y/N) : " confirm </dev/tty
+        prompt_read confirm "  Confirmer ? (y/N) : "
         case "$confirm" in
             y|Y) break ;;
             ""|n|N) echo "Annule."; exit 0 ;;
@@ -425,24 +467,40 @@ interactive_menu() {
     echo ""
 }
 
+# Debian 13 / Ubuntu 24.04 : beaucoup de bibliotheques ont ete renommees en *t64
+# (libasound2 -> libasound2t64...). L'ancien nom n'est alors plus qu'un paquet virtuel,
+# non installable directement. On prend le nom qui a un candidat.
+resolve_pkg() {
+    local p=$1 c cand
+    for c in "$p" "${p}t64"; do
+        cand=$(apt-cache policy "$c" 2>/dev/null | awk '/Candidate:/ {print $2}')
+        if [[ -n "$cand" && "$cand" != "(none)" ]]; then
+            echo "$c"
+            return 0
+        fi
+    done
+    echo "$p"
+}
+
 check_and_install_packages() {
-    local to_install=()
+    local to_install=() pkg real
     for pkg in "$@"; do
-        if ! dpkg -s "$pkg" 2>/dev/null | grep -q "^Status: install ok installed"; then
-            to_install+=("$pkg")
+        real=$(resolve_pkg "$pkg")
+        if ! dpkg -s "$real" 2>/dev/null | grep -q "^Status: install ok installed"; then
+            to_install+=("$real")
         fi
     done
     [[ ${#to_install[@]} -eq 0 ]] && return 0
 
     log "Installation des paquets manquants: ${to_install[*]}"
-    if sudo apt-get install -y "${to_install[@]}"; then
+    if apt_get install -y "${to_install[@]}"; then
         for pkg in "${to_install[@]}"; do manifest_add "apt:$pkg"; done
         done_action "Paquets systeme installes : ${to_install[*]}"
     else
         warn "Installation groupee echouee, nouvel essai paquet par paquet"
         local good=() bad=()
         for pkg in "${to_install[@]}"; do
-            if sudo apt-get install -y "$pkg"; then good+=("$pkg"); manifest_add "apt:$pkg"; else bad+=("$pkg"); fi
+            if apt_get install -y "$pkg"; then good+=("$pkg"); manifest_add "apt:$pkg"; else bad+=("$pkg"); fi
         done
         [[ ${#good[@]} -gt 0 ]] && done_action "Paquets systeme installes : ${good[*]}"
         if [[ ${#bad[@]} -gt 0 ]]; then
@@ -455,16 +513,19 @@ check_and_install_packages() {
 
 install_nodejs() {
     if [[ $HAS_NODE -eq 1 ]]; then
-        ok "Node.js $(node -v) deja installe"
+        ok "Node.js $(node -v) deja installe (npm $(npm -v))"
         return 0
     fi
-    log "Installation de Node.js 20.x"
-    download_with_retry "https://deb.nodesource.com/setup_20.x" "/tmp/node_setup.sh" \
-        || { error "Impossible de telecharger le script NodeSource"; exit 1; }
-    sudo bash /tmp/node_setup.sh
-    rm -f /tmp/node_setup.sh
-    sudo apt-get install -y nodejs \
+    log "Installation de Node.js ${NODE_MAJOR}.x"
+    local tmp; tmp=$(mktemp)
+    download_with_retry "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" "$tmp" \
+        || { rm -f "$tmp"; error "Impossible de telecharger le script NodeSource"; exit 1; }
+    sudo bash "$tmp"
+    rm -f "$tmp"
+    apt_get install -y nodejs \
         || { error "Echec installation nodejs"; exit 1; }
+    command -v npm >/dev/null 2>&1 \
+        || { error "npm absent apres l'installation de Node.js"; exit 1; }
     ok "Node.js installe : $(node -v)"
     manifest_add "nodejs"
     done_action "Node.js $(node -v) installe"
@@ -476,10 +537,11 @@ install_tailscale() {
         return 0
     fi
     log "Installation de Tailscale"
-    download_with_retry "https://tailscale.com/install.sh" "/tmp/tailscale_install.sh" \
-        || { error "Impossible de telecharger le script Tailscale"; exit 1; }
-    sudo bash /tmp/tailscale_install.sh
-    rm -f /tmp/tailscale_install.sh
+    local tmp; tmp=$(mktemp)
+    download_with_retry "https://tailscale.com/install.sh" "$tmp" \
+        || { rm -f "$tmp"; error "Impossible de telecharger le script Tailscale"; exit 1; }
+    sudo bash "$tmp"
+    rm -f "$tmp"
     sudo systemctl enable --now tailscaled 2>/dev/null || true
     ok "Tailscale installe"
     manifest_add "tailscale"
@@ -488,26 +550,30 @@ install_tailscale() {
 
 install_flatpak_jellyfin() {
     if ! command -v flatpak >/dev/null 2>&1; then
-        sudo apt-get install -y flatpak \
-            || { error "Echec installation flatpak"; exit 1; }
+        apt_get install -y flatpak \
+            || { error "Echec installation flatpak"; return 1; }
         manifest_add "apt:flatpak"
         done_action "Flatpak installe"
     fi
 
-    sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo \
+        || warn "Ajout du depot Flathub echoue"
 
     if [[ $HAS_JELLYFIN -eq 0 ]]; then
-        log "Installation de Jellyfin Media Player"
-        sudo flatpak install -y flathub com.github.iwalton3.jellyfin-media-player \
-            2>&1 | grep -v $'^\033' | tee -a "$LOG_FILE" || \
-            { error "Echec installation Jellyfin"; exit 1; }
-        ok "Jellyfin Media Player installe"
+        log "Installation de Jellyfin ($JELLYFIN_ID)"
+        # (le tuyau grep/tee de la version precedente masquait l'echec de flatpak et doublonnait les logs)
+        if ! sudo flatpak install -y --noninteractive flathub "$JELLYFIN_ID"; then
+            error "Echec installation Jellyfin"
+            return 1
+        fi
+        ok "Jellyfin installe"
         manifest_add "jellyfin"
-        done_action "Jellyfin Media Player installe via flatpak"
+        done_action "Jellyfin installe via flatpak ($JELLYFIN_ID)"
     else
-        log "Mise a jour de Jellyfin Media Player"
-        flatpak update -y com.github.iwalton3.jellyfin-media-player 2>/dev/null \
-            && done_action "Jellyfin Media Player mis a jour" || true
+        log "Mise a jour de Jellyfin"
+        # installation systeme -> la mise a jour demande root (sinon polkit pose une question sans terminal)
+        sudo flatpak update -y --noninteractive "$JELLYFIN_ID" 2>/dev/null \
+            && done_action "Jellyfin mis a jour" || true
         ok "Jellyfin a jour"
     fi
 
@@ -515,11 +581,10 @@ install_flatpak_jellyfin() {
     if ! getent group flatpak >/dev/null 2>&1; then
         sudo groupadd flatpak
     fi
-    if ! groups "$REAL_USER" | grep -q '\bflatpak\b'; then
+    if ! id -nG "$REAL_USER" | tr ' ' '\n' | grep -qx flatpak; then
         sudo usermod -a -G flatpak "$REAL_USER"
     fi
-    flatpak override --user --socket=x11 --share=network \
-        com.github.iwalton3.jellyfin-media-player 2>/dev/null || true
+    flatpak override --user --socket=x11 --share=network "$JELLYFIN_ID" 2>/dev/null || true
     ok "Flatpak et Jellyfin configures"
 }
 
@@ -532,49 +597,68 @@ install_turtlefin() {
         arm64|amd64) ;;
         *) error "Turtlefin : architecture $arch non prise en charge (arm64 ou amd64)"; return 1 ;;
     esac
+    command -v jq >/dev/null 2>&1 || { error "Turtlefin : jq est requis"; return 1; }
     api=$(curl -fsSL --max-time 20 "https://api.github.com/repos/$TURTLEFIN_REPO/releases/latest") \
         || { error "Turtlefin : impossible de lire la derniere version sur GitHub"; return 1; }
     latest=$(echo "$api" | jq -r '.tag_name // empty' | sed 's/^v//')
     url=$(echo "$api" | jq -r --arg a "_${arch}.deb" '.assets[] | select(.name | endswith($a)) | .browser_download_url' | head -1)
     [[ -n "$url" ]] || { error "Turtlefin : paquet .deb ($arch) introuvable dans la derniere version"; return 1; }
     cur=$(dpkg-query -W -f='${Version}' turtlefin 2>/dev/null || true)
-    if [[ -n "$cur" && "$cur" == "$latest" ]]; then
+    # la version dpkg peut porter un suffixe de revision (1.2.3-1) absent du tag git
+    if [[ -n "$cur" && ( "$cur" == "$latest" || "${cur%%-*}" == "$latest" ) ]]; then
         ok "Turtlefin $cur deja a jour"
-    else
-        log "Installation de Turtlefin $latest ($arch)"
-        tmp=$(mktemp -d)
-        if ! download_with_retry "$url" "$tmp/turtlefin.deb" || ! sudo apt-get install -y "$tmp/turtlefin.deb"; then
-            rm -rf "$tmp"
-            error "Echec installation Turtlefin"
-            return 1
-        fi
-        rm -rf "$tmp"
-        if [[ -n "$cur" ]]; then done_action "Turtlefin mis a jour ($cur -> $latest)"; else done_action "Turtlefin $latest installe (.deb)"; fi
-        ok "Turtlefin installe"
+        return 0
     fi
-    manifest_has "turtlefin" || manifest_add "turtlefin"
+
+    log "Installation de Turtlefin $latest ($arch)"
+    tmp=$(mktemp -d)
+    chmod 755 "$tmp"
+    # 300 s : un .deb ne tient pas toujours dans les 30 s par defaut
+    if ! download_with_retry "$url" "$tmp/turtlefin.deb" 300 \
+        || ! { chmod 644 "$tmp/turtlefin.deb"; apt_get install -y "$tmp/turtlefin.deb"; }; then
+        rm -rf "$tmp"
+        error "Echec installation Turtlefin"
+        return 1
+    fi
+    rm -rf "$tmp"
+    if [[ -n "$cur" ]]; then
+        done_action "Turtlefin mis a jour ($cur -> $latest)"
+    else
+        # Inventaire : seulement si c'est XeLauncher qui l'installe (sinon la desinstallation
+        # retirerait un paquet que l'utilisateur avait installe lui-meme).
+        manifest_add "turtlefin"
+        done_action "Turtlefin $latest installe (.deb)"
+    fi
+    ok "Turtlefin installe"
 }
 
 install_player() {
     if [[ "$PLAYER" == "turtlefin" ]]; then
         if ! install_turtlefin; then
             warn "Turtlefin non installe : Jellyfin Desktop reste le lecteur"
+            fail_action "Turtlefin non installe (repli sur Jellyfin)"
             PLAYER="jellyfin"
-            install_flatpak_jellyfin
+            install_flatpak_jellyfin || fail_action "Jellyfin non installe"
         fi
     else
-        install_flatpak_jellyfin
+        install_flatpak_jellyfin || fail_action "Jellyfin non installe"
     fi
 }
 
 # Choix du lecteur dans config.json (lu par le menu : logo, lancement). Le reste du fichier est garde.
 save_player_choice() {
     local cfg="$INSTALL_DIR/config.json" tmp
+    mkdir -p "$INSTALL_DIR"
     tmp=$(mktemp)
     if [[ -s "$cfg" ]] && jq --arg p "$PLAYER" '.player = $p' "$cfg" >"$tmp" 2>/dev/null; then
         mv "$tmp" "$cfg"
     else
         rm -f "$tmp"
+        if [[ -s "$cfg" ]]; then
+            # config.json illisible : on ne l'ecrase pas en silence
+            cp -a "$cfg" "$cfg.invalide.bak"
+            warn "config.json invalide : copie dans config.json.invalide.bak, fichier recree"
+        fi
         printf '{"controllerType": "generic", "player": "%s"}\n' "$PLAYER" >"$cfg"
     fi
     ok "Lecteur multimedia : $PLAYER"
@@ -588,11 +672,13 @@ move_blocking_untracked() {
     upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null) || upstream="origin/main"
     git fetch -q origin || return 1
     backup="$STATE_DIR/avant-maj-$(date +%Y%m%d-%H%M%S)"
+    # core.quotepath=false : sinon les noms avec accents sortent entre guillemets et ne correspondent plus
     while IFS= read -r f; do
         [[ -n "$f" ]] || continue
         mkdir -p "$backup/$(dirname "$f")"
         mv -f -- "$f" "$backup/$f" && n=$((n + 1))
-    done < <(comm -12 <(git ls-files --others | sort) <(git ls-tree -r --name-only "$upstream" | sort))
+    done < <(comm -12 <(git -c core.quotepath=false ls-files --others | sort) \
+                      <(git -c core.quotepath=false ls-tree -r --name-only "$upstream" | sort))
     if [[ $n -gt 0 ]]; then
         warn "$n fichier(s) non suivi(s) genaient la mise a jour : mis de cote dans $backup"
         done_action "$n fichier(s) non suivi(s) mis de cote avant la mise a jour ($backup)"
@@ -601,23 +687,58 @@ move_blocking_untracked() {
 }
 
 clone_or_update_repo() {
+    local old=""
+    # Le dossier existe mais n'est pas un depot git (copie manuelle...) : "git pull" ne peut rien en faire.
+    if [[ -d "$INSTALL_DIR" && ! -d "$INSTALL_DIR/.git" ]]; then
+        if [[ -z "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]]; then
+            rmdir "$INSTALL_DIR"
+        else
+            old="$INSTALL_DIR.avant-clone-$(date +%Y%m%d-%H%M%S)"
+            warn "$INSTALL_DIR n'est pas un depot git : mis de cote dans $old"
+            mv "$INSTALL_DIR" "$old" || { error "Impossible de deplacer $INSTALL_DIR"; exit 1; }
+        fi
+    fi
+
     if [[ ! -d "$INSTALL_DIR" ]]; then
         log "Clonage du depot XeLauncher"
         git clone "$REPO_URL" "$INSTALL_DIR" \
             || { error "Echec du clonage du depot"; exit 1; }
         ok "Depot clone"
         done_action "Depot XeLauncher clone dans $INSTALL_DIR"
+        if [[ -n "$old" ]]; then
+            # on rend les fichiers qui n'existent pas dans le depot (reglages, profils...)
+            cp -an "$old"/. "$INSTALL_DIR"/ 2>/dev/null || true
+            done_action "Ancien dossier conserve dans $old (fichiers personnels recopies)"
+        fi
     else
         log "Mise a jour du depot"
-        cd "$INSTALL_DIR"
-        git stash push -m "auto-stash" 2>/dev/null || true
-        if ! git pull --rebase; then
+        cd "$INSTALL_DIR" || { error "Impossible d'entrer dans $INSTALL_DIR"; exit 1; }
+        # Modifications locales de fichiers suivis : mises de cote puis REMISES apres la mise a jour
+        # (l'ancienne version faisait un stash sans jamais le restaurer : elles etaient perdues).
+        local stashed=0
+        if ! git diff --quiet || ! git diff --cached --quiet; then
+            if git "${GIT_ID[@]}" stash push -m "xelauncher-auto-stash" >/dev/null 2>&1; then
+                stashed=1
+            else
+                warn "Impossible de mettre de cote les modifications locales"
+            fi
+        fi
+        if ! git "${GIT_ID[@]}" pull --rebase; then
             git rebase --abort 2>/dev/null || true
             # Fichiers du depot presents ici sans etre suivis par git (copies a la main, ancienne
             # installation...) : git refuse de les ecraser. On met de cote SEULEMENT ceux-la (reglages,
             # profils, journaux, node_modules... non suivis ne sont pas touches), puis on reessaie.
             move_blocking_untracked || { error "Echec de la mise a jour du depot"; exit 1; }
-            git pull --rebase || { error "Echec de la mise a jour du depot"; exit 1; }
+            git "${GIT_ID[@]}" pull --rebase || { error "Echec de la mise a jour du depot"; exit 1; }
+        fi
+        if [[ $stashed -eq 1 ]]; then
+            if git "${GIT_ID[@]}" stash pop >/dev/null 2>&1; then
+                ok "Modifications locales rétablies"
+            else
+                git reset -q --hard 2>/dev/null || true
+                warn "Conflit en rétablissant tes modifications locales : elles restent dans 'git stash list' ($INSTALL_DIR)"
+                fail_action "Modifications locales en conflit : voir 'git -C $INSTALL_DIR stash list'"
+            fi
         fi
         ok "Depot mis a jour"
         done_action "Depot XeLauncher mis a jour"
@@ -625,7 +746,7 @@ clone_or_update_repo() {
 }
 
 fix_package_json() {
-    cd "$INSTALL_DIR"
+    cd "$INSTALL_DIR" || return 1
     local changed=0
 
     if [[ ! -f "package.json" ]]; then
@@ -649,21 +770,23 @@ fix_package_json() {
 EOF
         changed=1
     else
-        if grep -q '"main": "src/main.js"' package.json 2>/dev/null; then
+        if grep -qF '"main": "src/main.js"' package.json 2>/dev/null; then
             sed -i 's|"main": "src/main.js"|"main": "src/JSs/main.js"|' package.json
             changed=1
         fi
-        if grep -q '"electron-reload": "\\^2\\.0\\.0"' package.json 2>/dev/null; then
-            sed -i 's/"electron-reload": "\\^2\\.0\\.0"/"electron-reload": "^1.5.0"/' package.json
+        # (l'ancien motif '\\^2\\.0\\.0' ne correspondait jamais : le correctif electron-reload ne s'appliquait pas)
+        if grep -qF '"electron-reload": "^2.0.0"' package.json 2>/dev/null; then
+            sed -i 's/"electron-reload": "\^2\.0\.0"/"electron-reload": "^1.5.0"/' package.json
             changed=1
         fi
     fi
 
-    [[ $changed -eq 1 ]] && done_action "package.json cree/corrige (main: src/JSs/main.js)"
+    [[ $changed -eq 1 ]] && done_action "package.json cree/corrige (main: src/JSs/main.js, electron-reload ^1.5.0)"
+    return 0
 }
 
 install_npm_deps() {
-    cd "$INSTALL_DIR"
+    cd "$INSTALL_DIR" || { error "Dossier $INSTALL_DIR introuvable"; exit 1; }
     fix_package_json
 
     local needs_install=0
@@ -696,25 +819,50 @@ install_retropie() {
 
     if [[ "$PLATFORM" == "rpi5" ]]; then
         log "Installation de RetroPie sur Raspberry Pi 5 (optimisee)"
-        if ! grep -q "dtoverlay=vc4-kms-v3d" /boot/config.txt 2>/dev/null; then
-            echo "dtoverlay=vc4-kms-v3d" | sudo tee -a /boot/config.txt
-            log "Configuration GPU ajoutee (redemarrage requis plus tard)"
+        # Bookworm : config.txt est dans /boot/firmware. L'ancienne version ecrivait dans /boot/config.txt
+        # meme quand il n'existait pas (tee -a le creait : fichier parasite).
+        local cfg="" c
+        for c in /boot/firmware/config.txt /boot/config.txt; do
+            [[ -f "$c" ]] && { cfg="$c"; break; }
+        done
+        if [[ -n "$cfg" ]] && ! grep -qE '^[[:space:]]*dtoverlay=vc4-f?kms-v3d' "$cfg" 2>/dev/null; then
+            echo "dtoverlay=vc4-kms-v3d" | sudo tee -a "$cfg" >/dev/null
+            log "Configuration GPU ajoutee a $cfg (redemarrage requis plus tard)"
         fi
     else
         log "Installation de RetroPie (20-40 minutes)"
     fi
 
     if [[ ! -d "$HOME/RetroPie-Setup" ]]; then
-        git clone --depth=1 https://github.com/RetroPie/RetroPie-Setup.git "$HOME/RetroPie-Setup" \
-            || { error "Echec clonage RetroPie-Setup"; exit 1; }
+        if ! git clone --depth=1 https://github.com/RetroPie/RetroPie-Setup.git "$HOME/RetroPie-Setup"; then
+            error "Echec clonage RetroPie-Setup"
+            fail_action "RetroPie : clonage de RetroPie-Setup echoue"
+            return 0
+        fi
     fi
 
-    cd "$HOME/RetroPie-Setup"
+    cd "$HOME/RetroPie-Setup" || return 0
     git pull --rebase 2>/dev/null || true
 
-    log "Lancement de l'installation RetroPie..."
-    sudo __nodialog=1 ./retropie_packages.sh setup basic_install \
-        || { error "Echec installation RetroPie"; exit 1; }
+    log "Lancement de l'installation RetroPie... (Ctrl+C = passer cette etape)"
+    # Ctrl+C ne doit interrompre que RetroPie, pas tout le script (promis par l'aide, jamais implemente).
+    RETRO_INTERRUPTED=0
+    trap 'RETRO_INTERRUPTED=1' INT
+    sudo __nodialog=1 ./retropie_packages.sh setup basic_install
+    local rc=$?
+    trap - INT
+    cd "$HOME" || true
+
+    if [[ $RETRO_INTERRUPTED -eq 1 ]]; then
+        warn "Installation de RetroPie interrompue (Ctrl+C) : etape ignoree"
+        fail_action "RetroPie : installation interrompue (relancer l'installateur pour la reprendre)"
+        return 0
+    fi
+    if [[ $rc -ne 0 ]]; then
+        error "Echec installation RetroPie (code $rc)"
+        fail_action "RetroPie : installation echouee (voir $LOG_FILE)"
+        return 0
+    fi
 
     mkdir -p "$HOME/RetroPie/roms"/{nes,snes,gb,gba,n64,psx,mame,arcade}
 
@@ -723,6 +871,7 @@ install_retropie() {
         done_action "RetroPie installe (basic_install)"
     else
         warn "RetroPie n'a pas pu etre confirme. Verifiez $LOG_FILE"
+        fail_action "RetroPie : installation non confirmee (emulationstation introuvable)"
     fi
 }
 
@@ -742,10 +891,15 @@ configure_retropie_menu() {
     log "Configuration du menu RetroPie pour fonctionner sous X11 (xterm)"
     sudo sed -i \
         's|<command>sudo \(.*\)retropie_packages\.sh retropiemenu launch %ROM%.*</command>|<command>xterm -fullscreen -e sudo \1retropie_packages.sh retropiemenu launch %ROM%</command>|' \
-        "$cfg" \
-        && ok "es_systems.cfg mis a jour (xterm -fullscreen)" \
-        && done_action "es_systems.cfg: menu RetroPie lance dans xterm -fullscreen" \
-        || warn "Echec modification es_systems.cfg — a faire manuellement"
+        "$cfg"
+    # sed renvoie 0 meme sans correspondance : on verifie le resultat au lieu de croire au "&&"
+    if grep -q "xterm.*retropiemenu" "$cfg" 2>/dev/null; then
+        ok "es_systems.cfg mis a jour (xterm -fullscreen)"
+        done_action "es_systems.cfg: menu RetroPie lance dans xterm -fullscreen"
+    else
+        warn "Commande retropiemenu non reconnue dans es_systems.cfg — a faire manuellement"
+        fail_action "es_systems.cfg : menu RetroPie non modifie (format inattendu)"
+    fi
 }
 
 # Boot silencieux : ligne de commande noyau.
@@ -871,10 +1025,12 @@ configure_boot_splash() {
 
     if [[ ! -f "$logo" ]]; then
         warn "Logo introuvable a $logo — thème Plymouth ignore"
+        fail_action "Plymouth : logo introuvable ($logo), boot splash non configure"
         return 0
     fi
     if [[ ! -f "$theme_src/xe_theme.plymouth" || ! -f "$theme_src/xe_theme.script" ]]; then
         warn "Thème Plymouth introuvable dans $theme_src — ignore (verifiez le depot)"
+        fail_action "Plymouth : theme introuvable dans $theme_src"
         return 0
     fi
 
@@ -935,9 +1091,10 @@ configure_boot_splash() {
     fi
 
     # -- Reconstruire l'initramfs APRES tout le reste (theme + plymouth-label) --
+    # -k all : sur Raspberry Pi il y a un initramfs par noyau (v8 / 2712) ; sans ca l'autre restait sans theme
     if command -v update-initramfs >/dev/null 2>&1; then
         log "Regeneration de l'initramfs (embarque le theme Plymouth)..."
-        if sudo update-initramfs -u; then
+        if sudo update-initramfs -u -k all; then
             done_action "initramfs regenere (theme Plymouth embarque)"
         else
             warn "update-initramfs a echoue : le theme ne sera pas dans l'initramfs"
@@ -951,13 +1108,17 @@ configure_boot_splash() {
     if systemctl list-unit-files 2>/dev/null | grep -q '^asplashscreen\.service'; then
         if systemctl is-enabled asplashscreen >/dev/null 2>&1; then
             sudo systemctl disable asplashscreen 2>/dev/null || true
+            manifest_add "asplash-disabled"       # pour le reactiver a la desinstallation
             ok "Splashscreen RetroPie (asplashscreen) desactive"
             done_action "asplashscreen.service (splash RetroPie) desactive au profit de Plymouth"
         else
             ok "Splashscreen RetroPie deja desactive"
         fi
     fi
-    sudo rm -f /etc/splashscreen.list
+    # Mis de cote (et non supprime) : restaure par la desinstallation
+    if [[ -f /etc/splashscreen.list && ! -f /etc/splashscreen.list.xelauncher.bak ]]; then
+        sudo mv -f /etc/splashscreen.list /etc/splashscreen.list.xelauncher.bak
+    fi
 }
 
 # xe_cursor_pin.py : ecrit par l'installateur seulement s'il n'existe pas deja
@@ -1080,6 +1241,7 @@ create_start_script() {
             ok "$(basename "$f") rendu executable (fourni par le depot)"
         else
             warn "$(basename "$f") introuvable dans le depot — verifiez le clonage"
+            fail_action "$(basename "$f") introuvable dans le depot"
         fi
     done
 
@@ -1159,13 +1321,20 @@ EOF
     ok "Autologin TTY1 silencieux configure"
     done_action "Autologin TTY1 silencieux (systemd, $GETTY_OVERRIDE)"
 
-    # Supprime "Last login" / motd a l'ouverture de session
-    touch "$HOME/.hushlogin"
+    # Supprime "Last login" / motd a l'ouverture de session (inventorie pour pouvoir le retirer)
+    if [[ ! -f "$HOME/.hushlogin" ]]; then
+        touch "$HOME/.hushlogin"
+        manifest_add "hushlogin"
+    fi
 
     local BASH_PROFILE="$HOME/.bash_profile"
 
     if ! grep -q "XeLauncher" "$BASH_PROFILE" 2>/dev/null; then
-        if ! grep -q '\.bashrc' "$BASH_PROFILE" 2>/dev/null; then
+        if [[ ! -f "$BASH_PROFILE" && -f "$HOME/.profile" ]]; then
+            # Creer ~/.bash_profile MASQUE ~/.profile (bash ne lit que le premier) : on le rappelle
+            # explicitement pour ne pas perdre le PATH (~/.local/bin...) ; .profile source deja .bashrc.
+            echo '[ -f "$HOME/.profile" ] && . "$HOME/.profile"' >> "$BASH_PROFILE"
+        elif ! grep -qE '\.bashrc|\.profile' "$BASH_PROFILE" 2>/dev/null; then
             echo '[ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"' >> "$BASH_PROFILE"
         fi
         { echo ""; xe_profile_block; } >> "$BASH_PROFILE"
@@ -1209,9 +1378,9 @@ TTYPath=/dev/tty1
 StandardInput=tty
 StandardOutput=journal
 StandardError=journal
-Environment=HOME=/home/$REAL_USER
+Environment=HOME=$HOME
 Environment=XDG_RUNTIME_DIR=/run/user/$(id -u "$REAL_USER")
-ExecStart=/usr/bin/startx /home/$REAL_USER/.xinitrc -- :0 vt1 -nolisten tcp
+ExecStart=/usr/bin/startx $HOME/.xinitrc -- :0 vt1 -nolisten tcp
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=10
@@ -1254,7 +1423,7 @@ EOF
 }
 
 configure_input_system() {
-    local changed=0
+    local changed=0 grp
 
     # xe_input.py lit /dev/input/event* directement : l'utilisateur doit
     # appartenir aux groupes input et bluetooth pour y acceder sans root.
@@ -1262,7 +1431,7 @@ configure_input_system() {
         if ! getent group "$grp" >/dev/null 2>&1; then
             sudo groupadd "$grp" 2>/dev/null || true
         fi
-        if ! groups "$REAL_USER" | grep -q "\b${grp}\b"; then
+        if ! id -nG "$REAL_USER" | tr ' ' '\n' | grep -qx "$grp"; then
             sudo usermod -a -G "$grp" "$REAL_USER"
             changed=1
         fi
@@ -1315,7 +1484,7 @@ create_required_dirs() {
 uninstall_all() {
     section "Desinstallation de XeLauncher"
 
-    local anything_done=0
+    local anything_done=0 f fb xp
     cd "$HOME" || true    # si le script tourne depuis ~/xelauncher, on quitte le dossier avant de le supprimer
 
     # Arreter le launcher en cours AVANT de supprimer le depot : sinon Electron (logDebug dans
@@ -1361,6 +1530,12 @@ uninstall_all() {
         anything_done=1
     fi
 
+    if manifest_has "hushlogin" && [[ -f "$HOME/.hushlogin" ]]; then
+        rm -f "$HOME/.hushlogin"
+        done_action "~/.hushlogin supprime"
+        anything_done=1
+    fi
+
     if [[ -f "/etc/systemd/system/xelauncher.service" ]]; then
         sudo systemctl disable xelauncher 2>/dev/null || true
         sudo systemctl stop xelauncher 2>/dev/null || true
@@ -1395,31 +1570,44 @@ uninstall_all() {
     # pour toute appli installee a part ; on les supprime a la main si besoin.
     if manifest_has "turtlefin" || { [[ $PURGE_BY_NAME -eq 1 ]] && dpkg -s turtlefin >/dev/null 2>&1; }; then
         log "Desinstallation de Turtlefin"
-        sudo apt-get remove -y turtlefin 2>/dev/null || true
+        apt_get remove -y turtlefin 2>/dev/null || true
         ok "Turtlefin desinstalle (reglages ~/.config/turtlefin conserves)"
         done_action "Turtlefin desinstalle"
         anything_done=1
     fi
 
-    log "Desinstallation de RetroPie"
-    if [[ -d "$HOME/RetroPie-Setup" ]]; then
-        cd "$HOME/RetroPie-Setup"
-        sudo __nodialog=1 ./retropie_packages.sh setup remove_all 2>/dev/null || true
+    # RetroPie : UNIQUEMENT si demande (--retropie ou reponse a la question). L'ancienne version
+    # le supprimait toujours, ~/RetroPie (ROMs, BIOS, sauvegardes) compris, quoi que l'on reponde.
+    if [[ $REMOVE_RETROPIE -eq 1 ]]; then
+        log "Desinstallation de RetroPie"
+        if [[ -d "$HOME/RetroPie-Setup" ]]; then
+            cd "$HOME/RetroPie-Setup" && sudo __nodialog=1 ./retropie_packages.sh setup remove_all 2>/dev/null || true
+            cd "$HOME" || true
+        fi
+        sudo rm -rf "$HOME/RetroPie-Setup"
+        sudo rm -rf /opt/retropie
+        sudo rm -f /usr/bin/emulationstation
+        apt_get remove -y emulationstation 2>/dev/null || true
+        ok "RetroPie desinstalle"
+        done_action "RetroPie desinstalle"
+        anything_done=1
+        if [[ $REMOVE_ROMS -eq 1 ]]; then
+            sudo rm -rf "$HOME/RetroPie"
+            ok "~/RetroPie (ROMs, BIOS, sauvegardes) supprime"
+            done_action "~/RetroPie (ROMs, BIOS, sauvegardes) supprime"
+        elif [[ -d "$HOME/RetroPie" ]]; then
+            log "~/RetroPie (ROMs, BIOS, sauvegardes) conserve"
+        fi
+    else
+        log "RetroPie conserve"
     fi
-    sudo rm -rf "$HOME/RetroPie-Setup"
-    sudo rm -rf "$HOME/RetroPie"
-    sudo rm -rf /opt/retropie
-    sudo rm -f /usr/bin/emulationstation
-    sudo apt-get remove -y emulationstation 2>/dev/null || true
-    ok "RetroPie desinstalle"
-    done_action "RetroPie desinstalle"
-    anything_done=1
 
     if [[ $PURGE_BY_NAME -eq 1 ]] || manifest_has "nodejs"; then
         log "Desinstallation de Node.js"
-        sudo apt-get remove -y nodejs 2>/dev/null || true
+        apt_get remove -y nodejs 2>/dev/null || true
         sudo rm -f /etc/apt/sources.list.d/nodesource.list
         sudo rm -f /etc/apt/sources.list.d/nodesource.list.distUpgrade
+        sudo rm -f /etc/apt/keyrings/nodesource.gpg /usr/share/keyrings/nodesource.gpg
         ok "Node.js desinstalle"
         done_action "Node.js desinstalle"
         anything_done=1
@@ -1431,8 +1619,9 @@ uninstall_all() {
         log "Desinstallation de Tailscale"
         sudo systemctl stop tailscaled 2>/dev/null || true
         sudo systemctl disable tailscaled 2>/dev/null || true
-        sudo apt-get remove -y tailscale 2>/dev/null || true
+        apt_get remove -y tailscale 2>/dev/null || true
         sudo rm -f /etc/apt/sources.list.d/tailscale.list
+        sudo rm -f /usr/share/keyrings/tailscale-archive-keyring.gpg
         ok "Tailscale desinstalle"
         done_action "Tailscale desinstalle"
         anything_done=1
@@ -1442,13 +1631,13 @@ uninstall_all() {
 
     # Xorg / xinit / openbox / xdotool : seulement ceux que XeLauncher a installes.
     # JAMAIS d'autoremove automatique : sur un poste avec bureau il pourrait retirer le bureau.
-    local x_pkgs=() xp
+    local x_pkgs=()
     for xp in xserver-xorg xinit openbox xdotool; do
         if [[ $PURGE_BY_NAME -eq 1 ]] || manifest_has "apt:$xp"; then x_pkgs+=("$xp"); fi
     done
     if [[ ${#x_pkgs[@]} -gt 0 ]]; then
         log "Desinstallation de : ${x_pkgs[*]}"
-        sudo apt-get remove -y "${x_pkgs[@]}" 2>/dev/null || true
+        apt_get remove -y "${x_pkgs[@]}" 2>/dev/null || true
         ok "${x_pkgs[*]} desinstalle(s)"
         done_action "Paquets retires : ${x_pkgs[*]} (verifier ensuite 'sudo apt autoremove' a la main)"
         anything_done=1
@@ -1497,16 +1686,35 @@ uninstall_all() {
     fi
     rm -f "$HOME/.xelauncher-startx.log"
 
+    # Splash propre a RetroPie : on remet ce que l'installation avait desactive / mis de cote
+    if [[ -f /etc/splashscreen.list.xelauncher.bak ]]; then
+        sudo mv -f /etc/splashscreen.list.xelauncher.bak /etc/splashscreen.list
+        done_action "/etc/splashscreen.list restaure"
+    fi
+    if manifest_has "asplash-disabled"; then
+        sudo systemctl enable asplashscreen 2>/dev/null || true
+        done_action "asplashscreen.service (splash RetroPie) reactive"
+        anything_done=1
+    fi
+
     if [[ -d "$PLYMOUTH_THEME_DIR" ]]; then
+        local current_theme switched=0
         current_theme=$(plymouth-set-default-theme 2>/dev/null || true)
         if [[ "$current_theme" == "xe_theme" ]]; then
-            for fallback in pix debian text; do
-                if plymouth-set-default-theme --list 2>/dev/null | grep -qx "$fallback"; then
-                    sudo plymouth-set-default-theme "$fallback"
-                    command -v update-initramfs >/dev/null 2>&1 && sudo update-initramfs -u
+            for fb in pix debian text; do
+                if plymouth-set-default-theme --list 2>/dev/null | grep -qx "$fb"; then
+                    sudo plymouth-set-default-theme "$fb" && switched=1
                     break
                 fi
             done
+            # aucun theme de repli connu : on revient au theme par defaut de la distribution
+            [[ $switched -eq 1 ]] || { sudo plymouth-set-default-theme --reset 2>/dev/null && switched=1; }
+            if [[ $switched -eq 1 ]]; then
+                command -v update-initramfs >/dev/null 2>&1 && sudo update-initramfs -u -k all
+            else
+                warn "Aucun theme Plymouth de repli : le theme par defaut pointe toujours sur xe_theme"
+                fail_action "Plymouth : choisir un autre theme (plymouth-set-default-theme -R <theme>)"
+            fi
         fi
         sudo rm -rf "$PLYMOUTH_THEME_DIR"
         ok "Theme Plymouth xe_theme supprime"
@@ -1570,6 +1778,38 @@ print_summary() {
     echo ""
 }
 
+# Verrou reel (flock) : l'ancien LOCK_FILE n'etait qu'un marqueur touche a la fin, jamais lu,
+# donc deux installations pouvaient tourner en meme temps (dpkg/apt se battent alors).
+acquire_lock() {
+    if ( : >>"$LOCK_FILE" ) 2>/dev/null && command -v flock >/dev/null 2>&1; then
+        exec 9>>"$LOCK_FILE"
+        flock -n 9 || { error "Une autre instance de l'installateur est deja en cours"; exit 1; }
+    fi
+}
+
+# sudo expire apres ~15 min : une installation RetroPie de 60 min redemanderait le mot de passe
+# en plein milieu (sans terminal visible). On rafraichit le ticket tant que le script vit.
+start_sudo_keepalive() {
+    (
+        while true; do
+            sudo -n -v 2>/dev/null
+            sleep 50
+            kill -0 "$$" 2>/dev/null || exit 0
+        done
+    ) >/dev/null 2>&1 </dev/null &
+    SUDO_KEEPALIVE_PID=$!
+    trap '[[ -n "$SUDO_KEEPALIVE_PID" ]] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/null' EXIT
+}
+
+# Vide le tuyau de journalisation avant de rendre la main : sinon le resume final s'affiche
+# parfois APRES le retour du prompt (ou est tronque).
+finish_logging() {
+    [[ -n "$LOG_PID" ]] || return 0
+    exec 1>&- 2>&-
+    wait "$LOG_PID" 2>/dev/null || true
+    sleep 0.3
+}
+
 main() {
     for arg in "$@"; do
         case "$arg" in
@@ -1585,7 +1825,7 @@ main() {
             -h|--help) usage; exit 0 ;;
             *)
                 echo -e "${RED}✖${RESET} Argument inconnu : $arg" >&2
-                echo "  Usage : $0 [--i | --u]" >&2
+                echo "  Usage : $0 [--i | --u] [--no-retropie | --retropie] [--kiosk | --no-kiosk] [--jellyfin | --turtlefin] [--purge]  (-h pour l'aide)" >&2
                 exit 1
                 ;;
         esac
@@ -1596,32 +1836,50 @@ main() {
         exit 1
     fi
 
-    REAL_USER="${SUDO_USER:-$USER}"
-    export HOME="/home/$REAL_USER"
+    # $USER peut etre indefini (cron, env minimal) -> plantage sous "set -u". Et on NE reecrit PLUS HOME :
+    # les constantes du haut (INSTALL_DIR, LOG_FILE...) ont deja ete calculees avec le HOME d'origine.
+    REAL_USER=$(id -un)
+    PLATFORM=$(detect_platform)
+
+    acquire_lock
 
     sudo -v || { echo "Droits sudo requis" >&2; exit 1; }
+    start_sudo_keepalive
 
     if [[ "$AUTO_MODE" != "uninstall" ]]; then
         curl -sSf --max-time 10 https://github.com > /dev/null 2>&1 \
             || { echo "Connexion Internet requise (github.com injoignable)" >&2; exit 1; }
     fi
 
-    check_disk_space
-
     interactive_menu
 
-    exec > >(sed 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\[[0-9;]*[Rr]//g' | tee -a "$LOG_FILE") 2>&1
+    # Verification d'espace APRES le choix : avant, elle bloquait aussi la desinstallation
+    # (precisement quand le disque est plein).
+    if [[ "$MODE" == "install" ]]; then
+        check_disk_space
+    fi
+
+    # Journal sans codes ANSI, mais la couleur est conservee a l'ecran (l'ancien sed les retirait aussi du terminal).
+    exec > >(tee >(sed -u 's/\x1b\[[0-9;?]*[A-Za-z]//g' >> "$LOG_FILE")) 2>&1
+    LOG_PID=$!
+
+    log "Plateforme détectée: $PLATFORM"
 
     if [[ "$MODE" == "uninstall" ]]; then
         uninstall_all
         print_summary
+        finish_logging
         rm -f "$LOG_FILE"    # le journal d'installation part aussi (ce script vient d'y ecrire)
         exit 0
     fi
 
     section "1/10 — Mise a jour systeme"
-    sudo apt-get update -q
-    ok "Paquets a jour"
+    if apt_get update -q; then
+        ok "Index des paquets a jour"
+    else
+        warn "apt-get update a echoue : les installations suivantes peuvent echouer"
+        fail_action "apt-get update a echoue (reseau ou depot casse ?)"
+    fi
 
     section "2/10 — Dependances systeme"
     check_and_install_packages \
@@ -1659,14 +1917,22 @@ main() {
     install_npm_deps
 
     section "8/10 — RetroPie"
-    install_retropie
+    # (--no-retropie etait lu puis ignore : RetroPie s'installait quand meme)
+    if [[ $INSTALL_RETROPIE -eq 1 ]]; then
+        install_retropie
+    else
+        ok "RetroPie ignore (choix utilisateur)"
+    fi
 
     section "9/10 — Configuration entrees (evdev/Wiimote)"
     configure_input_system
 
     section "10/10 — Configuration du systeme"
     configure_boot_splash
-    configure_retropie_menu
+    # Le menu RetroPie ne se configure que si RetroPie est la
+    if [[ $INSTALL_RETROPIE -eq 1 || $HAS_RETROPIE -eq 1 ]]; then
+        configure_retropie_menu
+    fi
     create_start_script
     configure_autologin
     configure_systemd_service
@@ -1674,8 +1940,8 @@ main() {
     create_required_dirs
     save_player_choice
 
-    touch "$LOCK_FILE"
     print_summary
+    finish_logging
 }
 
 main "$@"
