@@ -265,6 +265,10 @@ decide_uninstall_retropie() {
             if [[ $HAS_RETROPIE -eq 1 || -d "$HOME/RetroPie-Setup" ]]; then
                 ask_yn "Desinstaller aussi RetroPie ?" n && REMOVE_RETROPIE=1
             fi
+            if [[ "${INSTALL_RETROPIE:-1}" -eq 0 ]]; then
+                ok "RetroPie ignore (--no-retropie)"
+                return 0
+            fi
             ;;
     esac
     if [[ $REMOVE_RETROPIE -eq 1 && -d "$HOME/RetroPie" ]]; then
